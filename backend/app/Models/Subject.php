@@ -1,0 +1,107 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+
+class Subject extends Model
+{
+    protected $keyType = 'string';
+    public $incrementing = false;
+
+    protected $fillable = [
+        'name',
+        'name_en',
+        'code',
+        'description',
+        'credits',
+        'department_id',
+        'cost_per_credit',
+        'is_required',
+        'semester_number',
+        'semester',
+        'prerequisites',
+        'teacher_id',
+        'max_students',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'credits' => 'integer',
+        'cost_per_credit' => 'decimal:2',
+        'is_required' => 'boolean',
+        'semester_number' => 'integer',
+        'prerequisites' => 'array',
+        'max_students' => 'integer',
+        'is_active' => 'boolean',
+    ];
+
+    protected static function boot()
+    {
+        parent::boot();
+        static::creating(function ($model) {
+            if (empty($model->id)) {
+                $model->id = (string) Str::uuid();
+            }
+        });
+    }
+
+    // Relationships
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function teacher()
+    {
+        return $this->belongsTo(Teacher::class);
+    }
+
+    public function subjectDepartments()
+    {
+        return $this->hasMany(SubjectDepartment::class);
+    }
+
+    public function departments()
+    {
+        return $this->belongsToMany(Department::class, 'subject_departments')
+            ->withPivot('is_primary_department', 'is_active')
+            ->withTimestamps();
+    }
+
+    public function departmentSemesterSubjects()
+    {
+        return $this->hasMany(DepartmentSemesterSubject::class);
+    }
+
+    public function teacherSubjects()
+    {
+        return $this->hasMany(TeacherSubject::class);
+    }
+
+    public function classSessions()
+    {
+        return $this->hasMany(ClassSession::class);
+    }
+
+    public function grades()
+    {
+        return $this->hasMany(StudentGrade::class);
+    }
+
+    public function classSchedules()
+    {
+        return $this->hasMany(ClassSchedule::class);
+    }
+
+    public function timetableEntries()
+    {
+        return $this->hasMany(TimetableEntry::class);
+    }
+
+    public function titles()
+    {
+        return $this->hasMany(SubjectTitle::class)->orderBy('order_index');
+    }
+}

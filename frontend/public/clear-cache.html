@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear Cache - UniERP</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .button {
+            background-color: #059669;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        .button:hover {
+            background-color: #047857;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f3f4f6;
+        }
+        .success {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        .error {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 تنظيف ذاكرة التخزين المؤقت</h1>
+    <p>اضغط على الزر أدناه لتنظيف ذاكرة التخزين المؤقت وإعادة تحميل الصفحة</p>
+    
+    <button class="button" onclick="clearAndReload()">تنظيف وإعادة التحميل</button>
+    <button class="button" onclick="testAPI()">اختبار API</button>
+    
+    <div id="result"></div>
+
+    <script>
+        function clearAndReload() {
+            // Clear localStorage
+            localStorage.clear();
+            
+            // Clear sessionStorage
+            sessionStorage.clear();
+            
+            // Clear IndexedDB (React Query cache)
+            if (window.indexedDB) {
+                indexedDB.databases().then(databases => {
+                    databases.forEach(db => {
+                        indexedDB.deleteDatabase(db.name);
+                    });
+                });
+            }
+            
+            // Show message
+            document.getElementById('result').innerHTML = 
+                '<div class="result success">✅ تم تنظيف ذاكرة التخزين المؤقت! جاري إعادة التحميل...</div>';
+            
+            // Reload with cache bypass
+            setTimeout(() => {
+                window.location.href = '/settings/system?' + new Date().getTime();
+            }, 1000);
+        }
+        
+        async function testAPI() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div class="result">⏳ جاري الاختبار...</div>';
+            
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/system-settings', {
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const contentType = response.headers.get('content-type');
+                const text = await response.text();
+                
+                if (contentType && contentType.includes('application/json')) {
+                    const json = JSON.parse(text);
+                    resultDiv.innerHTML = 
+                        '<div class="result success">✅ API يعمل بشكل صحيح!<br><pre style="text-align: left; direction: ltr;">' + 
+                        JSON.stringify(json, null, 2) + '</pre></div>';
+                } else {
+                    resultDiv.innerHTML = 
+                        '<div class="result error">❌ API يعيد HTML بدلاً من JSON<br>Status: ' + 
+                        response.status + '<br>Content-Type: ' + contentType + '</div>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = 
+                    '<div class="result error">❌ خطأ: ' + error.message + '</div>';
+            }
+        }
+    </script>
+</body>
+</html>

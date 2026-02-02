@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>System Settings API Test</h1>
+    <button onclick="testAPI()">Test API</button>
+    <pre id="result"></pre>
+
+    <script>
+        async function testAPI() {
+            const resultEl = document.getElementById('result');
+            resultEl.textContent = 'Testing...';
+            
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/system-settings', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                resultEl.textContent = `Status: ${response.status}\n`;
+                resultEl.textContent += `Content-Type: ${response.headers.get('content-type')}\n\n`;
+                
+                const text = await response.text();
+                resultEl.textContent += `Response:\n${text}`;
+                
+                // Try to parse as JSON
+                try {
+                    const json = JSON.parse(text);
+                    resultEl.textContent += '\n\n✅ Valid JSON!';
+                } catch (e) {
+                    resultEl.textContent += '\n\n❌ Invalid JSON: ' + e.message;
+                }
+            } catch (error) {
+                resultEl.textContent = '❌ Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,267 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Models\AppUser;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
+use Tymon\JWTAuth\Facades\JWTAuth;
+
+class AuthController extends Controller
+{
+    /**
+     * Create a new AuthController instance.
+     * Note: In Laravel 11, middleware is applied in routes, not in constructor
+     */
+    public function __construct()
+    {
+        // Middleware is now applied in routes/api.php
+    }
+
+    /**
+     * Register a new user
+     */
+    public function register(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users',
+            'password' => 'required|string|min:6|confirmed',
+            'role' => 'nullable|in:manager,staff,teacher',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+        ]);
+
+        // Create app_user record
+        $appUser = AppUser::create([
+            'auth_user_id' => $user->id,
+            'email' => $user->email,
+            'full_name' => $request->name,
+            'role' => $request->role ?? 'staff',
+            'status' => 'active',
+        ]);
+
+        $token = JWTAuth::fromUser($user);
+
+        return response()->json([
+            'message' => 'User successfully registered',
+            'user' => $user,
+            'app_user' => $appUser,
+            'access_token' => $token,
+            'token_type' => 'bearer',
+            'expires_in' => auth('api')->factory()->getTTL() * 60
+        ], 201);
+    }
+
+    /**
+     * Get a JWT via given credentials.
+     */
+    public function login(Request $request)
+    {
+        \Log::info('Login attempt', [
+            'email' => $request->email, 
+            'has_password' => !empty($request->password),
+            'password_length' => strlen($request->password ?? ''),
+            'all_data' => $request->all()
+        ]);
+        
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'password' => 'required|string|min:6',
+        ]);
+
+        if ($validator->fails()) {
+            \Log::error('Login validation failed', ['errors' => $validator->errors()]);
+            return response()->json([
+                'message' => 'The provided credentials are incorrect.',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $credentials = $request->only('email', 'password');
+        \Log::info('Attempting authentication', [
+            'email' => $credentials['email'],
+            'password_provided' => isset($credentials['password']),
+            'password_length' => strlen($credentials['password'] ?? '')
+        ]);
+
+        if (!$token = auth('api')->attempt($credentials)) {
+            \Log::error('Authentication failed', ['email' => $credentials['email']]);
+            return response()->json([
+                'error' => 'بيانات الدخول غير صحيحة',
+                'message' => 'The provided credentials are incorrect.'
+            ], 401);
+        }
+        
+        \Log::info('Authentication successful', ['email' => $credentials['email']]);
+
+        $user = auth('api')->user();
+        
+        // Get app_user data
+        $appUser = AppUser::where('auth_user_id', $user->id)->first();
+        
+        // Update last login
+        if ($appUser) {
+            $appUser->update(['last_login' => now()]);
+        }
+
+        return $this->respondWithToken($token, $user, $appUser);
+    }
+
+    /**
+     * Get the authenticated User.
+     */
+    public function me()
+    {
+        $user = auth('api')->user();
+        $appUser = AppUser::where('auth_user_id', $user->id)->first();
+
+        return response()->json([
+            'user' => $user,
+            'app_user' => $appUser,
+            'permissions' => $appUser ? $this->getUserPermissions($appUser->role) : []
+        ]);
+    }
+
+    /**
+     * Log the user out (Invalidate the token).
+     */
+    public function logout()
+    {
+        auth('api')->logout();
+
+        return response()->json(['message' => 'Successfully logged out']);
+    }
+
+    /**
+     * Refresh a token.
+     */
+    public function refresh()
+    {
+        $token = auth('api')->refresh();
+        $user = auth('api')->user();
+        $appUser = AppUser::where('auth_user_id', $user->id)->first();
+
+        return $this->respondWithToken($token, $user, $appUser);
+    }
+
+    /**
+     * Get the token array structure.
+     */
+    protected function respondWithToken($token, $user = null, $appUser = null)
+    {
+        return response()->json([
+            'access_token' => $token,
+            'token_type' => 'bearer',
+            'expires_in' => auth('api')->factory()->getTTL() * 60,
+            'user' => $user ?? auth('api')->user(),
+            'app_user' => $appUser,
+            'permissions' => $appUser ? $this->getUserPermissions($appUser->role) : []
+        ]);
+    }
+
+    /**
+     * Get user permissions based on role
+     */
+    protected function getUserPermissions($role)
+    {
+        $permissions = [
+            'manager' => [
+                'students' => ['view', 'create', 'edit', 'delete'],
+                'fees' => ['view', 'create', 'edit', 'delete'],
+                'teachers' => ['view', 'create', 'edit', 'delete'],
+                'departments' => ['view', 'create', 'edit', 'delete'],
+                'subjects' => ['view', 'create', 'edit', 'delete'],
+                'finance' => ['view', 'create', 'edit', 'delete'],
+                'users' => ['view', 'create', 'edit', 'delete'],
+            ],
+            'staff' => [
+                'students' => ['view', 'create'],
+                'fees' => ['view', 'create'],
+            ],
+            'teacher' => [
+                'sessions' => ['view', 'create', 'edit', 'delete'],
+                'attendance' => ['view', 'create', 'edit'],
+                'grades' => ['view', 'create', 'edit', 'delete'],
+                'students' => ['view'],
+                'subjects' => ['view'],
+                'schedule' => ['view', 'edit'],
+            ],
+        ];
+
+        return $permissions[$role] ?? [];
+    }
+
+    /**
+     * Change password
+     */
+    public function changePassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:6|confirmed',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user = auth('api')->user();
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json(['error' => 'Current password is incorrect'], 422);
+        }
+
+        $user->update([
+            'password' => Hash::make($request->new_password)
+        ]);
+
+        return response()->json(['message' => 'Password successfully changed']);
+    }
+
+    /**
+     * Update profile
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = auth('api')->user();
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'sometimes|required|string|max:255',
+            'email' => 'sometimes|required|email|unique:users,email,' . $user->id,
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user->update($request->only('name', 'email'));
+
+        // Update app_user if exists
+        $appUser = AppUser::where('auth_user_id', $user->id)->first();
+        if ($appUser) {
+            $appUser->update([
+                'full_name' => $request->name ?? $appUser->full_name,
+                'email' => $request->email ?? $appUser->email,
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Profile updated successfully',
+            'user' => $user,
+            'app_user' => $appUser
+        ]);
+    }
+}
