@@ -17,6 +17,8 @@ class AppUser extends Model
         'status',
         'last_login',
         'created_by',
+        'teacher_id',
+        'department_id',
     ];
 
     protected $casts = [
@@ -37,5 +39,15 @@ class AppUser extends Model
     public function actionLogs()
     {
         return $this->hasMany(UserActionLog::class, 'user_id');
+    }
+
+    public function teacher()
+    {
+        return $this->belongsTo(Teacher::class);
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
     }
 }

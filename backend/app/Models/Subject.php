@@ -21,6 +21,7 @@ class Subject extends Model
         'is_required',
         'semester_number',
         'semester',
+        'semester_id',
         'prerequisites',
         'teacher_id',
         'max_students',
@@ -103,5 +104,27 @@ class Subject extends Model
     public function titles()
     {
         return $this->hasMany(SubjectTitle::class)->orderBy('order_index');
+    }
+
+    public function semesterRelation()
+    {
+        return $this->belongsTo(Semester::class, 'semester_id');
+    }
+
+    public function prerequisiteSubjects()
+    {
+        return $this->belongsToMany(Subject::class, 'subject_prerequisites', 'subject_id', 'prerequisite_id')
+            ->withTimestamps();
+    }
+
+    public function dependentSubjects()
+    {
+        return $this->belongsToMany(Subject::class, 'subject_prerequisites', 'prerequisite_id', 'subject_id')
+            ->withTimestamps();
+    }
+
+    public function subjectPrerequisites()
+    {
+        return $this->hasMany(SubjectPrerequisite::class);
     }
 }

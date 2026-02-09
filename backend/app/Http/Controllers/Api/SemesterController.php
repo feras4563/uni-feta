@@ -115,4 +115,38 @@ class SemesterController extends Controller
             'semester' => $semester
         ]);
     }
+
+    /**
+     * Get all students registered in a specific semester
+     */
+    public function getRegisteredStudents(Request $request, $id)
+    {
+        $query = \App\Models\StudentSemesterRegistration::with([
+            'student:id,name,email,national_id_passport,phone',
+            'department:id,name'
+        ])
+        ->where('semester_id', $id);
+
+        if ($request->has('department_id')) {
+            $query->where('department_id', $request->department_id);
+        }
+
+        $registrations = $query->get();
+
+        $students = $registrations->map(function ($reg) {
+            return [
+                'id' => $reg->student->id ?? null,
+                'name' => $reg->student->name ?? '-',
+                'email' => $reg->student->email ?? '-',
+                'national_id_passport' => $reg->student->national_id_passport ?? '-',
+                'phone' => $reg->student->phone ?? '-',
+                'department' => $reg->department,
+                'registration_id' => $reg->id,
+                'group_id' => $reg->group_id,
+                'has_group' => !is_null($reg->group_id),
+            ];
+        })->filter(fn($s) => $s['id'] !== null)->values();
+
+        return response()->json($students);
+    }
 }

@@ -18,7 +18,8 @@ class StudentSubjectEnrollmentController extends Controller
             'subject:id,name,name_en,code,credits,cost_per_credit',
             'semester:id,name,name_en,code',
             'studyYear:id,name,name_en',
-            'department:id,name,name_en'
+            'department:id,name,name_en',
+            'invoice'
         ]);
 
         // Apply filters if provided

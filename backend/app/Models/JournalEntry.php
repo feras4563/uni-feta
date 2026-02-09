@@ -99,5 +99,41 @@ class JournalEntry extends Model
                 $entry->created_by = auth()->id();
             }
         });
+
+        // Update account balances when journal entry is created
+        static::created(function ($entry) {
+            if ($entry->status === 'posted') {
+                $entry->updateAccountBalances();
+            }
+        });
+
+        // Update account balances when journal entry is updated
+        static::updated(function ($entry) {
+            if ($entry->status === 'posted' && $entry->isDirty('status')) {
+                $entry->updateAccountBalances();
+            }
+        });
+    }
+
+    /**
+     * Update account balances based on journal entry lines
+     */
+    public function updateAccountBalances()
+    {
+        foreach ($this->lines as $line) {
+            if ($line->account_id) {
+                $account = Account::find($line->account_id);
+                if ($account) {
+                    // For assets and expenses: debit increases, credit decreases
+                    // For liabilities, equity, and revenue: credit increases, debit decreases
+                    if (in_array($account->account_type, ['asset', 'expense'])) {
+                        $account->balance += ($line->debit - $line->credit);
+                    } else {
+                        $account->balance += ($line->credit - $line->debit);
+                    }
+                    $account->save();
+                }
+            }
+        }
     }
 }

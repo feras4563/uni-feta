@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchDepartments } from '../lib/api';
-import { fetchSchedulingResources, generateAutoSchedule, fetchDepartmentSchedule } from '../lib/scheduling-api';
+import { fetchSchedulingResources, generateAutoSchedule, fetchDepartmentSchedule } from '../lib/jwt-api';
 import ScheduleGrid from '../components/scheduling/ScheduleGrid';
 import AutoGenerateWizard from '../components/scheduling/AutoGenerateWizard';
 import ResourceOverview from '../components/scheduling/ResourceOverview';

@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchDashboardStats } from '../lib/api';
+import { useAuth } from '../contexts/JWTAuthContext';
+import { hasClientPermission } from '../lib/jwt-auth';
 
 interface DashboardStats {
   totalStudents: number;
@@ -18,11 +20,15 @@ interface QuickAction {
   icon: string;
   color: string;
   path: string;
+  requiredResource: string;
+  requiredAction: string;
   action?: () => void;
 }
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const userRole = user?.role || 'staff';
   const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
     totalTeachers: 0,
@@ -62,7 +68,7 @@ const Dashboard: React.FC = () => {
   }, []);
 
   // Quick Actions Configuration
-  const quickActions: QuickAction[] = [
+  const allQuickActions: QuickAction[] = [
     {
       id: 'add-student',
       title: 'إضافة طالب جديد',
@@ -70,9 +76,36 @@ const Dashboard: React.FC = () => {
       icon: 'fa-user-plus',
       color: 'bg-blue-500',
       path: '/students',
+      requiredResource: 'students',
+      requiredAction: 'create',
       action: () => {
         navigate('/students');
-        // TODO: Open add student modal directly
+      }
+    },
+    {
+      id: 'student-registration',
+      title: 'تسجيل مواد للطلاب',
+      description: 'تسجيل الطلاب في المقررات الدراسية',
+      icon: 'fa-list',
+      color: 'bg-teal-500',
+      path: '/student-registrations',
+      requiredResource: 'student-registration',
+      requiredAction: 'create',
+      action: () => {
+        navigate('/student-registrations');
+      }
+    },
+    {
+      id: 'view-fees',
+      title: 'عرض الرسوم',
+      description: 'عرض رسوم الطلاب والفواتير',
+      icon: 'fa-money-bill-wave',
+      color: 'bg-emerald-500',
+      path: '/fees',
+      requiredResource: 'fees',
+      requiredAction: 'view',
+      action: () => {
+        navigate('/fees');
       }
     },
     {
@@ -82,9 +115,10 @@ const Dashboard: React.FC = () => {
       icon: 'fa-chalkboard-teacher',
       color: 'bg-green-500',
       path: '/teachers',
+      requiredResource: 'teachers',
+      requiredAction: 'create',
       action: () => {
         navigate('/teachers');
-        // TODO: Open add teacher modal directly
       }
     },
     {
@@ -94,21 +128,10 @@ const Dashboard: React.FC = () => {
       icon: 'fa-building',
       color: 'bg-purple-500',
       path: '/departments',
+      requiredResource: 'departments',
+      requiredAction: 'create',
       action: () => {
         navigate('/departments');
-        // TODO: Open add department modal directly
-      }
-    },
-    {
-      id: 'add-fee',
-      title: 'إضافة رسوم جديدة',
-      description: 'إنشاء رسوم دراسية للطلاب',
-      icon: 'fa-money-bill-wave',
-      color: 'bg-emerald-500',
-      path: '/fees',
-      action: () => {
-        navigate('/fees');
-        // TODO: Open add fee modal directly
       }
     },
     {
@@ -118,9 +141,10 @@ const Dashboard: React.FC = () => {
       icon: 'fa-pen-to-square',
       color: 'bg-indigo-500',
       path: '/finance',
+      requiredResource: 'finance',
+      requiredAction: 'create',
       action: () => {
         navigate('/finance');
-        // TODO: Open journal entry modal directly
       }
     },
     {
@@ -130,12 +154,17 @@ const Dashboard: React.FC = () => {
       icon: 'fa-credit-card',
       color: 'bg-cyan-500',
       path: '/fees',
+      requiredResource: 'fees',
+      requiredAction: 'create',
       action: () => {
         navigate('/fees');
-        // TODO: Open payment modal directly
       }
     }
   ];
+
+  const quickActions = useMemo(() => {
+    return allQuickActions.filter(a => hasClientPermission(userRole, a.requiredResource, a.requiredAction));
+  }, [userRole]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ar-LY', {

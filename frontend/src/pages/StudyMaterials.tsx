@@ -123,71 +123,7 @@ export default function StudyMaterials() {
       </div>
 
       <div className="px-6 py-8">
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-3xl font-bold text-gray-900">{subjects?.length || 0}</div>
-                <div className="text-sm font-medium text-gray-600 mt-1">إجمالي المقررات</div>
-              </div>
-              <div className="p-3 bg-gray-100 rounded-lg">
-                <svg className="h-6 w-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-3xl font-bold text-gray-900">
-                  {subjects?.filter(s => s.semester === '1').length || 0}
-                </div>
-                <div className="text-sm font-medium text-gray-600 mt-1">الفصل الأول</div>
-              </div>
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-3xl font-bold text-gray-900">
-                  {subjects?.filter(s => s.semester === '2').length || 0}
-                </div>
-                <div className="text-sm font-medium text-gray-600 mt-1">الفصل الثاني</div>
-              </div>
-              <div className="p-3 bg-green-100 rounded-lg">
-                <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-3xl font-bold text-gray-900">
-                  {subjects?.filter(s => s.credits && s.credits > 0).reduce((sum, s) => sum + (s.credits || 0), 0) || 0}
-                </div>
-                <div className="text-sm font-medium text-gray-600 mt-1">إجمالي الساعات</div>
-              </div>
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-
+        
         {/* Search and Filters */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
           <div className="px-6 py-4 border-b border-gray-200">
@@ -312,7 +248,7 @@ export default function StudyMaterials() {
                     <td className="px-6 py-4">
                       <div className="space-y-1">
                         <div className="text-sm text-gray-900">
-                          {subject.teachers?.name || 'غير محدد'}
+                          {subject.teacher?.name || 'غير محدد'}
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -330,10 +266,10 @@ export default function StudyMaterials() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {subject.total_cost ? (
+                        {subject.cost_per_credit ? (
                           <div>
                <div className="font-medium text-green-600">
-                 {subject.total_cost.toLocaleString()} دينار
+                 {((subject.credits || 0) * parseFloat(subject.cost_per_credit)).toLocaleString()} دينار
                </div>
                <div className="text-xs text-gray-500">
                  {subject.cost_per_credit} دينار/ساعة

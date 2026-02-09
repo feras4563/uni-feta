@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Teacher;
+use App\Models\User;
+use App\Models\AppUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
@@ -30,6 +32,7 @@ class TeacherController extends Controller
                   ->orWhere('name_en', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%")
                   ->orWhere('phone', 'like', "%{$search}%")
+                  ->orWhere('campus_id', 'like', "%{$search}%")
                   ->orWhere('specialization', 'like', "%{$search}%");
             });
         }
@@ -59,6 +62,19 @@ class TeacherController extends Controller
             'username' => 'nullable|string|unique:teachers,username|max:50',
             'password' => 'nullable|string|min:6',
             'is_active' => 'nullable|boolean',
+            'qualification' => 'nullable|in:رئيس قسم,محاضر,متعاون',
+            'education_level' => 'nullable|string|max:255',
+            'credential_institution' => 'nullable|string|max:255',
+            'credential_date' => 'nullable|date',
+            'years_experience' => 'nullable|integer|min:0|max:50',
+            'specializations' => 'nullable|array',
+            'teaching_hours' => 'nullable|integer|min:0|max:168',
+            'academic_records' => 'nullable|string',
+            'basic_salary' => 'nullable|numeric|min:0',
+            'hourly_rate' => 'nullable|numeric|min:0',
+            'bio' => 'nullable|string',
+            'office_location' => 'nullable|string|max:255',
+            'office_hours' => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -67,13 +83,28 @@ class TeacherController extends Controller
 
         $data = $request->all();
         
-        // Hash password if provided
-        if ($request->has('password')) {
-            $data['password_hash'] = Hash::make($request->password);
-            unset($data['password']);
+        // Generate default password if not provided
+        $rawPassword = $request->password ?? 'password123';
+        $data['password_hash'] = Hash::make($rawPassword);
+        unset($data['password']);
+
+        // Generate username from email if not provided
+        if (empty($data['username'])) {
+            $data['username'] = explode('@', $request->email)[0];
+            // Ensure uniqueness
+            $baseUsername = $data['username'];
+            $counter = 1;
+            while (Teacher::where('username', $data['username'])->exists()) {
+                $data['username'] = $baseUsername . $counter;
+                $counter++;
+            }
         }
 
         $teacher = Teacher::create($data);
+
+        // Auto-create login account for the teacher
+        $this->createTeacherLoginAccount($teacher, $rawPassword);
+
         $teacher->load('department:id,name,name_en');
 
         return response()->json($teacher, 201);
@@ -104,9 +135,19 @@ class TeacherController extends Controller
         $teacherData = $request->input('teacher');
         
         // Hash password if provided
-        if (isset($teacherData['password'])) {
-            $teacherData['password_hash'] = Hash::make($teacherData['password']);
-            unset($teacherData['password']);
+        $rawPassword = $teacherData['password'] ?? 'password123';
+        $teacherData['password_hash'] = Hash::make($rawPassword);
+        unset($teacherData['password']);
+
+        // Generate username from email if not provided
+        if (empty($teacherData['username']) && !empty($teacherData['email'])) {
+            $teacherData['username'] = explode('@', $teacherData['email'])[0];
+            $baseUsername = $teacherData['username'];
+            $counter = 1;
+            while (Teacher::where('username', $teacherData['username'])->exists()) {
+                $teacherData['username'] = $baseUsername . $counter;
+                $counter++;
+            }
         }
 
         // If department_ids provided, use the first one as primary department
@@ -116,6 +157,10 @@ class TeacherController extends Controller
         }
 
         $teacher = Teacher::create($teacherData);
+
+        // Auto-create login account for the teacher
+        $this->createTeacherLoginAccount($teacher, $rawPassword);
+
         $teacher->load('department:id,name,name_en');
 
         return response()->json($teacher, 201);
@@ -133,6 +178,8 @@ class TeacherController extends Controller
             },
             'teacherSubjects.subject',
             'teacherSubjects.department',
+            'teacherSubjects.semester',
+            'teacherSubjects.studyYear',
             'classSessions' => function($q) {
                 $q->latest()->limit(10);
             },
@@ -155,23 +202,31 @@ class TeacherController extends Controller
 
         $dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         $timeSlotMap = [
+            '08:00:00' => 'slot1',
             '08:00' => 'slot1',
+            '10:00:00' => 'slot2',
             '10:00' => 'slot2',
+            '12:00:00' => 'slot3',
             '12:00' => 'slot3',
+            '14:00:00' => 'slot4',
             '14:00' => 'slot4',
+            '16:00:00' => 'slot5',
             '16:00' => 'slot5',
         ];
 
         foreach ($schedules as $schedule) {
             $dayName = $dayNames[$schedule->day_of_week] ?? null;
-            $slotKey = $timeSlotMap[$schedule->start_time] ?? null;
+            // Normalize time format (remove seconds if present)
+            $startTime = substr($schedule->start_time, 0, 5);
+            $slotKey = $timeSlotMap[$schedule->start_time] ?? $timeSlotMap[$startTime] ?? null;
             
             if ($dayName && $slotKey && isset($availability[$dayName])) {
                 $availability[$dayName][$slotKey] = true;
             }
         }
 
-        $teacher->availability = $availability;
+        // Only set availability if schedules exist, otherwise set to null to show "not specified" message
+        $teacher->availability = $schedules->isEmpty() ? null : $availability;
 
         return response()->json($teacher);
     }
@@ -193,6 +248,19 @@ class TeacherController extends Controller
             'username' => 'nullable|string|unique:teachers,username,' . $id . '|max:50',
             'password' => 'nullable|string|min:6',
             'is_active' => 'nullable|boolean',
+            'qualification' => 'nullable|in:رئيس قسم,محاضر,متعاون',
+            'education_level' => 'nullable|string|max:255',
+            'credential_institution' => 'nullable|string|max:255',
+            'credential_date' => 'nullable|date',
+            'years_experience' => 'nullable|integer|min:0|max:50',
+            'specializations' => 'nullable|array',
+            'teaching_hours' => 'nullable|integer|min:0|max:168',
+            'academic_records' => 'nullable|string',
+            'basic_salary' => 'nullable|numeric|min:0',
+            'hourly_rate' => 'nullable|numeric|min:0',
+            'bio' => 'nullable|string',
+            'office_location' => 'nullable|string|max:255',
+            'office_hours' => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -334,5 +402,90 @@ class TeacherController extends Controller
         ];
 
         return response()->json($stats);
+    }
+
+    /**
+     * Upload teacher photo
+     */
+    public function uploadPhoto(Request $request, $id)
+    {
+        $teacher = Teacher::findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'photo' => 'required|image|mimes:jpeg,jpg,png,webp|max:5120',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Delete old photo if exists
+        if ($teacher->photo_url) {
+            $oldPath = str_replace('/storage/', '', $teacher->photo_url);
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($oldPath);
+        }
+
+        $path = $request->file('photo')->store('teacher-photos', 'public');
+        $teacher->update(['photo_url' => '/storage/' . $path]);
+
+        return response()->json([
+            'message' => 'تم رفع الصورة بنجاح',
+            'photo_url' => '/storage/' . $path,
+        ]);
+    }
+
+    /**
+     * Create a login account (User + AppUser) for a teacher
+     */
+    private function createTeacherLoginAccount(Teacher $teacher, string $rawPassword): void
+    {
+        try {
+            // Check if a User already exists with this email
+            $user = User::where('email', $teacher->email)->first();
+            
+            if (!$user) {
+                $user = User::create([
+                    'name' => $teacher->name,
+                    'email' => $teacher->email,
+                    'password' => Hash::make($rawPassword),
+                ]);
+            }
+
+            // Check if AppUser already exists
+            $appUser = AppUser::where('auth_user_id', $user->id)->first();
+            
+            if (!$appUser) {
+                AppUser::create([
+                    'auth_user_id' => $user->id,
+                    'email' => $teacher->email,
+                    'full_name' => $teacher->name,
+                    'role' => 'teacher',
+                    'status' => 'active',
+                    'teacher_id' => $teacher->id,
+                    'department_id' => $teacher->department_id,
+                ]);
+            } else {
+                // Update existing AppUser to link to teacher
+                $appUser->update([
+                    'role' => 'teacher',
+                    'teacher_id' => $teacher->id,
+                    'department_id' => $teacher->department_id,
+                ]);
+            }
+
+            // Link auth_user_id back to teacher
+            $teacher->update(['auth_user_id' => $user->id]);
+
+            \Log::info('Teacher login account created', [
+                'teacher_id' => $teacher->id,
+                'user_id' => $user->id,
+                'email' => $teacher->email,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to create teacher login account', [
+                'teacher_id' => $teacher->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

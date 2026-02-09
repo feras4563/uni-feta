@@ -12,6 +12,8 @@ export interface AppUser {
   lastLogin?: string;
   // Teacher-specific fields
   teacherId?: string;
+  teacherName?: string;
+  teacherCampusId?: string;
   departmentId?: string;
   departmentName?: string;
 }

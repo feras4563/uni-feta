@@ -52,6 +52,50 @@ class StudentInvoice extends Model
                 $model->invoice_number = self::generateInvoiceNumber();
             }
         });
+
+        // Sync payment status to enrollments when invoice is updated
+        static::updated(function ($model) {
+            if ($model->isDirty('status') || $model->isDirty('paid_amount') || $model->isDirty('balance')) {
+                $model->syncPaymentStatusToEnrollments();
+            }
+        });
+
+        // Sync payment status when invoice is created
+        static::created(function ($model) {
+            $model->syncPaymentStatusToEnrollments();
+        });
+    }
+
+    /**
+     * Sync payment status to related enrollments
+     */
+    public function syncPaymentStatusToEnrollments()
+    {
+        // Determine payment status
+        $paymentStatus = 'unpaid';
+        $attendanceAllowed = false;
+
+        if ($this->status === 'paid' || $this->balance == 0) {
+            $paymentStatus = 'paid';
+            $attendanceAllowed = true;
+        } elseif ($this->paid_amount > 0) {
+            $paymentStatus = 'partial';
+            // Partial payment: attendance not allowed by default (admin can override)
+            $attendanceAllowed = false;
+        }
+
+        // Update all enrollments for this student in this semester
+        StudentSubjectEnrollment::where('student_id', $this->student_id)
+            ->where('semester_id', $this->semester_id)
+            ->where('study_year_id', $this->study_year_id)
+            ->update([
+                'payment_status' => $paymentStatus,
+                'attendance_allowed' => \DB::raw("CASE 
+                    WHEN admin_override = 1 THEN attendance_allowed 
+                    ELSE " . ($attendanceAllowed ? '1' : '0') . " 
+                END"),
+                'invoice_id' => $this->id,
+            ]);
     }
 
     public static function generateInvoiceNumber(): string

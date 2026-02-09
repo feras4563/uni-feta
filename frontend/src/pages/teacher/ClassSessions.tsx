@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/JWTAuthContext';
 import { 
   fetchTeacherSessions, 
   fetchTeacherSubjects,
@@ -11,7 +11,7 @@ import {
   type ClassSession,
   type TeacherSubject,
   type AttendanceRecord
-} from '../../lib/teacher-api';
+} from '../../lib/jwt-api';
 import { QRService } from '../../lib/qr-service';
 import QRDisplay, { QRScanner } from '../../components/teacher/QRDisplay';
 

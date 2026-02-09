@@ -1,6 +1,6 @@
 import React from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { hasClientPermission } from '../../lib/auth';
+import { useAuth } from '../../contexts/JWTAuthContext';
+import { hasClientPermission } from '../../lib/jwt-auth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;

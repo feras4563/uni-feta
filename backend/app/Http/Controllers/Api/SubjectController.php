@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Subject;
+use App\Models\SubjectPrerequisite;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -14,7 +15,7 @@ class SubjectController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Subject::with('department:id,name,name_en', 'teacher:id,name,name_en');
+        $query = Subject::with('department:id,name,name_en', 'teacher:id,name,name_en', 'semesterRelation:id,name,name_en', 'prerequisiteSubjects:id,name,code');
 
         // Search functionality
         if ($request->has('search') && $request->search) {
@@ -35,6 +36,11 @@ class SubjectController extends Controller
         // Filter by semester
         if ($request->has('semester_number')) {
             $query->where('semester_number', $request->semester_number);
+        }
+
+        // Filter by semester_id
+        if ($request->has('semester_id')) {
+            $query->where('semester_id', $request->semester_id);
         }
 
         // Filter by required status
@@ -64,12 +70,15 @@ class SubjectController extends Controller
             'code' => 'required|string|unique:subjects,code',
             'description' => 'nullable|string',
             'credits' => 'required|integer|min:1|max:10',
-            'department_id' => 'nullable|exists:departments,id',
-            'cost_per_credit' => 'nullable|numeric|min:0',
+            'department_id' => 'required|exists:departments,id',
+            'cost_per_credit' => 'required|numeric|min:0',
             'is_required' => 'nullable|boolean',
-            'semester_number' => 'nullable|integer|min:1|max:12',
+            'semester_number' => 'required|integer|min:1|max:12',
             'semester' => 'nullable|string|max:50',
+            'semester_id' => 'nullable|exists:semesters,id',
             'prerequisites' => 'nullable|array',
+            'prerequisite_ids' => 'nullable|array',
+            'prerequisite_ids.*' => 'exists:subjects,id',
             'teacher_id' => 'nullable|exists:teachers,id',
             'max_students' => 'nullable|integer|min:1',
             'is_active' => 'nullable|boolean',
@@ -79,8 +88,15 @@ class SubjectController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $subject = Subject::create($request->all());
-        $subject->load('department:id,name,name_en', 'teacher:id,name,name_en');
+        $data = $request->except(['prerequisite_ids']);
+        $subject = Subject::create($data);
+
+        // Sync prerequisites
+        if ($request->has('prerequisite_ids')) {
+            $subject->prerequisiteSubjects()->sync($request->prerequisite_ids ?? []);
+        }
+
+        $subject->load('department:id,name,name_en', 'teacher:id,name,name_en', 'semesterRelation:id,name,name_en', 'prerequisiteSubjects:id,name,code');
 
         return response()->json($subject, 201);
     }
@@ -93,9 +109,15 @@ class SubjectController extends Controller
         $subject = Subject::with([
             'department:id,name,name_en',
             'teacher:id,name,name_en',
+            'semesterRelation:id,name,name_en',
+            'prerequisiteSubjects:id,name,name_en,code',
+            'dependentSubjects:id,name,name_en,code',
             'subjectDepartments.department',
             'departmentSemesterSubjects',
             'teacherSubjects.teacher',
+            'teacherSubjects.department',
+            'teacherSubjects.semester',
+            'teacherSubjects.studyYear',
             'titles',
         ])->findOrFail($id);
 
@@ -120,7 +142,10 @@ class SubjectController extends Controller
             'is_required' => 'nullable|boolean',
             'semester_number' => 'nullable|integer|min:1|max:12',
             'semester' => 'nullable|string|max:50',
+            'semester_id' => 'nullable|exists:semesters,id',
             'prerequisites' => 'nullable|array',
+            'prerequisite_ids' => 'nullable|array',
+            'prerequisite_ids.*' => 'exists:subjects,id',
             'teacher_id' => 'nullable|exists:teachers,id',
             'max_students' => 'nullable|integer|min:1',
             'is_active' => 'nullable|boolean',
@@ -130,8 +155,15 @@ class SubjectController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $subject->update($request->all());
-        $subject->load('department:id,name,name_en', 'teacher:id,name,name_en');
+        $data = $request->except(['prerequisite_ids']);
+        $subject->update($data);
+
+        // Sync prerequisites if provided
+        if ($request->has('prerequisite_ids')) {
+            $subject->prerequisiteSubjects()->sync($request->prerequisite_ids ?? []);
+        }
+
+        $subject->load('department:id,name,name_en', 'teacher:id,name,name_en', 'semesterRelation:id,name,name_en', 'prerequisiteSubjects:id,name,code');
 
         return response()->json($subject);
     }
@@ -166,11 +198,65 @@ class SubjectController extends Controller
      */
     public function bySemester($semesterNumber)
     {
-        $subjects = Subject::with('department:id,name,name_en', 'teacher:id,name,name_en')
+        $subjects = Subject::with('department:id,name,name_en', 'teacher:id,name,name_en', 'prerequisiteSubjects:id,name,code')
             ->where('semester_number', $semesterNumber)
             ->orderBy('name')
             ->get();
 
         return response()->json($subjects);
+    }
+
+    /**
+     * Check if a student meets prerequisites for a subject
+     */
+    public function checkPrerequisites(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'student_id' => 'required|exists:students,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $subject = Subject::with('prerequisiteSubjects:id,name,code')->findOrFail($id);
+        $prerequisites = $subject->prerequisiteSubjects;
+
+        if ($prerequisites->isEmpty()) {
+            return response()->json([
+                'can_enroll' => true,
+                'prerequisites' => [],
+                'missing_prerequisites' => [],
+                'message' => 'لا توجد متطلبات سابقة لهذا المقرر',
+            ]);
+        }
+
+        // Get completed subjects for this student (passed enrollments)
+        $completedSubjectIds = \App\Models\StudentSubjectEnrollment::where('student_id', $request->student_id)
+            ->where('status', 'completed')
+            ->pluck('subject_id')
+            ->toArray();
+
+        $missingPrerequisites = $prerequisites->filter(function ($prereq) use ($completedSubjectIds) {
+            return !in_array($prereq->id, $completedSubjectIds);
+        });
+
+        return response()->json([
+            'can_enroll' => $missingPrerequisites->isEmpty(),
+            'prerequisites' => $prerequisites->map(fn($p) => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'code' => $p->code,
+                'completed' => in_array($p->id, $completedSubjectIds),
+            ]),
+            'missing_prerequisites' => $missingPrerequisites->values()->map(fn($p) => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'code' => $p->code,
+            ]),
+            'message' => $missingPrerequisites->isEmpty()
+                ? 'الطالب مستوفي لجميع المتطلبات السابقة'
+                : 'الطالب لم يكمل المتطلبات السابقة التالية: ' . $missingPrerequisites->pluck('name')->join('، '),
+        ]);
     }
 }

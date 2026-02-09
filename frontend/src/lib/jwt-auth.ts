@@ -129,6 +129,12 @@ export async function signIn(credentials: LoginCredentials): Promise<AppUser> {
     createdAt: response.app_user?.created_at || new Date().toISOString(),
     updatedAt: response.app_user?.updated_at || new Date().toISOString(),
     lastLogin: response.app_user?.last_login,
+    // Teacher-specific fields
+    teacherId: response.app_user?.teacher_id,
+    teacherName: response.app_user?.teacher_name,
+    teacherCampusId: response.app_user?.teacher_campus_id,
+    departmentId: response.app_user?.department_id,
+    departmentName: response.app_user?.department_name,
   };
 
   console.log('✅ JWT: User object created:', user);
@@ -175,6 +181,12 @@ export async function getCurrentUser(): Promise<AppUser | null> {
       createdAt: response.app_user?.created_at || new Date().toISOString(),
       updatedAt: response.app_user?.updated_at || new Date().toISOString(),
       lastLogin: response.app_user?.last_login,
+      // Teacher-specific fields
+      teacherId: response.app_user?.teacher_id,
+      teacherName: response.app_user?.teacher_name,
+      teacherCampusId: response.app_user?.teacher_campus_id,
+      departmentId: response.app_user?.department_id,
+      departmentName: response.app_user?.department_name,
     };
 
     setStoredUser(user);
@@ -279,11 +291,9 @@ export const PERMISSIONS = {
   },
   staff: {
     students: ['view', 'create'],
-    fees: ['view', 'create'],
-    subjects: ['view', 'create'],
-    departments: ['view'],
-    teachers: ['view'],
-    receipts: ['view', 'create'],
+    fees: ['view'],
+    'student-registration': ['view', 'create'],
+    'student-enrollments': ['view', 'create'],
   },
   teacher: {
     sessions: ['view', 'create', 'edit', 'delete'],

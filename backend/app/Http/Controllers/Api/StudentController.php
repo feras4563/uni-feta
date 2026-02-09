@@ -5,11 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
 use App\Models\StudentSemesterRegistration;
+use App\Traits\LogsUserActions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class StudentController extends Controller
 {
+    use LogsUserActions;
+
     /**
      * Display a listing of students
      */
@@ -25,6 +28,7 @@ class StudentController extends Controller
                   ->orWhere('name_en', 'like', "%{$search}%")
                   ->orWhere('national_id_passport', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('campus_id', 'like', "%{$search}%")
                   ->orWhere('id', $search);
             });
         }
@@ -107,6 +111,11 @@ class StudentController extends Controller
         $student = Student::create($data);
         $student->load('department:id,name,name_en');
 
+        $this->logAction('create', 'students', $student->id, [
+            'student_name' => $student->name,
+            'department_id' => $student->department_id,
+        ]);
+
         return response()->json($student, 201);
     }
 
@@ -164,6 +173,11 @@ class StudentController extends Controller
         $student->update($request->all());
         $student->load('department:id,name,name_en');
 
+        $this->logAction('update', 'students', $student->id, [
+            'student_name' => $student->name,
+            'updated_fields' => array_keys($request->all()),
+        ]);
+
         return response()->json($student);
     }
 
@@ -173,9 +187,44 @@ class StudentController extends Controller
     public function destroy($id)
     {
         $student = Student::findOrFail($id);
+
+        $this->logAction('delete', 'students', $student->id, [
+            'student_name' => $student->name,
+        ]);
+
         $student->delete();
 
         return response()->json(['message' => 'Student deleted successfully'], 200);
+    }
+
+    /**
+     * Upload student photo
+     */
+    public function uploadPhoto(Request $request, $id)
+    {
+        $student = Student::findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'photo' => 'required|image|mimes:jpeg,jpg,png,webp|max:5120',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Delete old photo if exists
+        if ($student->photo_url) {
+            $oldPath = str_replace('/storage/', '', $student->photo_url);
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($oldPath);
+        }
+
+        $path = $request->file('photo')->store('student-photos', 'public');
+        $student->update(['photo_url' => '/storage/' . $path]);
+
+        return response()->json([
+            'message' => 'تم رفع الصورة بنجاح',
+            'photo_url' => '/storage/' . $path,
+        ]);
     }
 
     /**
@@ -245,6 +294,7 @@ class StudentController extends Controller
             'study_year_id' => 'required|exists:study_years,id',
             'department_id' => 'required|exists:departments,id',
             'semester_number' => 'required|integer|min:1',
+            'is_paying' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -304,6 +354,36 @@ class StudentController extends Controller
         $studentGroup->current_students = \App\Models\StudentSemesterRegistration::where('group_id', $studentGroup->id)->count();
         $studentGroup->save();
         
+        // Check prerequisites for all requested subjects
+        $completedSubjectIds = \App\Models\StudentSubjectEnrollment::where('student_id', $id)
+            ->where('status', 'completed')
+            ->pluck('subject_id')
+            ->toArray();
+
+        $prerequisiteErrors = [];
+        foreach ($request->subject_ids as $subjectId) {
+            $subjectToCheck = \App\Models\Subject::with('prerequisiteSubjects:id,name,code')->find($subjectId);
+            if ($subjectToCheck && $subjectToCheck->prerequisiteSubjects->isNotEmpty()) {
+                $missing = $subjectToCheck->prerequisiteSubjects->filter(function ($prereq) use ($completedSubjectIds) {
+                    return !in_array($prereq->id, $completedSubjectIds);
+                });
+                if ($missing->isNotEmpty()) {
+                    $prerequisiteErrors[] = [
+                        'subject' => $subjectToCheck->name,
+                        'subject_code' => $subjectToCheck->code,
+                        'missing' => $missing->map(fn($p) => ['id' => $p->id, 'name' => $p->name, 'code' => $p->code])->values(),
+                    ];
+                }
+            }
+        }
+
+        if (!empty($prerequisiteErrors)) {
+            return response()->json([
+                'message' => 'لا يمكن تسجيل الطالب في بعض المقررات بسبب عدم استيفاء المتطلبات السابقة',
+                'prerequisite_errors' => $prerequisiteErrors,
+            ], 422);
+        }
+
         $enrollments = [];
         $subjects = [];
 
@@ -316,6 +396,8 @@ class StudentController extends Controller
             ])->first();
 
             if (!$existing) {
+                $isPaying = $request->boolean('is_paying', false);
+                
                 $enrollment = \App\Models\StudentSubjectEnrollment::create([
                     'student_id' => $id,
                     'subject_id' => $subjectId,
@@ -325,6 +407,8 @@ class StudentController extends Controller
                     'semester_number' => $request->semester_number,
                     'enrollment_date' => now(),
                     'status' => 'enrolled',
+                    'payment_status' => $isPaying ? 'paid' : 'unpaid',
+                    'attendance_allowed' => $isPaying,
                 ]);
                 $enrollments[] = $enrollment;
                 
@@ -347,6 +431,8 @@ class StudentController extends Controller
                 $subtotal += ($subject->credits * $subject->cost_per_credit);
             }
             
+            $isPaying = $request->boolean('is_paying', false);
+            
             $invoice = \App\Models\StudentInvoice::create([
                 'student_id' => $id,
                 'semester_id' => $request->semester_id,
@@ -359,9 +445,9 @@ class StudentController extends Controller
                 'discount' => 0,
                 'tax' => 0,
                 'total_amount' => $subtotal,
-                'paid_amount' => 0,
-                'balance' => $subtotal,
-                'status' => 'pending',
+                'paid_amount' => $isPaying ? $subtotal : 0,
+                'balance' => $isPaying ? 0 : $subtotal,
+                'status' => $isPaying ? 'paid' : 'pending',
             ]);
             
             // Create invoice items
@@ -416,7 +502,19 @@ class StudentController extends Controller
             
             // Link journal entry to invoice
             $invoice->update(['journal_entry_id' => $journalEntry->id]);
+            
+            // If paying immediately, create payment journal entry
+            if ($isPaying) {
+                $this->createPaymentJournalEntry($invoice, $subtotal, $student);
+            }
         }
+
+        $this->logAction('enroll', 'student-enrollments', $id, [
+            'student_name' => $student->name,
+            'subject_count' => count($enrollments),
+            'semester_id' => $request->semester_id,
+            'subject_ids' => $request->subject_ids,
+        ]);
 
         return response()->json([
             'message' => 'Student enrolled successfully',
@@ -436,12 +534,111 @@ class StudentController extends Controller
             'subject',
             'semester',
             'studyYear',
-            'department'
+            'department',
+            'invoice'
         ])
         ->where('student_id', $id)
         ->orderBy('enrollment_date', 'desc')
         ->get();
 
         return response()->json($enrollments);
+    }
+
+    /**
+     * Get invoices for a student
+     */
+    public function invoices($id)
+    {
+        $invoices = \App\Models\StudentInvoice::with([
+            'semester',
+            'studyYear',
+            'department',
+            'items.subject'
+        ])
+        ->where('student_id', $id)
+        ->orderBy('invoice_date', 'desc')
+        ->get();
+
+        return response()->json($invoices);
+    }
+
+    /**
+     * Create payment journal entry when student pays during registration
+     */
+    protected function createPaymentJournalEntry($invoice, $amount, $student)
+    {
+        // Get default accounts
+        $receivableAccount = \App\Models\AccountDefault::where('category', 'accounts_receivable')->first();
+        $cashAccount = \App\Models\AccountDefault::where('category', 'cash')->first();
+        
+        // If no cash account configured, try to find one or skip
+        if (!$cashAccount) {
+            // Try to find a cash account
+            $cashAccountModel = \App\Models\Account::where('account_type', 'asset')
+                ->where(function($q) {
+                    $q->where('account_name', 'like', '%نقد%')
+                      ->orWhere('account_name', 'like', '%cash%')
+                      ->orWhere('account_number', 'like', '101%');
+                })
+                ->first();
+            
+            if (!$cashAccountModel) {
+                // Create a basic cash account
+                $cashAccountModel = \App\Models\Account::create([
+                    'account_number' => '1010',
+                    'account_name' => 'النقدية',
+                    'account_type' => 'asset',
+                    'root_account_type' => 'assets',
+                    'is_active' => true,
+                    'is_group' => false,
+                    'description' => 'حساب النقدية - Cash Account'
+                ]);
+                
+                // Set as default
+                \App\Models\AccountDefault::create([
+                    'category' => 'cash',
+                    'account_id' => $cashAccountModel->id,
+                    'description' => 'Default cash account'
+                ]);
+            }
+            
+            $cashAccountId = $cashAccountModel->id;
+        } else {
+            $cashAccountId = $cashAccount->account_id;
+        }
+
+        $journalEntry = \App\Models\JournalEntry::create([
+            'entry_type' => 'قيد يومية',
+            'reference_number' => $invoice->invoice_number . '-PAY',
+            'entry_date' => now(),
+            'posting_date' => now(),
+            'notes' => 'دفعة من الطالب عند التسجيل: ' . $student->name,
+            'status' => 'posted',
+            'total_debit' => $amount,
+            'total_credit' => $amount,
+            'posted_at' => now(),
+        ]);
+
+        // Debit: Cash
+        \App\Models\JournalEntryLine::create([
+            'journal_entry_id' => $journalEntry->id,
+            'account_id' => $cashAccountId,
+            'debit' => $amount,
+            'credit' => 0,
+            'description' => 'دفعة نقدية من الطالب - ' . $student->name,
+            'line_number' => 1,
+        ]);
+
+        // Credit: Accounts Receivable
+        \App\Models\JournalEntryLine::create([
+            'journal_entry_id' => $journalEntry->id,
+            'account_id' => $receivableAccount->account_id,
+            'debit' => 0,
+            'credit' => $amount,
+            'description' => 'تخفيض المستحقات - ' . $student->name,
+            'line_number' => 2,
+        ]);
+        
+        return $journalEntry;
     }
 }

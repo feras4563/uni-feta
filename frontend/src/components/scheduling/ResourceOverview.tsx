@@ -1,4 +1,4 @@
-import { SchedulingResources } from '../../lib/scheduling-api';
+import { SchedulingResources } from '../../lib/jwt-api';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
 

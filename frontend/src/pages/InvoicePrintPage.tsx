@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/api-client';
+import logoWithName from '../assets/Logo_with_name.png';
 
 export default function InvoicePrintPage() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
@@ -335,6 +336,7 @@ export default function InvoicePrintPage() {
         <div className="print-content-wrapper">
           {/* Header */}
           <div className="print-header">
+          <img src={logoWithName} alt="جامعة الخليل الأهلية" style={{ height: '50px', margin: '0 auto 8px', display: 'block' }} />
           <div className="print-title">فاتورة</div>
           <div className="print-subtitle">INVOICE</div>
           <div className="print-invoice-number">رقم الفاتورة: {invoice.invoice_number}</div>
@@ -465,7 +467,7 @@ export default function InvoicePrintPage() {
           {/* Footer */}
           <div className="print-footer">
             <div>تم طباعة هذه الفاتورة في: {new Date().toLocaleDateString('ar-LY')}</div>
-            <div>نظام إدارة الجامعة - UniERP</div>
+            <div>جامعة الخليل الأهلية - University of Alkhalil</div>
             <div>هاتف: +964-XXX-XXX-XXXX | البريد الإلكتروني: info@university.edu</div>
           </div>
         </div>

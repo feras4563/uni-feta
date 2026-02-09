@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-// import { supabase } from "../lib/supabase"; // OLD - Supabase
-import { api } from "../lib/api-client"; // NEW - JWT
+import { api } from "../lib/api-client";
 
 export function useSystemSettings() {
   return useQuery({
@@ -15,10 +14,10 @@ export function useSystemSettings() {
         // Return default settings if API fails
         return {
           id: 'main',
-          app_name: 'UniERP Horizon',
+          app_name: 'جامعة الخليل الأهلية',
           app_logo_url: null,
           app_logo_name: null,
-          theme_color: '#059669',
+          theme_color: '#1a2332',
           language: 'ar',
           timezone: 'Asia/Riyadh'
         };

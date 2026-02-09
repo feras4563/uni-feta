@@ -235,6 +235,61 @@ export class QRService {
   }
 
   /**
+   * Generate teacher QR code (for teacher identification)
+   */
+  static async generateTeacherQR(teacherData: {
+    teacherId: string;
+    name: string;
+    nameEn?: string;
+    departmentName?: string;
+    qualification?: string;
+    specialization?: string;
+    campusId?: string;
+  }): Promise<{
+    payload: string;
+    qrDataURL: string;
+    formattedData: string;
+  }> {
+    const formattedData = [
+      '\u0627\u0644\u0627\u0633\u0645: ' + teacherData.name,
+      teacherData.nameEn ? 'Name: ' + teacherData.nameEn : '',
+      '\u0631\u0642\u0645 \u0627\u0644\u0645\u062F\u0631\u0633: ' + (teacherData.campusId || teacherData.teacherId),
+      '\u0627\u0644\u0642\u0633\u0645: ' + (teacherData.departmentName || '\u063A\u064A\u0631 \u0645\u062D\u062F\u062F'),
+      teacherData.qualification ? '\u0627\u0644\u0631\u062A\u0628\u0629: ' + teacherData.qualification : '',
+      teacherData.specialization ? '\u0627\u0644\u062A\u062E\u0635\u0635: ' + teacherData.specialization : '',
+      '\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u0625\u0635\u062F\u0627\u0631: ' + new Date().toLocaleDateString('en-GB')
+    ].filter(line => line.trim() !== '').join('\n');
+
+    const payload = JSON.stringify({
+      type: 'teacher',
+      teacher_id: teacherData.teacherId,
+      campus_id: teacherData.campusId || '',
+      name: teacherData.name,
+      name_en: teacherData.nameEn || '',
+      department_name: teacherData.departmentName || '',
+      qualification: teacherData.qualification || '',
+      generated_at: new Date().toISOString(),
+      formatted_display: formattedData,
+      version: '2.0'
+    });
+
+    const qrDataURL = await this.generateQRCodeDataURL(formattedData, {
+      width: 300,
+      margin: 3,
+      color: {
+        dark: '#1f2937',
+        light: '#ffffff'
+      }
+    });
+
+    return {
+      payload,
+      qrDataURL,
+      formattedData
+    };
+  }
+
+  /**
    * Validate student QR code
    */
   static validateStudentQR(payload: string): {

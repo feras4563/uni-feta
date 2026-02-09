@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\StudentSemesterRegistration;
+use App\Traits\LogsUserActions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class StudentRegistrationController extends Controller
 {
+    use LogsUserActions;
+
     /**
      * Get all student registrations
      */
@@ -103,8 +106,43 @@ class StudentRegistrationController extends Controller
             ], 409);
         }
 
+        // Fee check when assigning to a group
+        if ($request->group_id && !$request->boolean('tuition_paid')) {
+            $hasPaid = false;
+            $hasOverride = false;
+
+            $invoice = \App\Models\StudentInvoice::where('student_id', $request->student_id)
+                ->where('semester_id', $request->semester_id)
+                ->first();
+            if ($invoice && $invoice->status === 'paid') {
+                $hasPaid = true;
+            }
+
+            $adminOverride = \App\Models\StudentSubjectEnrollment::where('student_id', $request->student_id)
+                ->where('semester_id', $request->semester_id)
+                ->where('admin_override', true)
+                ->where('attendance_allowed', true)
+                ->exists();
+            if ($adminOverride) {
+                $hasOverride = true;
+            }
+
+            if (!$hasPaid && !$hasOverride) {
+                return response()->json([
+                    'message' => 'لا يمكن تعيين الطالب في مجموعة: الرسوم غير مدفوعة ولا يوجد تجاوز إداري.',
+                    'error_code' => 'FEES_NOT_PAID'
+                ], 422);
+            }
+        }
+
         $registration = StudentSemesterRegistration::create($request->all());
         $registration->load(['student', 'semester', 'studyYear', 'department', 'group']);
+
+        $this->logAction('register', 'student-registration', $registration->id, [
+            'student_id' => $request->student_id,
+            'semester_id' => $request->semester_id,
+            'department_id' => $request->department_id,
+        ]);
 
         return response()->json($registration, 201);
     }
@@ -147,6 +185,39 @@ class StudentRegistrationController extends Controller
                 'message' => 'Validation failed',
                 'errors' => $validator->errors()
             ], 422);
+        }
+
+        // Fee check when assigning to a group during update
+        if ($request->has('group_id') && $request->group_id && !$registration->group_id) {
+            $tuitionPaid = $request->has('tuition_paid') ? $request->boolean('tuition_paid') : $registration->tuition_paid;
+            if (!$tuitionPaid) {
+                $hasPaid = false;
+                $hasOverride = false;
+
+                $semesterId = $request->semester_id ?? $registration->semester_id;
+                $invoice = \App\Models\StudentInvoice::where('student_id', $registration->student_id)
+                    ->where('semester_id', $semesterId)
+                    ->first();
+                if ($invoice && $invoice->status === 'paid') {
+                    $hasPaid = true;
+                }
+
+                $adminOverride = \App\Models\StudentSubjectEnrollment::where('student_id', $registration->student_id)
+                    ->where('semester_id', $semesterId)
+                    ->where('admin_override', true)
+                    ->where('attendance_allowed', true)
+                    ->exists();
+                if ($adminOverride) {
+                    $hasOverride = true;
+                }
+
+                if (!$hasPaid && !$hasOverride) {
+                    return response()->json([
+                        'message' => 'لا يمكن تعيين الطالب في مجموعة: الرسوم غير مدفوعة ولا يوجد تجاوز إداري.',
+                        'error_code' => 'FEES_NOT_PAID'
+                    ], 422);
+                }
+            }
         }
 
         $registration->update($request->all());

@@ -21,7 +21,8 @@ import {
   Calculator,
   FileText,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  X
 } from "lucide-react";
 
 export default function EnhancedStudentRegistration() {
@@ -34,6 +35,7 @@ export default function EnhancedStudentRegistration() {
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [studySemester, setStudySemester] = useState<string>("");
   const [academicYear, setAcademicYear] = useState<string>("");
+  const [isPaying, setIsPaying] = useState(false);
 
   const { data: students, isLoading: loadingStudents } = useQuery({
     queryKey: ["students"],
@@ -112,6 +114,26 @@ export default function EnhancedStudentRegistration() {
     
     console.log('🔍 Extracted enrolled subject IDs:', subjectIds);
     return subjectIds;
+  }, [enrollments]);
+
+  // Create a map of subject ID to enrollment data for payment status
+  const enrollmentMap = useMemo(() => {
+    if (!enrollments) return new Map();
+    console.log('🔍 Building enrollmentMap from enrollments:', enrollments);
+    const map = new Map();
+    enrollments.forEach(enrollment => {
+      const subjectId = enrollment.subject_id || enrollment.subjects?.id;
+      if (subjectId) {
+        console.log(`📝 Mapping subject ${subjectId}:`, {
+          payment_status: enrollment.payment_status,
+          attendance_allowed: enrollment.attendance_allowed,
+          invoice_id: enrollment.invoice_id
+        });
+        map.set(subjectId, enrollment);
+      }
+    });
+    console.log('✅ enrollmentMap created with', map.size, 'entries');
+    return map;
   }, [enrollments]);
 
   const availableCost = useMemo(() => {
@@ -193,7 +215,8 @@ export default function EnhancedStudentRegistration() {
         studySemester, // semester_id
         semesters?.find(s => s.id === studySemester)?.study_year_id || semesters?.find(s => s.id === studySemester)?.studyYear?.id || '', // study_year_id
         selectedDepartment,
-        selectedSemesterNumber
+        selectedSemesterNumber,
+        isPaying
       );
       
       queryClient.invalidateQueries({ queryKey: ["student-enrollments"] });
@@ -203,15 +226,17 @@ export default function EnhancedStudentRegistration() {
       const selectedSemesterName = semesters?.find(s => s.id === studySemester)?.name || studySemester;
       
       // Show detailed success message
+      const paymentStatus = isPaying ? ' وتم تسجيل الدفع الكامل' : ' وتم إنشاء الفاتورة';
       if (result.skippedSubjects && result.skippedSubjects.length > 0) {
-        alert(`تم تسجيل الطالب في ${result.enrolledSubjects.length} مقرر جديد للفصل الدراسي ${selectedSemesterName} - ${academicYear}. تم تجاهل ${result.skippedSubjects.length} مقرر مسجل مسبقاً.`);
+        alert(`تم تسجيل الطالب في ${result.enrolledSubjects.length} مقرر جديد للفصل الدراسي ${selectedSemesterName} - ${academicYear}${paymentStatus}. تم تجاهل ${result.skippedSubjects.length} مقرر مسجل مسبقاً.`);
       } else {
-        alert(`تم تسجيل الطالب في جميع المقررات بنجاح للفصل الدراسي ${selectedSemesterName} - ${academicYear} وتم إنشاء الفاتورة`);
+        alert(`تم تسجيل الطالب في جميع المقررات بنجاح للفصل الدراسي ${selectedSemesterName} - ${academicYear}${paymentStatus}`);
       }
       
       setSelectedSubjects([]); // Clear selected subjects after registration
       setStudySemester(""); // Clear study semester
       setAcademicYear(""); // Clear academic year
+      setIsPaying(false); // Reset payment checkbox
     } catch (error: any) {
       alert("خطأ في تسجيل الطالب: " + error.message);
     }
@@ -533,12 +558,51 @@ export default function EnhancedStudentRegistration() {
                                         مطلوب
                                       </span>
                                     )}
-                                    {isEnrolled && (
-                                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center gap-1">
-                                        <CheckCircle className="h-3 w-3" />
-                                        مسجل مسبقاً
-                                      </span>
-                                    )}
+                                    {isEnrolled && (() => {
+                                      const enrollment = enrollmentMap.get(item.id);
+                                      const paymentStatus = enrollment?.payment_status || 'unpaid';
+                                      const attendanceAllowed = enrollment?.attendance_allowed || false;
+                                      
+                                      console.log(`🎨 Rendering badges for subject ${item.id} (${item.name}):`, {
+                                        enrollment,
+                                        paymentStatus,
+                                        attendanceAllowed,
+                                        hasEnrollment: !!enrollment
+                                      });
+                                      
+                                      return (
+                                        <>
+                                          <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center gap-1">
+                                            <CheckCircle className="h-3 w-3" />
+                                            مسجل مسبقاً
+                                          </span>
+                                          {paymentStatus === 'paid' && (
+                                            <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center gap-1">
+                                              <CheckCircle className="h-3 w-3" />
+                                              مدفوع
+                                            </span>
+                                          )}
+                                          {paymentStatus === 'partial' && (
+                                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full flex items-center gap-1">
+                                              <AlertCircle className="h-3 w-3" />
+                                              مدفوع جزئياً
+                                            </span>
+                                          )}
+                                          {paymentStatus === 'unpaid' && (
+                                            <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full flex items-center gap-1">
+                                              <AlertCircle className="h-3 w-3" />
+                                              غير مدفوع
+                                            </span>
+                                          )}
+                                          {!attendanceAllowed && (
+                                            <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full flex items-center gap-1">
+                                              <X className="h-3 w-3" />
+                                              غير مسموح بالحضور
+                                            </span>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
                                     {isAvailable && !isSelected && (
                                       <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
                                         متاح للتسجيل
@@ -579,6 +643,36 @@ export default function EnhancedStudentRegistration() {
                     </div>
                   )}
 
+                  {/* Payment Option */}
+                  {selectedSubjects.length > 0 && (
+                    <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isPaying}
+                          onChange={(e) => setIsPaying(e.target.checked)}
+                          className="h-5 w-5 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                        />
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">الدفع عند التسجيل</div>
+                          <div className="text-sm text-gray-600">
+                            {isPaying ? (
+                              <span className="text-green-700">✓ سيتم تسجيل الدفع الكامل ({selectedCost.toLocaleString()} دينار)</span>
+                            ) : (
+                              <span>سيتم إنشاء فاتورة بحالة "غير مدفوع"</span>
+                            )}
+                          </div>
+                        </div>
+                        {isPaying && (
+                          <div className="text-right">
+                            <div className="text-2xl font-bold text-green-600">{selectedCost.toLocaleString()}</div>
+                            <div className="text-xs text-green-700">دينار</div>
+                          </div>
+                        )}
+                      </label>
+                    </div>
+                  )}
+
                   {/* Action Buttons */}
                   <div className="flex gap-3 mt-6">
                     <button
@@ -587,7 +681,7 @@ export default function EnhancedStudentRegistration() {
                       className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       <Plus className="h-4 w-4" />
-                      تسجيل المقررات المختارة ({selectedSubjects.length})
+                      {isPaying ? 'تسجيل ودفع' : 'تسجيل المقررات المختارة'} ({selectedSubjects.length})
                     </button>
                     <button
                       onClick={() => setShowInvoiceModal(true)}

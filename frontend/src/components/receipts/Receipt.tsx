@@ -1,4 +1,5 @@
 import React from 'react';
+import logo1 from '../../assets/logo1.png';
 
 interface ReceiptProps {
   receiptData: {
@@ -140,7 +141,7 @@ export default function Receipt({ receiptData, onPrint, onClose, showActions = t
     return `
       <div class="receipt">
         <div class="header">
-          <h1>جامعة الأفق</h1>
+          <h1>جامعة الخليل الأهلية</h1>
           <h2>إيصال دفع رسوم</h2>
         </div>
         
@@ -233,11 +234,9 @@ export default function Receipt({ receiptData, onPrint, onClose, showActions = t
     <div className="bg-white rounded-lg shadow-lg max-w-md mx-auto">
       {/* Receipt Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-t-lg text-center">
-        <div className="flex items-center justify-center mb-2">
-          <svg className="w-8 h-8 mr-2" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-          </svg>
-          <h2 className="text-xl font-bold">جامعة الأفق</h2>
+        <div className="flex items-center justify-center mb-2 gap-2">
+          <img src={logo1} alt="UKL" className="h-8 w-auto object-contain" />
+          <h2 className="text-xl font-bold">جامعة الخليل الأهلية</h2>
         </div>
         <p className="text-blue-100">إيصال دفع رسوم</p>
       </div>

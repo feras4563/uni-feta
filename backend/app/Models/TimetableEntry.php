@@ -56,6 +56,11 @@ class TimetableEntry extends Model
         return $this->belongsTo(StudentGroup::class, 'group_id');
     }
 
+    public function studentGroup()
+    {
+        return $this->belongsTo(StudentGroup::class, 'group_id');
+    }
+
     public function subject()
     {
         return $this->belongsTo(Subject::class);

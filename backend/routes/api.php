@@ -29,6 +29,9 @@ use App\Http\Controllers\Api\SubjectTitleController;
 use App\Http\Controllers\Api\StudentInvoiceController;
 use App\Http\Controllers\Api\PaymentModeController;
 use App\Http\Controllers\Api\PaymentEntryController;
+use App\Http\Controllers\Api\FeeController;
+use App\Http\Controllers\Api\ActionLogController;
+use App\Http\Controllers\Api\TeacherPortalController;
 
 /*
 |--------------------------------------------------------------------------
@@ -74,68 +77,72 @@ Route::middleware('auth:api')->group(function () {
     
     // Students Routes
     Route::prefix('students')->group(function () {
-        Route::get('/', [StudentController::class, 'index']);
-        Route::post('/', [StudentController::class, 'store']);
-        Route::get('/statistics', [StudentController::class, 'statistics']);
-        Route::get('/count-by-department', [StudentController::class, 'countByDepartment']);
-        Route::get('/{id}', [StudentController::class, 'show']);
-        Route::get('/{id}/enrollments', [StudentController::class, 'enrollments']);
-        Route::get('/{id}/subject-enrollments', [StudentController::class, 'subjectEnrollments']);
-        Route::post('/{id}/enroll-subjects', [StudentController::class, 'enrollInSubjects']);
-        Route::put('/{id}', [StudentController::class, 'update']);
-        Route::patch('/{id}', [StudentController::class, 'update']);
-        Route::delete('/{id}', [StudentController::class, 'destroy']);
+        Route::get('/', [StudentController::class, 'index'])->middleware('permission:students,view');
+        Route::post('/', [StudentController::class, 'store'])->middleware('permission:students,create');
+        Route::get('/statistics', [StudentController::class, 'statistics'])->middleware('permission:students,view');
+        Route::get('/count-by-department', [StudentController::class, 'countByDepartment'])->middleware('permission:students,view');
+        Route::get('/{id}', [StudentController::class, 'show'])->middleware('permission:students,view');
+        Route::get('/{id}/enrollments', [StudentController::class, 'enrollments'])->middleware('permission:students,view');
+        Route::get('/{id}/subject-enrollments', [StudentController::class, 'subjectEnrollments'])->middleware('permission:students,view');
+        Route::get('/{id}/invoices', [StudentController::class, 'invoices'])->middleware('permission:students,view');
+        Route::post('/{id}/enroll-subjects', [StudentController::class, 'enrollInSubjects'])->middleware('permission:student-enrollments,create');
+        Route::post('/{id}/upload-photo', [StudentController::class, 'uploadPhoto'])->middleware('permission:students,create');
+        Route::put('/{id}', [StudentController::class, 'update'])->middleware('permission:students,edit');
+        Route::patch('/{id}', [StudentController::class, 'update'])->middleware('permission:students,edit');
+        Route::delete('/{id}', [StudentController::class, 'destroy'])->middleware('permission:students,delete');
     });
 
-    // Departments Routes
+    // Departments Routes (manager only for write operations)
     Route::prefix('departments')->group(function () {
         Route::get('/', [DepartmentController::class, 'index']);
-        Route::post('/', [DepartmentController::class, 'store']);
         Route::get('/{id}', [DepartmentController::class, 'show']);
         Route::get('/{id}/details', [DepartmentController::class, 'details']);
         Route::get('/{id}/statistics', [DepartmentController::class, 'statistics']);
         Route::get('/{id}/semesters/{semesterNumber}/subjects', [DepartmentController::class, 'getSemesterSubjects']);
         Route::get('/{id}/curriculum/semester/{semesterNumber}', [DepartmentController::class, 'getSemesterSubjects']);
-        Route::put('/{id}/semesters/{semesterNumber}/subjects', [DepartmentController::class, 'updateSemesterSubjects']);
-        Route::put('/{id}', [DepartmentController::class, 'update']);
-        Route::patch('/{id}', [DepartmentController::class, 'update']);
-        Route::delete('/{id}', [DepartmentController::class, 'destroy']);
+        Route::post('/', [DepartmentController::class, 'store'])->middleware('role:manager');
+        Route::put('/{id}/semesters/{semesterNumber}/subjects', [DepartmentController::class, 'updateSemesterSubjects'])->middleware('role:manager');
+        Route::put('/{id}', [DepartmentController::class, 'update'])->middleware('role:manager');
+        Route::patch('/{id}', [DepartmentController::class, 'update'])->middleware('role:manager');
+        Route::delete('/{id}', [DepartmentController::class, 'destroy'])->middleware('role:manager');
     });
 
-    // Subjects Routes
+    // Subjects Routes (manager only for write operations)
     Route::prefix('subjects')->group(function () {
         Route::get('/', [SubjectController::class, 'index']);
-        Route::post('/', [SubjectController::class, 'store']);
         Route::get('/department/{departmentId}', [SubjectController::class, 'byDepartment']);
         Route::get('/semester/{semesterNumber}', [SubjectController::class, 'bySemester']);
         Route::get('/{id}', [SubjectController::class, 'show']);
-        Route::put('/{id}', [SubjectController::class, 'update']);
-        Route::patch('/{id}', [SubjectController::class, 'update']);
-        Route::delete('/{id}', [SubjectController::class, 'destroy']);
+        Route::post('/{id}/check-prerequisites', [SubjectController::class, 'checkPrerequisites']);
+        Route::post('/', [SubjectController::class, 'store'])->middleware('role:manager');
+        Route::put('/{id}', [SubjectController::class, 'update'])->middleware('role:manager');
+        Route::patch('/{id}', [SubjectController::class, 'update'])->middleware('role:manager');
+        Route::delete('/{id}', [SubjectController::class, 'destroy'])->middleware('role:manager');
     });
 
-    // Subject Titles Routes
+    // Subject Titles Routes (manager only for write operations)
     Route::prefix('subject-titles')->group(function () {
         Route::get('/', [SubjectTitleController::class, 'index']);
-        Route::post('/', [SubjectTitleController::class, 'store']);
         Route::get('/{id}', [SubjectTitleController::class, 'show']);
-        Route::put('/{id}', [SubjectTitleController::class, 'update']);
-        Route::patch('/{id}', [SubjectTitleController::class, 'update']);
-        Route::delete('/{id}', [SubjectTitleController::class, 'destroy']);
+        Route::post('/', [SubjectTitleController::class, 'store'])->middleware('role:manager');
+        Route::put('/{id}', [SubjectTitleController::class, 'update'])->middleware('role:manager');
+        Route::patch('/{id}', [SubjectTitleController::class, 'update'])->middleware('role:manager');
+        Route::delete('/{id}', [SubjectTitleController::class, 'destroy'])->middleware('role:manager');
     });
 
-    // Teachers Routes
+    // Teachers Routes (manager only for write operations)
     Route::prefix('teachers')->group(function () {
         Route::get('/', [TeacherController::class, 'index']);
-        Route::post('/', [TeacherController::class, 'store']);
-        Route::post('/with-departments', [TeacherController::class, 'storeWithDepartments']);
         Route::get('/{id}', [TeacherController::class, 'show']);
         Route::get('/{id}/subjects', [TeacherController::class, 'subjects']);
         Route::get('/{id}/sessions', [TeacherController::class, 'sessions']);
         Route::get('/{id}/statistics', [TeacherController::class, 'statistics']);
-        Route::put('/{id}', [TeacherController::class, 'update']);
-        Route::patch('/{id}', [TeacherController::class, 'update']);
-        Route::delete('/{id}', [TeacherController::class, 'destroy']);
+        Route::post('/', [TeacherController::class, 'store'])->middleware('role:manager');
+        Route::post('/with-departments', [TeacherController::class, 'storeWithDepartments'])->middleware('role:manager');
+        Route::post('/{id}/upload-photo', [TeacherController::class, 'uploadPhoto'])->middleware('role:manager');
+        Route::put('/{id}', [TeacherController::class, 'update'])->middleware('role:manager');
+        Route::patch('/{id}', [TeacherController::class, 'update'])->middleware('role:manager');
+        Route::delete('/{id}', [TeacherController::class, 'destroy'])->middleware('role:manager');
     });
 
     // Study Years Routes
@@ -157,6 +164,7 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/current', [SemesterController::class, 'current']);
         Route::post('/set-current', [SemesterController::class, 'setCurrent']);
         Route::get('/{id}', [SemesterController::class, 'show']);
+        Route::get('/{id}/registered-students', [SemesterController::class, 'getRegisteredStudents']);
         Route::put('/{id}', [SemesterController::class, 'update']);
         Route::patch('/{id}', [SemesterController::class, 'update']);
         Route::delete('/{id}', [SemesterController::class, 'destroy']);
@@ -205,6 +213,9 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('student-groups')->group(function () {
         Route::get('/', [StudentGroupController::class, 'index']);
         Route::post('/', [StudentGroupController::class, 'store']);
+        Route::post('/create-from-registrations', [StudentGroupController::class, 'createFromRegistrations']);
+        Route::post('/auto-create', [StudentGroupController::class, 'autoCreate']);
+        Route::post('/auto-assign', [StudentGroupController::class, 'autoAssign']);
         Route::get('/{id}', [StudentGroupController::class, 'show']);
         Route::get('/{id}/students', [StudentGroupController::class, 'getStudents']);
         Route::get('/{id}/available-students', [StudentGroupController::class, 'getAvailableStudents']);
@@ -352,5 +363,33 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/', [PaymentEntryController::class, 'store']);
         Route::get('/{id}', [PaymentEntryController::class, 'show']);
         Route::delete('/{id}', [PaymentEntryController::class, 'destroy']);
+    });
+
+    // Fees routes (Student Invoices) - staff can view only, manager can manage
+    Route::prefix('fees')->group(function () {
+        Route::get('/', [FeeController::class, 'index'])->middleware('permission:fees,view');
+        Route::get('/statistics', [FeeController::class, 'statistics'])->middleware('permission:fees,view');
+        Route::get('/{id}', [FeeController::class, 'show'])->middleware('permission:fees,view');
+        Route::post('/{id}/payment', [FeeController::class, 'recordPayment'])->middleware('role:manager');
+        Route::post('/{id}/toggle-attendance', [FeeController::class, 'toggleAttendance'])->middleware('role:manager');
+    });
+
+    // Action Logs routes (manager only)
+    Route::prefix('action-logs')->middleware('role:manager')->group(function () {
+        Route::get('/', [ActionLogController::class, 'index']);
+        Route::get('/statistics', [ActionLogController::class, 'statistics']);
+    });
+
+    // Teacher Portal Routes (teacher role only - scoped to their own data)
+    Route::prefix('teacher-portal')->middleware('role:teacher')->group(function () {
+        Route::get('/dashboard', [TeacherPortalController::class, 'dashboard']);
+        Route::get('/my-subjects', [TeacherPortalController::class, 'mySubjects']);
+        Route::get('/my-students', [TeacherPortalController::class, 'myStudents']);
+        Route::get('/my-schedule', [TeacherPortalController::class, 'mySchedule']);
+        Route::get('/my-attendance', [TeacherPortalController::class, 'myAttendance']);
+        Route::get('/subjects/{subjectId}/grades', [TeacherPortalController::class, 'subjectGrades']);
+        Route::post('/grades', [TeacherPortalController::class, 'storeGrades']);
+        Route::put('/grades/{gradeId}', [TeacherPortalController::class, 'updateGrade']);
+        Route::delete('/grades/{gradeId}', [TeacherPortalController::class, 'deleteGrade']);
     });
 });

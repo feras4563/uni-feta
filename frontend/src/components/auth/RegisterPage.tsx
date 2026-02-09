@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../../lib/api-client';
+import logoWithName from '../../assets/Logo_with_name.png';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -64,7 +65,7 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gradient-to-br from-[#1a2332] via-[#243447] to-[#1a2332] flex items-center justify-center px-4">
         <div className="max-w-md w-full">
           <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-full mb-4">
@@ -80,15 +81,13 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#1a2332] via-[#243447] to-[#1a2332] flex items-center justify-center px-4">
       <div className="max-w-md w-full">
         {/* Logo and Title */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-full mb-4">
-            <i className="fas fa-graduation-cap text-white text-2xl"></i>
+          <div className="inline-block bg-white rounded-2xl px-6 py-3 shadow-lg">
+            <img src={logoWithName} alt="جامعة الخليل الأهلية" className="h-16 w-auto mx-auto" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">UniERP Horizon</h1>
-          <p className="text-slate-400">نظام إدارة الجامعة</p>
         </div>
 
         {/* Registration Form */}
@@ -267,7 +266,7 @@ export default function RegisterPage() {
         {/* Footer */}
         <div className="text-center mt-8">
           <p className="text-slate-400 text-sm">
-            © 2024 UniERP Horizon. جميع الحقوق محفوظة
+            © 2024 جامعة الخليل الأهلية. جميع الحقوق محفوظة
           </p>
         </div>
       </div>

@@ -150,11 +150,12 @@ export default function SubjectTeachersModal({
                         <div className="text-xs text-gray-600 mb-2">
                           <div className="flex items-center justify-between">
                             <span>{assignment.department?.name}</span>
-                            <span>{assignment.academic_year}</span>
+                            <span>{assignment.study_year?.name || assignment.academic_year}</span>
                           </div>
                           <div className="mt-1">
-                            {assignment.semester === 'fall' ? 'الفصل الأول' : 
-                             assignment.semester === 'spring' ? 'الفصل الثاني' : 'الفصل الصيفي'}
+                            {assignment.semester?.name || 
+                             (assignment.semester === 'fall' ? 'الفصل الأول' : 
+                              assignment.semester === 'spring' ? 'الفصل الثاني' : 'الفصل الصيفي')}
                           </div>
                         </div>
                         

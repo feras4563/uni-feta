@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SchedulingResources, AutoGenerationConstraints } from '../../lib/scheduling-api';
+import { SchedulingResources, AutoGenerationConstraints } from '../../lib/jwt-api';
 import Modal from '../ui/Modal';
 
 interface AutoGenerateWizardProps {

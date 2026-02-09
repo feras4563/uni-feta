@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScheduleEntry } from '../../lib/scheduling-api';
+import { ScheduleEntry } from '../../lib/jwt-api';
 
 interface ScheduleGridProps {
   schedule: ScheduleEntry[];

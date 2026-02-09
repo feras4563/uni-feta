@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchDepartments } from "../lib/api";
-import { getStudent, updateStudent, deleteStudent as deleteStudentAPI } from "../lib/jwt-api";
+import { fetchDepartments, getStudent, updateStudent, deleteStudent as deleteStudentAPI, uploadStudentPhoto } from "../lib/jwt-api";
 import { usePermissions } from "../hooks/usePermissions";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../contexts/JWTAuthContext";
+import { QRService } from "../lib/qr-service";
+import logo1 from "../assets/logo1.png";
 
 export default function StudentDetail() {
   const { id } = useParams();
@@ -12,794 +13,555 @@ export default function StudentDetail() {
   const { canEdit, canDelete } = usePermissions();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const photoInputRef = useRef<HTMLInputElement>(null);
   
   const [isEditing, setIsEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [transcriptFile, setTranscriptFile] = useState<File | null>(null);
+  const [qrDataURL, setQrDataURL] = useState<string | null>(null);
+  const [showCardModal, setShowCardModal] = useState(false);
   
   const [form, setForm] = useState({
-    // Personal Information
-    name: "",
-    name_en: "",
-    national_id_passport: "",
-    gender: "",
-    birth_date: "",
-    nationality: "",
-    phone: "",
-    email: "",
-    address: "",
-    sponsor_name: "",
-    sponsor_contact: "",
-    
-    // Academic History
-    academic_history: "",
-    academic_history_type: "",
-    academic_score: "",
-    
-    // Enrollment
-    department_id: "",
-    year: "",
-    status: "active",
-    enrollment_date: ""
+    name: "", name_en: "", national_id_passport: "", gender: "", birth_date: "",
+    nationality: "", phone: "", email: "", address: "", sponsor_name: "", sponsor_contact: "",
+    academic_history: "", academic_score: "", department_id: "", year: "", status: "active", enrollment_date: ""
   });
 
-  // Load departments
-  const { data: departments = [] } = useQuery({
-    queryKey: ["departments"],
-    queryFn: fetchDepartments
-  });
-
-  // Load student data
+  const { data: departments = [] } = useQuery({ queryKey: ["departments"], queryFn: fetchDepartments });
   const { data: student, isLoading, error } = useQuery({
-    queryKey: ["student", id],
-    queryFn: () => getStudent(id!),
-    enabled: !!id
+    queryKey: ["student", id], queryFn: () => getStudent(id!), enabled: !!id
   });
 
-  // QR code functionality removed - not using Supabase
-
-  // Load student data into form when student is loaded
   useEffect(() => {
     if (student) {
       setForm({
-        name: student.name || "",
-        name_en: student.name_en || "",
-        national_id_passport: student.national_id_passport || "",
-        gender: student.gender || "",
-        birth_date: student.birth_date || "",
-        nationality: student.nationality || "",
-        phone: student.phone || "",
-        email: student.email || "",
-        address: student.address || "",
-        sponsor_name: student.sponsor_name || "",
-        sponsor_contact: student.sponsor_contact || "",
-        academic_history: student.academic_history || "",
-        academic_history_type: student.academic_history_type || "",
-        academic_score: student.academic_score || "",
-        department_id: String(student.department_id || ""),
-        year: String(student.year || ""),
-        status: student.status || "active",
-        enrollment_date: student.enrollment_date || ""
+        name: student.name || "", name_en: student.name_en || "",
+        national_id_passport: student.national_id_passport || "", gender: student.gender || "",
+        birth_date: student.birth_date || "", nationality: student.nationality || "",
+        phone: student.phone || "", email: student.email || "", address: student.address || "",
+        sponsor_name: student.sponsor_name || "", sponsor_contact: student.sponsor_contact || "",
+        academic_history: student.academic_history || "", academic_score: student.academic_score || "",
+        department_id: String(student.department_id || ""), year: String(student.year || ""),
+        status: student.status || "active", enrollment_date: student.enrollment_date || ""
       });
+      generateQR(student);
     }
   }, [student]);
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!form.name.trim()) {
-      newErrors.name = "الاسم مطلوب";
-    }
-    if (!form.national_id_passport.trim()) {
-      newErrors.national_id_passport = "الرقم القومي/جواز السفر مطلوب";
-    }
-    if (!form.gender) {
-      newErrors.gender = "الجنس مطلوب";
-    }
-    if (!form.birth_date) {
-      newErrors.birth_date = "تاريخ الميلاد مطلوب";
-    }
-    if (form.email && !/\S+@\S+\.\S+/.test(form.email)) {
-      newErrors.email = "البريد الإلكتروني غير صحيح";
-    }
-    if (!form.department_id) {
-      newErrors.department_id = "القسم مطلوب";
-    }
-    if (!form.year) {
-      newErrors.year = "السنة الدراسية مطلوبة";
-    }
-    if (!form.enrollment_date) {
-      newErrors.enrollment_date = "تاريخ التسجيل مطلوب";
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  const generateQR = async (s: any) => {
+    try {
+      const dept = departments.find((d: any) => d.id === s.department_id);
+      const result = await QRService.generateStudentQR({
+        studentId: s.id, name: s.name, nameEn: s.name_en || '',
+        birthDate: s.birth_date || '', departmentId: s.department_id,
+        departmentName: dept?.name || s.department?.name || '', academicYear: s.year || 1,
+        registrationDate: s.enrollment_date || ''
+      });
+      setQrDataURL(result.qrDataURL);
+    } catch { /* silent */ }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const validateForm = () => {
+    const e: Record<string, string> = {};
+    if (!form.name.trim()) e.name = "الاسم مطلوب";
+    if (!form.national_id_passport.trim()) e.national_id_passport = "الرقم القومي مطلوب";
+    if (!form.gender) e.gender = "الجنس مطلوب";
+    if (!form.birth_date) e.birth_date = "تاريخ الميلاد مطلوب";
+    if (form.email && !/\S+@\S+\.\S+/.test(form.email)) e.email = "البريد غير صحيح";
+    if (!form.department_id) e.department_id = "القسم مطلوب";
+    if (!form.year) e.year = "السنة مطلوبة";
+    if (!form.enrollment_date) e.enrollment_date = "تاريخ التسجيل مطلوب";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = async (ev?: React.FormEvent) => {
+    ev?.preventDefault();
     if (!validateForm()) return;
-    
     setSubmitting(true);
     try {
-      const formData: any = {
-        name: form.name.trim(),
-        name_en: form.name_en.trim() || null,
+      await updateStudent(id!, {
+        name: form.name.trim(), name_en: form.name_en.trim() || null,
         national_id_passport: form.national_id_passport.trim(),
-        gender: form.gender || null,
-        birth_date: form.birth_date || null,
-        nationality: form.nationality.trim() || null,
-        phone: form.phone.trim() || null,
-        email: form.email.trim() || null,
-        address: form.address.trim() || null,
-        sponsor_name: form.sponsor_name.trim() || null,
-        sponsor_contact: form.sponsor_contact.trim() || null,
-        academic_history: form.academic_history ? String(form.academic_history).trim() || null : null,
-        academic_score: form.academic_score ? String(form.academic_score).trim() || null : null,
-        transcript_file: transcriptFile ? transcriptFile.name : student?.transcript_file,
-        department_id: form.department_id || null,
-        year: form.year ? parseInt(form.year) : null,
-        status: form.status,
-        enrollment_date: form.enrollment_date || null
-      };
-
-      await updateStudent(id!, formData);
-
+        gender: form.gender || null, birth_date: form.birth_date || null,
+        nationality: form.nationality.trim() || null, phone: form.phone.trim() || null,
+        email: form.email.trim() || null, address: form.address.trim() || null,
+        sponsor_name: form.sponsor_name.trim() || null, sponsor_contact: form.sponsor_contact.trim() || null,
+        academic_history: form.academic_history?.trim() || null,
+        academic_score: form.academic_score?.trim() || null,
+        department_id: form.department_id || null, year: form.year ? parseInt(form.year) : null,
+        status: form.status, enrollment_date: form.enrollment_date || null
+      });
       queryClient.invalidateQueries({ queryKey: ["student", id] });
       queryClient.invalidateQueries({ queryKey: ["students"] });
       setIsEditing(false);
-    } catch (error: any) {
-      console.error("Error updating student:", error);
-      setErrors({ submit: error.message || "خطأ في حفظ البيانات" });
-    } finally {
-      setSubmitting(false);
-    }
+    } catch (err: any) {
+      setErrors({ submit: err.message || "خطأ في حفظ البيانات" });
+    } finally { setSubmitting(false); }
   };
 
   const handleInputChange = (field: string, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: "" }));
-    }
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: "" }));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-      if (allowedTypes.includes(file.type)) {
-        setTranscriptFile(file);
-        if (errors.transcript_file) {
-          setErrors(prev => ({ ...prev, transcript_file: "" }));
-        }
-      } else {
-        setErrors(prev => ({ ...prev, transcript_file: "يرجى اختيار ملف PDF أو صورة (JPG, PNG, GIF)" }));
-      }
+    if (!file) return;
+    if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)) {
+      alert('يرجى اختيار صورة (JPG, PNG, WEBP)');
+      return;
     }
+    setUploadingPhoto(true);
+    try {
+      await uploadStudentPhoto(id!, file);
+      queryClient.invalidateQueries({ queryKey: ["student", id] });
+      queryClient.invalidateQueries({ queryKey: ["students"] });
+    } catch (err: any) {
+      alert('خطأ في رفع الصورة: ' + err.message);
+    } finally { setUploadingPhoto(false); }
   };
 
   const handleDeleteStudent = async () => {
     if (!confirm('هل أنت متأكد من حذف هذا الطالب؟')) return;
-
     try {
       await deleteStudentAPI(id!);
-      alert('تم حذف الطالب بنجاح');
       queryClient.invalidateQueries({ queryKey: ["students"] });
       navigate('/students');
-    } catch (error: any) {
-      console.error('Error deleting student:', error);
-      alert('خطأ في حذف الطالب');
-    }
+    } catch { alert('خطأ في حذف الطالب'); }
   };
 
-  // QR code functionality removed - not using Supabase
-
-  const getDepartmentName = (departmentId: string) => {
-    if (!departmentId) return 'غير محدد';
-    const dept = departments.find((d: any) => d.id === departmentId);
-    return dept ? dept.name : 'غير محدد';
+  const getDepartmentName = (did: string) => {
+    if (!did) return 'غير محدد';
+    return departments.find((d: any) => d.id === did)?.name || 'غير محدد';
   };
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'غير محدد';
-    return new Date(dateString).toLocaleDateString('ar-LY');
-  };
-
+  const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('ar-LY') : 'غير محدد';
   const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      active: { label: 'نشط', classes: 'bg-emerald-50 text-emerald-700', icon: '●' },
-      inactive: { label: 'غير نشط', classes: 'bg-red-50 text-red-700', icon: '●' },
-      graduated: { label: 'متخرج', classes: 'bg-blue-50 text-blue-700', icon: '●' },
-      suspended: { label: 'معلق', classes: 'bg-yellow-50 text-yellow-700', icon: '●' }
+    const m: Record<string, { l: string; c: string }> = {
+      active: { l: 'نشط', c: 'bg-gray-100 text-gray-800' },
+      inactive: { l: 'غير نشط', c: 'bg-red-50 text-red-700' },
+      graduated: { l: 'متخرج', c: 'bg-gray-200 text-gray-700' },
+      suspended: { l: 'معلق', c: 'bg-yellow-50 text-yellow-700' },
     };
-    
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.inactive;
-    
-    return (
-      <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${config.classes}`}>
-        <span className="mr-1">{config.icon}</span>
-        {config.label}
-      </span>
-    );
+    const s = m[status] || m.inactive;
+    return <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${s.c}`}>{s.l}</span>;
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-gray-300 border-t-green-500 rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-sm text-gray-600">جاري تحميل بيانات الطالب...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !student) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-            <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
+  const printStudentCard = () => {
+    if (!student || !qrDataURL) return;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    const fmtDate = (ds: string) => { try { return new Date(ds).toLocaleDateString('en-GB'); } catch { return ds || '-'; } };
+    const photoURL = student.photo_url ? (student.photo_url.startsWith('http') ? student.photo_url : `${API_URL}${student.photo_url}`) : null;
+    w.document.write(`<html><head><title>بطاقة الطالب - ${student.name}</title>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;700;800&display=swap');
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:'Noto Sans Arabic',Arial,sans-serif;background:#f3f4f6;direction:rtl}
+        .card{width:85.6mm;height:53.98mm;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;display:flex;flex-direction:column;box-shadow:0 4px 20px rgba(0,0,0,0.15)}
+        .card-top{background:#1a2332;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;position:relative}
+        .card-top::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#2dd4bf,#14b8a6,#2dd4bf)}
+        .card-top .uni-block{display:flex;align-items:center;gap:8px}
+        .card-top .logo-wrap{background:#fff;border-radius:4px;padding:2px;display:flex;align-items:center;justify-content:center}
+        .card-top .uni-logo{width:24px;height:24px;object-fit:contain}
+        .card-top .uni{color:#fff;font-size:12px;font-weight:700;letter-spacing:0.5px}
+        .card-top .uni-en{color:#2dd4bf;font-size:7.5px;font-weight:600;font-family:Arial;letter-spacing:0.3px}
+        .card-top .badge{background:rgba(45,212,191,0.15);color:#2dd4bf;font-size:7px;padding:2px 8px;border-radius:10px;font-weight:700;border:1px solid rgba(45,212,191,0.3)}
+        .card-body{flex:1;display:flex;padding:10px 14px;gap:10px}
+        .photo-col{display:flex;flex-direction:column;align-items:center;gap:4px}
+        .photo{width:60px;height:72px;border-radius:6px;border:2px solid #1a2332;object-fit:cover;background:#f9fafb}
+        .photo-placeholder{width:60px;height:72px;border-radius:6px;border:2px solid #e5e7eb;background:#f3f4f6;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:24px}
+        .info-col{flex:1;display:flex;flex-direction:column;justify-content:center}
+        .student-name{font-size:12px;font-weight:700;color:#1a2332;margin-bottom:6px;border-bottom:2px solid #2dd4bf;padding-bottom:4px}
+        .info-row{display:flex;justify-content:space-between;font-size:8px;margin-bottom:3px;line-height:1.5}
+        .info-label{color:#6b7280;font-weight:600}
+        .info-value{color:#1a2332;font-weight:700}
+        .qr-col{display:flex;flex-direction:column;align-items:center;justify-content:center}
+        .qr-col img{width:70px;height:70px;border:2px solid #1a2332;border-radius:6px;padding:2px}
+        .qr-label{font-size:6px;color:#1a2332;margin-top:2px;font-weight:600}
+        .card-footer{background:#1a2332;padding:4px 14px;display:flex;justify-content:space-between;font-size:6.5px;color:#2dd4bf;font-weight:600}
+        @media print{body{background:#fff!important}@page{size:85.6mm 53.98mm;margin:0}.card{border:none;box-shadow:none}}
+      </style></head><body>
+      <div class="card">
+        <div class="card-top">
+          <div class="uni-block">
+            <div class="logo-wrap"><img class="uni-logo" src="${logo1}" alt="UKL" /></div>
+            <div><div class="uni">جامعة الخليل الأهلية</div><div class="uni-en">UNIVERSITY OF ALKHALIL</div></div>
           </div>
-          <h3 className="mt-2 text-sm font-semibold text-gray-900">خطأ في تحميل البيانات</h3>
-          <p className="mt-1 text-sm text-gray-500">تعذر تحميل بيانات الطالب. يرجى المحاولة مرة أخرى.</p>
-          <button
-            onClick={() => navigate('/students')}
-            className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-          >
-            العودة إلى قائمة الطلاب
-          </button>
+          <div class="badge">بطاقة طالب</div>
         </div>
-      </div>
-    );
-  }
+        <div class="card-body">
+          <div class="photo-col">
+            ${photoURL ? `<img class="photo" src="${photoURL}" />` : `<div class="photo-placeholder">👤</div>`}
+          </div>
+          <div class="info-col">
+            <div class="student-name">${student.name}</div>
+            ${student.name_en ? `<div style="font-size:9px;color:#6b7280;margin-bottom:4px;font-family:Arial">${student.name_en}</div>` : ''}
+            <div class="info-row"><span class="info-label">رقم الطالب:</span><span class="info-value">${student.campus_id || student.id}</span></div>
+            <div class="info-row"><span class="info-label">التخصص:</span><span class="info-value">${getDepartmentName(student.department_id)}</span></div>
+            <div class="info-row"><span class="info-label">السنة:</span><span class="info-value">السنة ${student.year || 1}</span></div>
+            <div class="info-row"><span class="info-label">تاريخ الميلاد:</span><span class="info-value">${fmtDate(student.birth_date)}</span></div>
+          </div>
+          <div class="qr-col">
+            <img src="${qrDataURL}" alt="QR" />
+            <div class="qr-label">رمز التعريف</div>
+          </div>
+        </div>
+        <div class="card-footer">
+          <span>تاريخ الإصدار: ${fmtDate(student.enrollment_date)}</span>
+          <span>جامعة الخليل الأهلية - بطاقة رسمية</span>
+        </div>
+      </div></body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 500);
+  };
+
+  if (isLoading) return (
+    <div className="flex items-center justify-center h-96">
+      <div className="w-8 h-8 border-4 border-gray-200 border-t-gray-600 rounded-full animate-spin"></div>
+    </div>
+  );
+
+  if (error || !student) return (
+    <div className="flex flex-col items-center justify-center h-96 text-gray-500 gap-3">
+      <p>تعذر تحميل بيانات الطالب.</p>
+      <button onClick={() => navigate('/students')} className="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-800">العودة</button>
+    </div>
+  );
+
+  const API_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://127.0.0.1:8000';
+  const photoSrc = student.photo_url ? (student.photo_url.startsWith('http') ? student.photo_url : `${API_URL}${student.photo_url}`) : null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
-        <div className="px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4 space-x-reverse">
-              <button
-                onClick={() => navigate('/students')}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <div className="flex items-center space-x-3 space-x-reverse">
-                <div className="p-3 bg-gray-100 rounded-lg">
-                  <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
-                <div>
-                  <h1 className="text-3xl font-bold text-gray-900">
-                    {isEditing ? "تعديل بيانات الطالب" : "تفاصيل الطالب"}
-                  </h1>
-                  <p className="text-lg text-gray-600 mt-1 font-medium">
-                    {student.name} - {getDepartmentName(student.department_id)}
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-3 space-x-reverse">
-              {!isEditing && canEdit('students') && (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="inline-flex items-center px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors duration-200 shadow-sm"
-                >
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  تعديل البيانات
-                </button>
-              )}
-              
-              {!isEditing && canDelete('students') && (
-                <button
-                  onClick={handleDeleteStudent}
-                  className="inline-flex items-center px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200 shadow-sm"
-                >
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  حذف الطالب
-                </button>
-              )}
-              
-              {isEditing && (
-                <>
-                  <button
-                    onClick={() => setIsEditing(false)}
-                    className="px-6 py-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-                  >
-                    إلغاء
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    disabled={submitting}
-                    className="inline-flex items-center px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors duration-200 shadow-sm disabled:opacity-50"
-                  >
-                    {submitting ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        جاري الحفظ...
-                      </>
-                    ) : (
-                      "حفظ التغييرات"
-                    )}
-                  </button>
-                </>
-              )}
-            </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate('/students')} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{isEditing ? "تعديل بيانات الطالب" : student.name}</h1>
+            <p className="text-sm text-gray-500">{getDepartmentName(student.department_id)} - {student.campus_id || student.id}</p>
           </div>
         </div>
-      </div>
-
-      {/* Content */}
-      <div className="px-6 py-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Main Content */}
-            <div className="lg:col-span-2 space-y-8">
-              {/* Personal Information */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-                <div className="flex items-center mb-8">
-                  <div className="p-3 bg-gray-100 rounded-lg ml-4">
-                    <svg className="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                    </svg>
-                  </div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    المعلومات الشخصية
-                  </h2>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Arabic Name */}
-                  <div className="group">
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">
-                      الاسم الكامل (عربي) <span className="text-red-500 mr-1">*</span>
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors duration-200 ${
-                          errors.name ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
-                        }`}
-                        value={form.name}
-                        onChange={(e) => handleInputChange("name", e.target.value)}
-                      />
-                    ) : (
-                      <div className="px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <p className="text-gray-900 font-medium">{student.name}</p>
-                      </div>
-                    )}
-                    {errors.name && <p className="mt-2 text-sm text-red-600">
-                      {errors.name}
-                    </p>}
-                  </div>
-
-                  {/* English Name */}
-                  <div className="group">
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">
-                      الاسم الكامل (إنجليزي)
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors duration-200"
-                        value={form.name_en}
-                        onChange={(e) => handleInputChange("name_en", e.target.value)}
-                      />
-                    ) : (
-                      <div className="px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <p className="text-gray-900 font-medium">{student.name_en || 'غير محدد'}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* National ID */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      الرقم القومي/جواز السفر <span className="text-red-500">*</span>
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.national_id_passport ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        value={form.national_id_passport}
-                        onChange={(e) => handleInputChange("national_id_passport", e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-gray-900">{student.national_id_passport}</p>
-                    )}
-                    {errors.national_id_passport && <p className="mt-1 text-sm text-red-600">{errors.national_id_passport}</p>}
-                  </div>
-
-                  {/* Gender */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      الجنس <span className="text-red-500">*</span>
-                    </label>
-                    {isEditing ? (
-                      <select
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.gender ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        value={form.gender}
-                        onChange={(e) => handleInputChange("gender", e.target.value)}
-                      >
-                        <option value="">اختر الجنس</option>
-                        <option value="male">ذكر</option>
-                        <option value="female">أنثى</option>
-                      </select>
-                    ) : (
-                      <p className="text-gray-900">
-                        {student.gender === 'male' ? 'ذكر' : student.gender === 'female' ? 'أنثى' : 'غير محدد'}
-                      </p>
-                    )}
-                    {errors.gender && <p className="mt-1 text-sm text-red-600">{errors.gender}</p>}
-                  </div>
-
-                  {/* Birth Date */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      تاريخ الميلاد <span className="text-red-500">*</span>
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="date"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.birth_date ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        value={form.birth_date}
-                        onChange={(e) => handleInputChange("birth_date", e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-gray-900">{formatDate(student.birth_date)}</p>
-                    )}
-                    {errors.birth_date && <p className="mt-1 text-sm text-red-600">{errors.birth_date}</p>}
-                  </div>
-
-                  {/* Nationality */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      الجنسية
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        value={form.nationality}
-                        onChange={(e) => handleInputChange("nationality", e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-gray-900">{student.nationality || 'غير محدد'}</p>
-                    )}
-                  </div>
-
-                  {/* Phone */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      رقم الهاتف
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="tel"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        value={form.phone}
-                        onChange={(e) => handleInputChange("phone", e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-gray-900">{student.phone || 'غير محدد'}</p>
-                    )}
-                  </div>
-
-                  {/* Email */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      البريد الإلكتروني
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="email"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.email ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        value={form.email}
-                        onChange={(e) => handleInputChange("email", e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-gray-900">{student.email || 'غير محدد'}</p>
-                    )}
-                    {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
-                  </div>
-
-                  {/* Address */}
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      العنوان
-                    </label>
-                    {isEditing ? (
-                      <textarea
-                        rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        value={form.address}
-                        onChange={(e) => handleInputChange("address", e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-gray-900">{student.address || 'غير محدد'}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Academic Information */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-                <div className="flex items-center mb-8">
-                  <div className="p-3 bg-gray-100 rounded-lg ml-4">
-                    <svg className="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
-                    </svg>
-                  </div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    المعلومات الأكاديمية
-                  </h2>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Department */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      القسم <span className="text-red-500">*</span>
-                    </label>
-                    {isEditing ? (
-                      <select
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.department_id ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        value={form.department_id}
-                        onChange={(e) => handleInputChange("department_id", e.target.value)}
-                      >
-                        <option value="">اختر القسم</option>
-                        {departments.map((dept: any) => (
-                          <option key={dept.id} value={dept.id}>
-                            {dept.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <p className="text-gray-900">{getDepartmentName(student.department_id)}</p>
-                    )}
-                    {errors.department_id && <p className="mt-1 text-sm text-red-600">{errors.department_id}</p>}
-                  </div>
-
-                  {/* Year */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      السنة الدراسية <span className="text-red-500">*</span>
-                    </label>
-                    {isEditing ? (
-                      <select
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.year ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        value={form.year}
-                        onChange={(e) => handleInputChange("year", e.target.value)}
-                      >
-                        <option value="">اختر السنة</option>
-                        <option value="1">السنة الأولى</option>
-                        <option value="2">السنة الثانية</option>
-                        <option value="3">السنة الثالثة</option>
-                        <option value="4">السنة الرابعة</option>
-                        <option value="5">السنة الخامسة</option>
-                      </select>
-                    ) : (
-                      <p className="text-gray-900">السنة {student.year}</p>
-                    )}
-                    {errors.year && <p className="mt-1 text-sm text-red-600">{errors.year}</p>}
-                  </div>
-
-                  {/* Status */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      حالة الطالب
-                    </label>
-                    {isEditing ? (
-                      <select
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        value={form.status}
-                        onChange={(e) => handleInputChange("status", e.target.value)}
-                      >
-                        <option value="active">نشط</option>
-                        <option value="inactive">غير نشط</option>
-                        <option value="graduated">متخرج</option>
-                        <option value="suspended">معلق</option>
-                      </select>
-                    ) : (
-                      <div>{getStatusBadge(student.status)}</div>
-                    )}
-                  </div>
-
-                  {/* Enrollment Date */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      تاريخ التسجيل <span className="text-red-500">*</span>
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="date"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.enrollment_date ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        value={form.enrollment_date}
-                        onChange={(e) => handleInputChange("enrollment_date", e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-gray-900">{formatDate(student.enrollment_date)}</p>
-                    )}
-                    {errors.enrollment_date && <p className="mt-1 text-sm text-red-600">{errors.enrollment_date}</p>}
-                  </div>
-
-                  {/* Academic Score */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      الدرجة الأكاديمية
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        value={form.academic_score}
-                        onChange={(e) => handleInputChange("academic_score", e.target.value)}
-                        placeholder="مثال: 85.5% أو 3.2 GPA"
-                      />
-                    ) : (
-                      <p className="text-gray-900">{student.academic_score || 'غير محدد'}</p>
-                    )}
-                  </div>
-
-                  {/* Academic History */}
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      تفاصيل المؤهل الأكاديمي
-                    </label>
-                    {isEditing ? (
-                      <textarea
-                        rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        value={form.academic_history}
-                        onChange={(e) => handleInputChange("academic_history", e.target.value)}
-                        placeholder="تفاصيل إضافية حول المؤهل الأكاديمي..."
-                      />
-                    ) : (
-                      <p className="text-gray-900">{student.academic_history || 'غير محدد'}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* QR Code Card */}
-              {student.qr_code && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <div className="flex items-center mb-6">
-                    <div className="p-2 bg-gray-100 rounded-lg ml-3">
-                      <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                      </svg>
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900">رمز QR</h3>
-                  </div>
-                  <div className="text-center">
-                    <div className="bg-white p-4 rounded-lg border-2 border-gray-200 inline-block">
-                      <img 
-                        src={student.qr_code} 
-                        alt="QR Code" 
-                        className="w-48 h-48 mx-auto"
-                      />
-                    </div>
-                    <p className="mt-4 text-sm text-gray-600">
-                      امسح الرمز لعرض معلومات الطالب
-                    </p>
-                  </div>
-                </div>
+        <div className="flex items-center gap-2">
+          {isEditing ? (
+            <>
+              <button onClick={() => setIsEditing(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
+              <button onClick={handleSubmit} disabled={submitting} className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
+                {submitting ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+              </button>
+            </>
+          ) : (
+            <>
+              {canEdit('students') && (
+                <button onClick={() => setIsEditing(true)} className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800">تعديل</button>
               )}
-
-              {/* Student Status Card */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center mb-6">
-                  <div className="p-2 bg-gray-100 rounded-lg ml-3">
-                    <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900">حالة الطالب</h3>
-                </div>
-                <div className="text-center">
-                  <div className="mb-6">{getStatusBadge(student.status)}</div>
-                  <div className="space-y-3">
-                    <div className="px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <p className="text-sm font-medium text-gray-600">رقم الطالب</p>
-                      <p className="text-lg font-bold text-gray-900">{student.id}</p>
-                    </div>
-                    <div className="px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <p className="text-sm font-medium text-gray-600">تاريخ التسجيل</p>
-                      <p className="text-lg font-bold text-gray-900">{formatDate(student.enrollment_date)}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Guardian Information */}
-              {(student.sponsor_name || student.sponsor_contact) && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <div className="flex items-center mb-6">
-                    <div className="p-2 bg-gray-100 rounded-lg ml-3">
-                      <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900">معلومات ولي الأمر</h3>
-                  </div>
-                  <div className="space-y-4">
-                    {student.sponsor_name && (
-                      <div className="px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <p className="text-sm font-medium text-gray-600">الاسم</p>
-                        <p className="text-lg font-bold text-gray-900">{student.sponsor_name}</p>
-                      </div>
-                    )}
-                    {student.sponsor_contact && (
-                      <div className="px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <p className="text-sm font-medium text-gray-600">رقم الهاتف</p>
-                        <p className="text-lg font-bold text-gray-900">{student.sponsor_contact}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
+              {canDelete('students') && (
+                <button onClick={handleDeleteStudent} className="px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50">حذف</button>
               )}
-            </div>
-          </div>
-
-          {/* Submit Error */}
-          {errors.submit && (
-            <div className="mt-8 bg-white rounded-lg shadow-sm border border-red-200 p-6">
-              <div className="flex items-start">
-                <div className="flex-shrink-0">
-                  <div className="p-2 bg-red-100 rounded-lg">
-                    <svg className="h-6 w-6 text-red-600" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="mr-4">
-                  <h3 className="text-lg font-bold text-red-800 mb-2">
-                    خطأ في حفظ البيانات
-                  </h3>
-                  <div className="text-red-700 bg-red-50 px-4 py-3 rounded-lg border border-red-200">
-                    <p>{errors.submit}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            </>
           )}
         </div>
       </div>
+
+      {errors.submit && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{errors.submit}</div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Personal Info */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-5 pb-3 border-b border-gray-100">المعلومات الشخصية</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {[
+                { key: 'name', label: 'الاسم (عربي)', required: true, val: student.name },
+                { key: 'name_en', label: 'الاسم (إنجليزي)', val: student.name_en },
+                { key: 'national_id_passport', label: 'الرقم القومي', required: true, val: student.national_id_passport },
+                { key: 'birth_date', label: 'تاريخ الميلاد', required: true, type: 'date', val: formatDate(student.birth_date) },
+                { key: 'nationality', label: 'الجنسية', val: student.nationality },
+                { key: 'phone', label: 'الهاتف', val: student.phone },
+                { key: 'email', label: 'البريد الإلكتروني', type: 'email', val: student.email },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{f.label}{f.required && <span className="text-red-400 mr-0.5">*</span>}</label>
+                  {isEditing ? (
+                    <input type={f.type || 'text'} value={(form as any)[f.key]} onChange={e => handleInputChange(f.key, e.target.value)}
+                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-gray-400 ${errors[f.key] ? 'border-red-300' : 'border-gray-200'}`} />
+                  ) : (
+                    <p className="text-sm text-gray-900">{f.val || 'غير محدد'}</p>
+                  )}
+                  {errors[f.key] && <p className="text-xs text-red-500 mt-1">{errors[f.key]}</p>}
+                </div>
+              ))}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">الجنس<span className="text-red-400 mr-0.5">*</span></label>
+                {isEditing ? (
+                  <select value={form.gender} onChange={e => handleInputChange('gender', e.target.value)}
+                    className={`w-full px-3 py-2 text-sm border rounded-lg bg-white focus:ring-1 focus:ring-gray-400 ${errors.gender ? 'border-red-300' : 'border-gray-200'}`}>
+                    <option value="">اختر</option><option value="male">ذكر</option><option value="female">أنثى</option>
+                  </select>
+                ) : (
+                  <p className="text-sm text-gray-900">{student.gender === 'male' ? 'ذكر' : student.gender === 'female' ? 'أنثى' : 'غير محدد'}</p>
+                )}
+                {errors.gender && <p className="text-xs text-red-500 mt-1">{errors.gender}</p>}
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-500 mb-1">العنوان</label>
+                {isEditing ? (
+                  <textarea rows={2} value={form.address} onChange={e => handleInputChange('address', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400" />
+                ) : (
+                  <p className="text-sm text-gray-900">{student.address || 'غير محدد'}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Academic Info */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-5 pb-3 border-b border-gray-100">المعلومات الأكاديمية</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">القسم<span className="text-red-400 mr-0.5">*</span></label>
+                {isEditing ? (
+                  <select value={form.department_id} onChange={e => handleInputChange('department_id', e.target.value)}
+                    className={`w-full px-3 py-2 text-sm border rounded-lg bg-white focus:ring-1 focus:ring-gray-400 ${errors.department_id ? 'border-red-300' : 'border-gray-200'}`}>
+                    <option value="">اختر القسم</option>
+                    {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                ) : <p className="text-sm text-gray-900">{getDepartmentName(student.department_id)}</p>}
+                {errors.department_id && <p className="text-xs text-red-500 mt-1">{errors.department_id}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">السنة الدراسية<span className="text-red-400 mr-0.5">*</span></label>
+                {isEditing ? (
+                  <select value={form.year} onChange={e => handleInputChange('year', e.target.value)}
+                    className={`w-full px-3 py-2 text-sm border rounded-lg bg-white focus:ring-1 focus:ring-gray-400 ${errors.year ? 'border-red-300' : 'border-gray-200'}`}>
+                    <option value="">اختر</option>
+                    {[1,2,3,4,5].map(y => <option key={y} value={y}>السنة {['الأولى','الثانية','الثالثة','الرابعة','الخامسة'][y-1]}</option>)}
+                  </select>
+                ) : <p className="text-sm text-gray-900">السنة {student.year}</p>}
+                {errors.year && <p className="text-xs text-red-500 mt-1">{errors.year}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">حالة الطالب</label>
+                {isEditing ? (
+                  <select value={form.status} onChange={e => handleInputChange('status', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:ring-1 focus:ring-gray-400">
+                    <option value="active">نشط</option><option value="inactive">غير نشط</option>
+                    <option value="graduated">متخرج</option><option value="suspended">معلق</option>
+                  </select>
+                ) : getStatusBadge(student.status)}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">تاريخ التسجيل<span className="text-red-400 mr-0.5">*</span></label>
+                {isEditing ? (
+                  <input type="date" value={form.enrollment_date} onChange={e => handleInputChange('enrollment_date', e.target.value)}
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-gray-400 ${errors.enrollment_date ? 'border-red-300' : 'border-gray-200'}`} />
+                ) : <p className="text-sm text-gray-900">{formatDate(student.enrollment_date)}</p>}
+                {errors.enrollment_date && <p className="text-xs text-red-500 mt-1">{errors.enrollment_date}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">الدرجة الأكاديمية</label>
+                {isEditing ? (
+                  <input type="text" value={form.academic_score} onChange={e => handleInputChange('academic_score', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400" placeholder="85.5%" />
+                ) : <p className="text-sm text-gray-900">{student.academic_score || 'غير محدد'}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">ولي الأمر</label>
+                {isEditing ? (
+                  <input type="text" value={form.sponsor_name} onChange={e => handleInputChange('sponsor_name', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400" />
+                ) : <p className="text-sm text-gray-900">{student.sponsor_name || 'غير محدد'}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">هاتف ولي الأمر</label>
+                {isEditing ? (
+                  <input type="text" value={form.sponsor_contact} onChange={e => handleInputChange('sponsor_contact', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400" />
+                ) : <p className="text-sm text-gray-900">{student.sponsor_contact || 'غير محدد'}</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Student ID Card Preview */}
+          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900">بطاقة الطالب</h3>
+              <div className="flex gap-1">
+                <button onClick={() => setShowCardModal(true)} className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100">عرض</button>
+                <button onClick={printStudentCard} className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100">طباعة</button>
+              </div>
+            </div>
+            {/* Card-size preview (85.6mm x 53.98mm ratio = ~1.586) */}
+            <div className="p-4">
+              <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ aspectRatio: '1.586' }}>
+                {/* Mini card header */}
+                <div className="bg-[#1a2332] px-3 py-1.5 flex justify-between items-center border-b-2 border-[#2dd4bf]">
+                  <div className="flex items-center gap-1.5">
+                    <div className="bg-white rounded p-0.5 flex items-center justify-center">
+                      <img src={logo1} alt="UKL" className="h-4 w-auto object-contain" />
+                    </div>
+                    <div>
+                      <div className="text-white text-[10px] font-bold">جامعة الخليل الأهلية</div>
+                      <div className="text-[#2dd4bf] text-[6px]">UNIVERSITY OF ALKHALIL</div>
+                    </div>
+                  </div>
+                  <span className="text-[6px] text-[#2dd4bf] bg-[#2dd4bf]/10 border border-[#2dd4bf]/30 px-1.5 py-0.5 rounded-full font-medium">بطاقة طالب</span>
+                </div>
+                {/* Mini card body */}
+                <div className="flex p-2 gap-2 bg-white" style={{ minHeight: 0 }}>
+                  {/* Photo */}
+                  <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                    <div className="w-10 h-12 rounded border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center">
+                      {photoSrc ? (
+                        <img src={photoSrc} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                      )}
+                    </div>
+                  </div>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[9px] font-bold text-gray-900 truncate border-b border-gray-100 pb-0.5 mb-0.5">{student.name}</div>
+                    <div className="text-[6.5px] text-gray-500 space-y-0.5">
+                      <div className="flex justify-between"><span>رقم الطالب:</span><span className="font-medium text-gray-800">{student.campus_id || '-'}</span></div>
+                      <div className="flex justify-between"><span>التخصص:</span><span className="font-medium text-gray-800 truncate mr-1">{getDepartmentName(student.department_id)}</span></div>
+                      <div className="flex justify-between"><span>السنة:</span><span className="font-medium text-gray-800">{student.year || '-'}</span></div>
+                    </div>
+                  </div>
+                  {/* QR */}
+                  <div className="flex-shrink-0 flex flex-col items-center justify-center">
+                    {qrDataURL ? (
+                      <img src={qrDataURL} alt="QR" className="w-11 h-11 border border-gray-200 rounded p-0.5" />
+                    ) : (
+                      <div className="w-11 h-11 border border-gray-200 rounded bg-gray-50"></div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Photo Upload */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">صورة الطالب</h3>
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-28 h-36 rounded-lg border-2 border-dashed border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center">
+                {photoSrc ? (
+                  <img src={photoSrc} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                )}
+              </div>
+              <input ref={photoInputRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" className="hidden" onChange={handlePhotoUpload} />
+              <button
+                onClick={() => photoInputRef.current?.click()}
+                disabled={uploadingPhoto}
+                className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {uploadingPhoto ? 'جاري الرفع...' : (photoSrc ? 'تغيير الصورة' : 'رفع صورة')}
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Info */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">معلومات سريعة</h3>
+            <div className="space-y-2.5">
+              {[
+                { label: 'رقم الطالب', value: student.campus_id || student.id },
+                { label: 'الحالة', value: getStatusBadge(student.status), isJsx: true },
+                { label: 'تاريخ التسجيل', value: formatDate(student.enrollment_date) },
+                { label: 'الهاتف', value: student.phone || '-' },
+                { label: 'البريد', value: student.email || '-' },
+              ].map((item, i) => (
+                <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+                  <span className="text-xs text-gray-500">{item.label}</span>
+                  {item.isJsx ? item.value : <span className="text-xs font-medium text-gray-900">{item.value as string}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Full-size Card Modal */}
+      {showCardModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowCardModal(false)}>
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">بطاقة الطالب</h3>
+              <button onClick={() => setShowCardModal(false)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            {/* Card at actual ratio */}
+            <div className="border border-gray-200 rounded-lg overflow-hidden mx-auto" style={{ maxWidth: '400px', aspectRatio: '1.586' }}>
+              <div className="bg-[#1a2332] px-4 py-2 flex justify-between items-center border-b-[3px] border-[#2dd4bf]">
+                <div className="flex items-center gap-2">
+                  <div className="bg-white rounded-md p-0.5 flex items-center justify-center">
+                    <img src={logo1} alt="UKL" className="h-6 w-auto object-contain" />
+                  </div>
+                  <div>
+                    <div className="text-white text-sm font-bold">جامعة الخليل الأهلية</div>
+                    <div className="text-[#2dd4bf] text-[8px] font-medium">UNIVERSITY OF ALKHALIL</div>
+                  </div>
+                </div>
+                <span className="text-[8px] text-[#2dd4bf] bg-[#2dd4bf]/10 border border-[#2dd4bf]/30 px-2 py-0.5 rounded-full font-medium">بطاقة طالب</span>
+              </div>
+              <div className="flex p-3 gap-3 bg-white flex-1">
+                <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                  <div className="w-16 h-20 rounded-md border-2 border-[#1a2332] overflow-hidden bg-gray-50 flex items-center justify-center">
+                    {photoSrc ? (
+                      <img src={photoSrc} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    )}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-[#1a2332] truncate border-b-2 border-[#2dd4bf] pb-1 mb-1">{student.name}</div>
+                  {student.name_en && <div className="text-[10px] text-gray-500 mb-1">{student.name_en}</div>}
+                  <div className="text-[10px] text-gray-600 space-y-1">
+                    <div className="flex justify-between"><span>رقم الطالب:</span><span className="font-semibold text-[#1a2332]">{student.campus_id || student.id}</span></div>
+                    <div className="flex justify-between"><span>التخصص:</span><span className="font-semibold text-[#1a2332] truncate mr-1">{getDepartmentName(student.department_id)}</span></div>
+                    <div className="flex justify-between"><span>السنة الدراسية:</span><span className="font-semibold text-[#1a2332]">السنة {student.year || 1}</span></div>
+                    <div className="flex justify-between"><span>تاريخ الميلاد:</span><span className="font-semibold text-[#1a2332]">{formatDate(student.birth_date)}</span></div>
+                  </div>
+                </div>
+                <div className="flex-shrink-0 flex flex-col items-center justify-center">
+                  {qrDataURL ? (
+                    <>
+                      <img src={qrDataURL} alt="QR" className="w-20 h-20 border-2 border-[#1a2332] rounded-md p-1" />
+                      <span className="text-[7px] text-[#1a2332] font-semibold mt-1">رمز التعريف</span>
+                    </>
+                  ) : (
+                    <div className="w-20 h-20 border border-gray-200 rounded bg-gray-50"></div>
+                  )}
+                </div>
+              </div>
+              <div className="bg-[#1a2332] px-4 py-1.5 flex justify-between text-[8px] text-[#2dd4bf] font-medium">
+                <span>تاريخ الإصدار: {formatDate(student.enrollment_date)}</span>
+                <span>جامعة الخليل الأهلية - بطاقة رسمية</span>
+              </div>
+            </div>
+            <div className="flex justify-center gap-2 mt-4">
+              <button onClick={printStudentCard} className="px-4 py-2 text-sm bg-[#1a2332] text-white rounded-lg hover:bg-[#243447]">طباعة البطاقة</button>
+              <button onClick={() => setShowCardModal(false)} className="px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">إغلاق</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 class Student extends Model
 {
@@ -11,6 +13,7 @@ class Student extends Model
 
     protected $fillable = [
         'id',
+        'campus_id',
         'name',
         'name_en',
         'email',
@@ -30,6 +33,7 @@ class Student extends Model
         'academic_score',
         'transcript_file',
         'qr_code',
+        'photo_url',
     ];
 
     protected $casts = [
@@ -38,6 +42,40 @@ class Student extends Model
         'academic_score' => 'decimal:2',
         'year' => 'integer',
     ];
+
+    protected static function boot()
+    {
+        parent::boot();
+        
+        static::creating(function ($student) {
+            if (empty($student->id)) {
+                $student->id = (string) Str::uuid();
+            }
+            
+            if (empty($student->campus_id)) {
+                $student->campus_id = self::generateCampusId();
+            }
+        });
+    }
+
+    /**
+     * Generate next available campus ID for students
+     */
+    private static function generateCampusId(): string
+    {
+        $lastStudent = self::where('campus_id', 'like', 'S%')
+            ->orderBy('campus_id', 'desc')
+            ->first();
+
+        if ($lastStudent && $lastStudent->campus_id) {
+            $lastNumber = (int) substr($lastStudent->campus_id, 1);
+            $nextNumber = $lastNumber + 1;
+        } else {
+            $nextNumber = 1;
+        }
+
+        return 'S' . str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
+    }
 
     // Relationships
     public function department()
@@ -58,6 +96,11 @@ class Student extends Model
     public function grades()
     {
         return $this->hasMany(StudentGrade::class);
+    }
+
+    public function subjectEnrollments()
+    {
+        return $this->hasMany(StudentSubjectEnrollment::class);
     }
 
     public function academicProgress()

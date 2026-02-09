@@ -55,55 +55,7 @@ export default function Rooms() {
         <p className="text-gray-600">إدارة قاعات المحاضرات والمختبرات</p>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <Building className="h-8 w-8 text-blue-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">{rooms?.length || 0}</div>
-              <div className="text-sm text-gray-600">إجمالي القاعات</div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <Users className="h-8 w-8 text-green-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">
-                {rooms?.reduce((sum, room) => sum + room.capacity, 0) || 0}
-              </div>
-              <div className="text-sm text-gray-600">إجمالي السعة</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <MapPin className="h-8 w-8 text-purple-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">
-                {new Set(rooms?.map(room => room.building)).size || 0}
-              </div>
-              <div className="text-sm text-gray-600">عدد المباني</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <Building className="h-8 w-8 text-orange-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">
-                {rooms?.filter(room => room.room_type === 'lab').length || 0}
-              </div>
-              <div className="text-sm text-gray-600">المختبرات</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      
       {/* Search and Actions */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">

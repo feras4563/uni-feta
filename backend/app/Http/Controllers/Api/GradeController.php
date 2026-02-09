@@ -44,7 +44,7 @@ class GradeController extends Controller
             'student_id' => 'required|exists:students,id',
             'subject_id' => 'required|exists:subjects,id',
             'teacher_id' => 'required|exists:teachers,id',
-            'grade_type' => 'required|in:midterm,final,assignment,quiz,project,participation,homework',
+            'grade_type' => 'required|in:midterm,final,assignment,quiz,project,participation,homework,classwork',
             'grade_name' => 'required|string',
             'grade_value' => 'required|numeric|min:0',
             'max_grade' => 'required|numeric|min:0',
@@ -77,7 +77,7 @@ class GradeController extends Controller
         $grade = StudentGrade::findOrFail($id);
 
         $validator = Validator::make($request->all(), [
-            'grade_type' => 'sometimes|required|in:midterm,final,assignment,quiz,project,participation,homework',
+            'grade_type' => 'sometimes|required|in:midterm,final,assignment,quiz,project,participation,homework,classwork',
             'grade_name' => 'sometimes|required|string',
             'grade_value' => 'sometimes|required|numeric|min:0',
             'max_grade' => 'sometimes|required|numeric|min:0',

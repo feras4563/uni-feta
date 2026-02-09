@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { QRService } from '../../lib/qr-service';
 import Modal from '../ui/Modal';
+import logo1 from '../../assets/logo1.png';
 
 interface StudentQRModalProps {
   open: boolean;
@@ -103,7 +104,7 @@ export default function StudentQRModal({ open, onClose, student }: StudentQRModa
                 margin: 0; 
                 padding: 20px;
                 font-family: 'Noto Sans Arabic', Arial, sans-serif;
-                background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #60a5fa 100%);
+                background: #f3f4f6;
                 direction: rtl;
               }
               
@@ -111,76 +112,91 @@ export default function StudentQRModal({ open, onClose, student }: StudentQRModa
                 width: 85.6mm;
                 height: 53.98mm;
                 background: white;
-                border-radius: 12px;
+                border-radius: 10px;
                 overflow: hidden;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1);
-                position: relative;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+                display: flex;
+                flex-direction: column;
+                border: 1px solid #e5e7eb;
               }
               
               .card-header {
-                background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-                padding: 12px 16px;
+                background: #1a2332;
+                padding: 8px 14px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
                 position: relative;
-                overflow: hidden;
-              }
-              
-              .card-header::before {
-                content: '';
-                position: absolute;
-                top: -50%;
-                right: -10%;
-                width: 200px;
-                height: 200px;
-                background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
-                border-radius: 50%;
               }
               
               .card-header::after {
                 content: '';
                 position: absolute;
-                bottom: -30%;
-                left: -5%;
-                width: 150px;
-                height: 150px;
-                background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-                border-radius: 50%;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                height: 3px;
+                background: linear-gradient(90deg, #2dd4bf, #14b8a6, #2dd4bf);
               }
               
-              .university-logo {
-                text-align: center;
-                position: relative;
-                z-index: 1;
+              .uni-block {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+              }
+              
+              .logo-wrap {
+                background: #fff;
+                border-radius: 4px;
+                padding: 2px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              
+              .uni-logo {
+                width: 24px;
+                height: 24px;
+                object-fit: contain;
               }
               
               .university-name {
-                font-size: 16px;
-                font-weight: 800;
+                font-size: 12px;
+                font-weight: 700;
                 color: white;
-                margin-bottom: 3px;
-                text-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                letter-spacing: 1px;
-              }
-              
-              .university-name-en {
-                font-size: 10px;
-                font-weight: 600;
-                color: rgba(255,255,255,0.95);
-                font-family: Arial, sans-serif;
                 letter-spacing: 0.5px;
               }
               
+              .university-name-en {
+                font-size: 7.5px;
+                font-weight: 600;
+                color: #2dd4bf;
+                font-family: Arial, sans-serif;
+                letter-spacing: 0.3px;
+              }
+              
+              .badge {
+                background: rgba(45,212,191,0.15);
+                color: #2dd4bf;
+                font-size: 7px;
+                padding: 2px 8px;
+                border-radius: 10px;
+                font-weight: 700;
+                border: 1px solid rgba(45,212,191,0.3);
+              }
+              
               .card-body {
+                flex: 1;
                 display: flex;
-                padding: 14px 16px;
-                gap: 12px;
-                background: linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%);
+                padding: 10px 14px;
+                gap: 10px;
               }
               
               .left-section {
                 flex: 1;
                 display: flex;
                 flex-direction: column;
-                justify-content: space-between;
+                justify-content: center;
               }
               
               .student-info {
@@ -188,12 +204,12 @@ export default function StudentQRModal({ open, onClose, student }: StudentQRModa
               }
               
               .student-name {
-                font-size: 13px;
+                font-size: 12px;
                 font-weight: 700;
-                color: #1e40af;
-                margin-bottom: 8px;
+                color: #1a2332;
+                margin-bottom: 6px;
                 line-height: 1.3;
-                border-bottom: 2px solid #3b82f6;
+                border-bottom: 2px solid #2dd4bf;
                 padding-bottom: 4px;
               }
               
@@ -201,25 +217,19 @@ export default function StudentQRModal({ open, onClose, student }: StudentQRModa
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 5px;
-                font-size: 9px;
-                line-height: 1.4;
+                margin-bottom: 3px;
+                font-size: 8px;
+                line-height: 1.5;
               }
               
               .info-label {
                 font-weight: 600;
-                color: #475569;
-                min-width: 65px;
+                color: #6b7280;
               }
               
               .info-value {
-                color: #1f2937;
-                font-weight: 600;
-                background: white;
-                padding: 2px 6px;
-                border-radius: 4px;
-                border: 1px solid #e2e8f0;
-                font-size: 8.5px;
+                color: #1a2332;
+                font-weight: 700;
               }
               
               .qr-section {
@@ -227,51 +237,34 @@ export default function StudentQRModal({ open, onClose, student }: StudentQRModa
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                background: white;
-                padding: 8px;
-                border-radius: 8px;
-                border: 2px solid #3b82f6;
-                box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
               }
               
               .qr-code {
-                width: 90px;
-                height: 90px;
-                border: 2px solid #e5e7eb;
+                width: 70px;
+                height: 70px;
+                border: 2px solid #1a2332;
                 border-radius: 6px;
-                padding: 4px;
+                padding: 2px;
                 background: white;
               }
               
               .qr-label {
-                font-size: 7px;
-                color: #1e40af;
-                font-weight: 700;
-                margin-top: 4px;
+                font-size: 6px;
+                color: #1a2332;
+                font-weight: 600;
+                margin-top: 2px;
                 text-align: center;
               }
               
               .card-footer {
-                background: linear-gradient(90deg, #1e40af 0%, #3b82f6 50%, #1e40af 100%);
-                padding: 4px 16px;
+                background: #1a2332;
+                padding: 4px 14px;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                font-size: 7px;
-                color: white;
+                font-size: 6.5px;
+                color: #2dd4bf;
                 font-weight: 600;
-              }
-              
-              .validity {
-                display: flex;
-                align-items: center;
-                gap: 4px;
-              }
-              
-              .issue-date {
-                display: flex;
-                align-items: center;
-                gap: 4px;
               }
               
               @media print {
@@ -281,6 +274,7 @@ export default function StudentQRModal({ open, onClose, student }: StudentQRModa
                 }
                 .card-wrapper { 
                   box-shadow: none !important;
+                  border: none !important;
                   page-break-inside: avoid;
                 }
                 @page {
@@ -293,17 +287,21 @@ export default function StudentQRModal({ open, onClose, student }: StudentQRModa
           <body>
             <div class="card-wrapper">
               <div class="card-header">
-                <div class="university-logo">
-                  <div class="university-name">جـامعة أفق ليبيا</div>
-                  <div class="university-name-en">OFOK LIBYA UNIVERSITY</div>
+                <div class="uni-block">
+                  <div class="logo-wrap"><img class="uni-logo" src="${logo1}" alt="UKL" /></div>
+                  <div>
+                    <div class="university-name">جامعة الخليل الأهلية</div>
+                    <div class="university-name-en">UNIVERSITY OF ALKHALIL</div>
+                  </div>
                 </div>
+                <div class="badge">بطاقة طالب</div>
               </div>
               
               <div class="card-body">
                 <div class="left-section">
                   <div class="student-info">
                     <div class="student-name">${student.name}</div>
-                    ${student.name_en ? `<div style="font-size: 10px; color: #64748b; font-weight: 600; margin-bottom: 6px; font-family: Arial;">${student.name_en}</div>` : ''}
+                    ${student.name_en ? `<div style="font-size: 9px; color: #6b7280; font-weight: 600; margin-bottom: 4px; font-family: Arial;">${student.name_en}</div>` : ''}
                     
                     <div class="info-item">
                       <span class="info-label">رقم الطالب:</span>
@@ -334,14 +332,8 @@ export default function StudentQRModal({ open, onClose, student }: StudentQRModa
               </div>
               
               <div class="card-footer">
-                <div class="validity">
-                  <span>✓</span>
-                  <span>بطاقة طالب رسمية</span>
-                </div>
-                <div class="issue-date">
-                  <span>تاريخ الإصدار:</span>
-                  <span>${formatDate(student.enrollment_date)}</span>
-                </div>
+                <span>تاريخ الإصدار: ${formatDate(student.enrollment_date)}</span>
+                <span>جامعة الخليل الأهلية - بطاقة رسمية</span>
               </div>
             </div>
           </body>

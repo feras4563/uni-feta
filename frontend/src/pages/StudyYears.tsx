@@ -126,71 +126,7 @@ export default function StudyYears() {
       </div>
 
       <div className="px-6 py-8">
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-3xl font-bold text-gray-900">{studyYears?.length || 0}</div>
-                <div className="text-sm font-medium text-gray-600 mt-1">إجمالي السنوات</div>
-              </div>
-              <div className="p-3 bg-gray-100 rounded-lg">
-                <svg className="h-6 w-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-3xl font-bold text-gray-900">
-                  {studyYears?.filter(y => y.is_current).length || 0}
-                </div>
-                <div className="text-sm font-medium text-gray-600 mt-1">السنة الحالية</div>
-              </div>
-              <div className="p-3 bg-green-100 rounded-lg">
-                <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-3xl font-bold text-gray-900">
-                  {studyYears?.filter(y => y.is_active && !y.is_current).length || 0}
-                </div>
-                <div className="text-sm font-medium text-gray-600 mt-1">السنوات النشطة</div>
-              </div>
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-3xl font-bold text-gray-900">
-                  {studyYears?.filter(y => !y.is_active).length || 0}
-                </div>
-                <div className="text-sm font-medium text-gray-600 mt-1">السنوات غير النشطة</div>
-              </div>
-              <div className="p-3 bg-red-100 rounded-lg">
-                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-
+        
         {/* Filters */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
           <div className="p-6">

@@ -152,61 +152,7 @@ export default function TeacherSubjectAssignment() {
         <p className="text-gray-600">إدارة تكليف المدرسين بالمواد الدراسية لكل فصل دراسي</p>
       </div>
 
-      {/* Statistics Cards */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <UserCheck className="h-8 w-8 text-blue-600" />
-              <div className="mr-4">
-                <div className="text-2xl font-bold text-gray-900">{stats.totalAssignments}</div>
-                <div className="text-sm text-gray-600">إجمالي التكليفات</div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <CheckCircle className="h-8 w-8 text-green-600" />
-              <div className="mr-4">
-                <div className="text-2xl font-bold text-gray-900">{stats.activeAssignments}</div>
-                <div className="text-sm text-gray-600">التكليفات النشطة</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <Users className="h-8 w-8 text-purple-600" />
-              <div className="mr-4">
-                <div className="text-2xl font-bold text-gray-900">{stats.assignedTeachers}</div>
-                <div className="text-sm text-gray-600">المدرسين المكلفين</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <BookOpen className="h-8 w-8 text-orange-600" />
-              <div className="mr-4">
-                <div className="text-2xl font-bold text-gray-900">{stats.assignedSubjects}</div>
-                <div className="text-sm text-gray-600">المواد المكلفة</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <Calendar className="h-8 w-8 text-indigo-600" />
-              <div className="mr-4">
-                <div className="text-2xl font-bold text-gray-900">{stats.currentSemester}</div>
-                <div className="text-sm text-gray-600">الفصل الحالي</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
+      
       {/* Filters and Actions */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
@@ -460,9 +406,9 @@ function TeachersView({ teachers, assignments, onEdit }: any) {
                 <h5 className="text-sm font-medium text-gray-700">المواد المكلف بها:</h5>
                 {teacher.assignments.slice(0, 3).map((assignment: any) => (
                   <div key={assignment.id} className="text-xs bg-gray-50 p-2 rounded">
-                    <div className="font-medium">{assignment.subjects?.name}</div>
+                    <div className="font-medium">{assignment.subject?.name}</div>
                     <div className="text-gray-500">
-                      {assignment.departments?.name} - {assignment.semester}
+                      {assignment.department?.name} - {assignment.semester?.name || assignment.semester}
                     </div>
                   </div>
                 ))}
@@ -570,6 +516,31 @@ function AssignmentModal({
   });
   const [submitting, setSubmitting] = useState(false);
 
+  // When teacher changes, auto-set department and clear subject
+  const handleTeacherChange = (teacherId: string) => {
+    const selectedTeacher = teachers.find((t: any) => t.id === teacherId);
+    setForm(prev => ({
+      ...prev,
+      teacher_id: teacherId,
+      department_id: selectedTeacher?.department_id || prev.department_id,
+      subject_id: "", // reset subject since department changed
+    }));
+  };
+
+  // When department changes manually, clear subject
+  const handleDepartmentChange = (departmentId: string) => {
+    setForm(prev => ({
+      ...prev,
+      department_id: departmentId,
+      subject_id: "", // reset subject since department changed
+    }));
+  };
+
+  // Filter subjects by selected department
+  const filteredSubjects = form.department_id
+    ? subjects.filter((s: any) => s.department_id === form.department_id)
+    : subjects;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -600,7 +571,7 @@ function AssignmentModal({
             <label className="block text-sm font-medium text-gray-700 mb-1">المدرس</label>
             <select
               value={form.teacher_id}
-              onChange={(e) => setForm(prev => ({ ...prev, teacher_id: e.target.value }))}
+              onChange={(e) => handleTeacherChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
             >
@@ -612,25 +583,10 @@ function AssignmentModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">المادة</label>
-            <select
-              value={form.subject_id}
-              onChange={(e) => setForm(prev => ({ ...prev, subject_id: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            >
-              <option value="">اختر المادة</option>
-              {subjects.map((subject: any) => (
-                <option key={subject.id} value={subject.id}>{subject.name} ({subject.code})</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">القسم</label>
             <select
               value={form.department_id}
-              onChange={(e) => setForm(prev => ({ ...prev, department_id: e.target.value }))}
+              onChange={(e) => handleDepartmentChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
             >
@@ -639,6 +595,28 @@ function AssignmentModal({
                 <option key={dept.id} value={dept.id}>{dept.name}</option>
               ))}
             </select>
+            {form.teacher_id && form.department_id && (
+              <p className="text-xs text-blue-600 mt-1">تم تحديد القسم تلقائياً بناءً على المدرس المختار</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">المادة</label>
+            <select
+              value={form.subject_id}
+              onChange={(e) => setForm(prev => ({ ...prev, subject_id: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+              disabled={!form.department_id}
+            >
+              <option value="">{form.department_id ? 'اختر المادة' : 'اختر القسم أولاً'}</option>
+              {filteredSubjects.map((subject: any) => (
+                <option key={subject.id} value={subject.id}>{subject.name} ({subject.code})</option>
+              ))}
+            </select>
+            {form.department_id && filteredSubjects.length === 0 && (
+              <p className="text-xs text-red-500 mt-1">لا توجد مواد في هذا القسم</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">

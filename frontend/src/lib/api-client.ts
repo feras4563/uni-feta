@@ -107,6 +107,42 @@ class APIClient {
       method: 'DELETE',
     });
   }
+
+  async upload<T>(endpoint: string, formData: FormData): Promise<T> {
+    const token = getToken();
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const url = `${this.baseURL}${endpoint}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        removeToken();
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+      }
+      const error = await response.json().catch(() => ({ message: `HTTP ${response.status}` }));
+      if (error.errors && typeof error.errors === 'object') {
+        throw new Error(Object.values(error.errors).flat().join(', '));
+      }
+      throw new Error(error.message || `HTTP ${response.status}`);
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return response.json();
+    }
+    return {} as T;
+  }
 }
 
 export const apiClient = new APIClient(API_URL);
@@ -123,4 +159,6 @@ export const api = {
     apiClient.patch<T>(endpoint, data),
   delete: <T>(endpoint: string) => 
     apiClient.delete<T>(endpoint),
+  upload: <T>(endpoint: string, formData: FormData) =>
+    apiClient.upload<T>(endpoint, formData),
 };

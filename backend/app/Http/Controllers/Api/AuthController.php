@@ -128,9 +128,22 @@ class AuthController extends Controller
         $user = auth('api')->user();
         $appUser = AppUser::where('auth_user_id', $user->id)->first();
 
+        // Enrich with teacher data if applicable
+        $appUserData = $appUser ? $appUser->toArray() : null;
+        if ($appUser && $appUser->role === 'teacher' && $appUser->teacher_id) {
+            $teacher = \App\Models\Teacher::with('department:id,name,name_en')->find($appUser->teacher_id);
+            if ($teacher) {
+                $appUserData['teacher_id'] = $teacher->id;
+                $appUserData['teacher_name'] = $teacher->name;
+                $appUserData['teacher_campus_id'] = $teacher->campus_id;
+                $appUserData['department_id'] = $teacher->department_id;
+                $appUserData['department_name'] = $teacher->department?->name;
+            }
+        }
+
         return response()->json([
             'user' => $user,
-            'app_user' => $appUser,
+            'app_user' => $appUserData,
             'permissions' => $appUser ? $this->getUserPermissions($appUser->role) : []
         ]);
     }
@@ -162,12 +175,25 @@ class AuthController extends Controller
      */
     protected function respondWithToken($token, $user = null, $appUser = null)
     {
+        // Enrich app_user with teacher data if role is teacher
+        $appUserData = $appUser ? $appUser->toArray() : null;
+        if ($appUser && $appUser->role === 'teacher' && $appUser->teacher_id) {
+            $teacher = \App\Models\Teacher::with('department:id,name,name_en')->find($appUser->teacher_id);
+            if ($teacher) {
+                $appUserData['teacher_id'] = $teacher->id;
+                $appUserData['teacher_name'] = $teacher->name;
+                $appUserData['teacher_campus_id'] = $teacher->campus_id;
+                $appUserData['department_id'] = $teacher->department_id;
+                $appUserData['department_name'] = $teacher->department?->name;
+            }
+        }
+
         return response()->json([
             'access_token' => $token,
             'token_type' => 'bearer',
             'expires_in' => auth('api')->factory()->getTTL() * 60,
             'user' => $user ?? auth('api')->user(),
-            'app_user' => $appUser,
+            'app_user' => $appUserData,
             'permissions' => $appUser ? $this->getUserPermissions($appUser->role) : []
         ]);
     }
@@ -189,7 +215,9 @@ class AuthController extends Controller
             ],
             'staff' => [
                 'students' => ['view', 'create'],
-                'fees' => ['view', 'create'],
+                'fees' => ['view'],
+                'student-registration' => ['view', 'create'],
+                'student-enrollments' => ['view', 'create'],
             ],
             'teacher' => [
                 'sessions' => ['view', 'create', 'edit', 'delete'],

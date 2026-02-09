@@ -19,6 +19,10 @@ class StudentSubjectEnrollment extends Model
         'semester_number',
         'enrollment_date',
         'status',
+        'payment_status',
+        'attendance_allowed',
+        'admin_override',
+        'invoice_id',
         'grade',
         'grade_letter',
         'passed',
@@ -29,6 +33,8 @@ class StudentSubjectEnrollment extends Model
         'enrollment_date' => 'date',
         'grade' => 'decimal:2',
         'passed' => 'boolean',
+        'attendance_allowed' => 'boolean',
+        'admin_override' => 'boolean',
     ];
 
     protected static function boot()
@@ -65,5 +71,10 @@ class StudentSubjectEnrollment extends Model
     public function department()
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function invoice()
+    {
+        return $this->belongsTo(StudentInvoice::class, 'invoice_id');
     }
 }

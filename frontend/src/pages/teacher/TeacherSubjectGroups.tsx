@@ -16,7 +16,7 @@ import {
   Clock,
   MapPin
 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/JWTAuthContext";
 
 export default function TeacherSubjectGroups() {
   const { user } = useAuth();

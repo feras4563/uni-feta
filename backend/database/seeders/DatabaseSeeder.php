@@ -36,27 +36,55 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // Create Staff User
-        $staffUser = User::updateOrCreate(
-            ['email' => 'staff@university.edu'],
+        // Create Staff Users
+        $staffUsers = [
             [
-                'name' => 'Staff Member',
-                'password' => Hash::make('password123'),
-            ]
-        );
+                'email' => 'abrar@university.edu',
+                'name' => 'Abrar',
+                'full_name' => 'أبرار',
+            ],
+            [
+                'email' => 'raneem@university.edu',
+                'name' => 'Raneem',
+                'full_name' => 'رنيم',
+            ],
+            [
+                'email' => 'lujine@university.edu',
+                'name' => 'Lujine',
+                'full_name' => 'لجين',
+            ],
+            [
+                'email' => 'staff@university.edu',
+                'name' => 'Staff',
+                'full_name' => 'موظف عام',
+            ],
+        ];
 
-        AppUser::updateOrCreate(
-            ['auth_user_id' => $staffUser->id],
-            [
-                'email' => $staffUser->email,
-                'full_name' => 'Staff Member',
-                'role' => 'staff',
-                'status' => 'active',
-            ]
-        );
+        foreach ($staffUsers as $staffData) {
+            $staffUser = User::updateOrCreate(
+                ['email' => $staffData['email']],
+                [
+                    'name' => $staffData['name'],
+                    'password' => Hash::make('password123'),
+                ]
+            );
+
+            AppUser::updateOrCreate(
+                ['auth_user_id' => $staffUser->id],
+                [
+                    'email' => $staffUser->email,
+                    'full_name' => $staffData['full_name'],
+                    'role' => 'staff',
+                    'status' => 'active',
+                ]
+            );
+        }
 
         $this->command->info('✅ Manager and Staff users created successfully!');
         $this->command->info('📧 Manager: manager@university.edu / password123');
-        $this->command->info('📧 Staff: staff@university.edu / password123');
+        $this->command->info('📧 Staff (Abrar): abrar@university.edu / password123');
+        $this->command->info('📧 Staff (Raneem): raneem@university.edu / password123');
+        $this->command->info('📧 Staff (Lujine): lujine@university.edu / password123');
+        $this->command->info('📧 Staff (General): staff@university.edu / password123');
     }
 }

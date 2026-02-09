@@ -24,6 +24,8 @@ export default function TeacherCreate() {
     phone: '',
     qualification: '',
     education_level: '',
+    credential_institution: '',
+    credential_date: '',
     years_experience: null as number | null,
     availability: {
       sunday: { slot1: false, slot2: false, slot3: false, slot4: false, slot5: false },
@@ -63,6 +65,8 @@ export default function TeacherCreate() {
         phone: teacher.phone || '',
         qualification: teacher.qualification || '',
         education_level: teacher.education_level || '',
+        credential_institution: teacher.credential_institution || '',
+        credential_date: teacher.credential_date || '',
         years_experience: teacher.years_experience || null,
         availability: teacher.availability || {
           sunday: { slot1: false, slot2: false, slot3: false, slot4: false, slot5: false },
@@ -101,12 +105,9 @@ export default function TeacherCreate() {
   ];
 
   const qualifications = [
-    'أستاذ',
-    'أستاذ مشارك',
-    'أستاذ مساعد',
-    'مدرس',
-    'مدرس مساعد',
-    'محاضر'
+    'رئيس قسم',
+    'محاضر',
+    'متعاون'
   ];
 
   const educationLevels = [
@@ -116,8 +117,12 @@ export default function TeacherCreate() {
     'دبلوم'
   ];
 
-  // Use subjects from database as available specializations
-  const availableSpecializations = subjects;
+  // Filter subjects by selected departments for specializations dropdown
+  const availableSpecializations = subjects.filter((s: any) => 
+    teacherForm.department_ids && teacherForm.department_ids.length > 0
+      ? teacherForm.department_ids.includes(s.department_id)
+      : true
+  );
 
   const handleInputChange = (field: string, value: any) => {
     setTeacherForm(prev => ({ ...prev, [field]: value }));
@@ -182,6 +187,8 @@ export default function TeacherCreate() {
         phone: teacherForm.phone || null,
         qualification: teacherForm.qualification || null,
         education_level: teacherForm.education_level || null,
+        credential_institution: teacherForm.credential_institution || null,
+        credential_date: teacherForm.credential_date || null,
         years_experience: teacherForm.years_experience || null,
         availability: teacherForm.availability || null,
         specializations: teacherForm.specializations || null,
@@ -398,6 +405,31 @@ export default function TeacherCreate() {
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      الجهة المانحة
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="اسم المؤسسة التي حصل منها على المؤهل"
+                      value={teacherForm.credential_institution}
+                      onChange={(e) => handleInputChange("credential_institution", e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      تاريخ الحصول عليه
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      value={teacherForm.credential_date}
+                      onChange={(e) => handleInputChange("credential_date", e.target.value)}
+                    />
                   </div>
                   
                   <div>
