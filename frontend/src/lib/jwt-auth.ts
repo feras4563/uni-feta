@@ -5,6 +5,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 // Token management
 export const TOKEN_KEY = 'jwt_token';
 export const USER_KEY = 'jwt_user';
+export const PERMISSIONS_KEY = 'jwt_permissions';
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -17,6 +18,21 @@ export function setToken(token: string): void {
 export function removeToken(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(PERMISSIONS_KEY);
+}
+
+export function getStoredPermissions(): Record<string, string[]> {
+  const permsStr = localStorage.getItem(PERMISSIONS_KEY);
+  if (!permsStr) return {};
+  try {
+    return JSON.parse(permsStr);
+  } catch {
+    return {};
+  }
+}
+
+export function setStoredPermissions(permissions: Record<string, string[]>): void {
+  localStorage.setItem(PERMISSIONS_KEY, JSON.stringify(permissions));
 }
 
 export function getStoredUser(): AppUser | null {
@@ -135,6 +151,11 @@ export async function signIn(credentials: LoginCredentials): Promise<AppUser> {
     teacherCampusId: response.app_user?.teacher_campus_id,
     departmentId: response.app_user?.department_id,
     departmentName: response.app_user?.department_name,
+    // Student-specific fields
+    studentId: response.app_user?.student_id,
+    studentName: response.app_user?.student_name,
+    studentCampusId: response.app_user?.student_campus_id,
+    studentYear: response.app_user?.student_year,
   };
 
   console.log('✅ JWT: User object created:', user);
@@ -142,6 +163,11 @@ export async function signIn(credentials: LoginCredentials): Promise<AppUser> {
   // Store user data
   setStoredUser(user);
   console.log('✅ JWT: User stored in localStorage');
+
+  // Store dynamic permissions from backend
+  if (response.permissions) {
+    setStoredPermissions(response.permissions);
+  }
 
   return user;
 }
@@ -187,9 +213,20 @@ export async function getCurrentUser(): Promise<AppUser | null> {
       teacherCampusId: response.app_user?.teacher_campus_id,
       departmentId: response.app_user?.department_id,
       departmentName: response.app_user?.department_name,
+      // Student-specific fields
+      studentId: response.app_user?.student_id,
+      studentName: response.app_user?.student_name,
+      studentCampusId: response.app_user?.student_campus_id,
+      studentYear: response.app_user?.student_year,
     };
 
     setStoredUser(user);
+
+    // Store dynamic permissions from backend
+    if (response.permissions) {
+      setStoredPermissions(response.permissions);
+    }
+
     return user;
   } catch (error) {
     console.error('Get current user error:', error);
@@ -304,6 +341,14 @@ export const PERMISSIONS = {
     schedule: ['view', 'edit'],
     departments: ['view'],
   },
+  student: {
+    'student-portal': ['view'],
+    subjects: ['view'],
+    grades: ['view'],
+    attendance: ['view'],
+    fees: ['view'],
+    schedule: ['view'],
+  },
 } as const;
 
 export function hasClientPermission(
@@ -321,7 +366,7 @@ export function hasClientPermission(
   const resourcePermissions = rolePermissions[resource as keyof typeof rolePermissions];
   if (!resourcePermissions) return false;
   
-  return resourcePermissions.includes(action as any);
+  return (resourcePermissions as readonly string[]).includes(action);
 }
 
 // Action logging (optional - can be implemented later)

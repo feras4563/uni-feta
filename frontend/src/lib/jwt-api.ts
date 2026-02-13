@@ -14,6 +14,10 @@ export async function getStudent(id: string | number) {
   return api.get<any>(`/students/${id}`);
 }
 
+export async function fetchNextStudentId() {
+  return api.get<{ id: string }>('/students/next-id');
+}
+
 export async function createStudent(data: any) {
   return api.post<any>('/students', data);
 }
@@ -127,9 +131,10 @@ export async function updateDepartmentSemesterSubjects(
 // SUBJECTS API
 // ============================================
 
-export async function fetchSubjects(search?: string) {
+export async function fetchSubjects(search?: string, departmentId?: string) {
   const params: any = { paginate: 'false' };
   if (search) params.search = search.trim();
+  if (departmentId) params.department_id = departmentId;
   return api.get<any[]>('/subjects', params);
 }
 
@@ -593,8 +598,11 @@ export async function getSubjectDepartments(subjectId: string) {
   return subject.departments || [];
 }
 
-export async function updateSubjectDepartments(subjectId: string, departmentIds: number[]) {
-  return api.put<any>(`/subjects/${subjectId}`, { department_ids: departmentIds });
+export async function updateSubjectDepartments(subjectId: string, departmentIds: number[] | string[], primaryDepartmentId?: string) {
+  return api.put<any>(`/subjects/${subjectId}`, { 
+    department_ids: departmentIds,
+    ...(primaryDepartmentId ? { primary_department_id: primaryDepartmentId } : {})
+  });
 }
 
 export async function fetchSubjectWithStats(subjectId: string) {
@@ -726,6 +734,24 @@ export async function fetchStudentInvoices(studentId: number) {
   return api.get<any[]>(`/students/${studentId}/invoices`);
 }
 
+export async function fetchApplicableFees(departmentId: string, semesterNumber: number, totalCredits: number = 0, studentYear: number = 1, nationality: string = '') {
+  return api.get<any[]>('/fee-rules/applicable', {
+    department_id: departmentId,
+    semester_number: String(semesterNumber),
+    total_credits: String(totalCredits),
+    student_year: String(studentYear),
+    nationality,
+  });
+}
+
+export async function fetchStudentFeeSummary(studentId: string, semesterId: string) {
+  return api.get<any>(`/students/${studentId}/fee-summary`, { semester_id: semesterId });
+}
+
+export async function applyPendingFees(studentId: string, semesterId: string) {
+  return api.post<any>('/fees/apply-pending', { student_id: studentId, semester_id: semesterId });
+}
+
 export async function updateInvoiceStatus(invoiceId: number, status: string) {
   return api.put<any>(`/invoices/${invoiceId}/status`, { status });
 }
@@ -846,4 +872,36 @@ export async function updateTeacherGrade(gradeId: string, data: any) {
 
 export async function deleteTeacherGrade(gradeId: string) {
   return api.delete<any>(`/teacher-portal/grades/${gradeId}`);
+}
+
+// ============================================
+// STUDENT PORTAL API (scoped to logged-in student)
+// ============================================
+
+export async function fetchStudentPortalDashboard() {
+  return api.get<any>('/student-portal/dashboard');
+}
+
+export async function fetchStudentMySubjects(params?: { semester_id?: string; status?: string }) {
+  return api.get<any[]>('/student-portal/my-subjects', params);
+}
+
+export async function fetchStudentMyFees(params?: { semester_id?: string; status?: string }) {
+  return api.get<any>('/student-portal/my-fees', params);
+}
+
+export async function fetchStudentMySchedule() {
+  return api.get<any>('/student-portal/my-schedule');
+}
+
+export async function fetchStudentMyGrades(params?: { subject_id?: string }) {
+  return api.get<any>('/student-portal/my-grades', params);
+}
+
+export async function fetchStudentMyAttendance(params?: { subject_id?: string }) {
+  return api.get<any>('/student-portal/my-attendance', params);
+}
+
+export async function fetchStudentMyProfile() {
+  return api.get<any>('/student-portal/my-profile');
 }

@@ -28,6 +28,10 @@ class StudentInvoice extends Model
         'status',
         'notes',
         'journal_entry_id',
+        'discount_type',
+        'discount_percentage',
+        'discount_reason',
+        'discount_approved_by',
     ];
 
     protected $casts = [
@@ -39,6 +43,7 @@ class StudentInvoice extends Model
         'total_amount' => 'decimal:3',
         'paid_amount' => 'decimal:3',
         'balance' => 'decimal:3',
+        'discount_percentage' => 'decimal:2',
     ];
 
     protected static function boot()

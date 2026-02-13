@@ -6,6 +6,7 @@ import {
   getToken,
   hasPermission,
   PERMISSIONS,
+  getStoredPermissions,
 } from '../lib/jwt-auth';
 import type { AppUser, AuthState, LoginCredentials, Permission, UserRole } from '../types/auth';
 
@@ -30,12 +31,24 @@ export function JWTAuthProvider({ children }: { children: React.ReactNode }) {
     console.log('🔍 JWT: Loading permissions for role:', role);
     
     const clientPermissions: Permission[] = [];
-    const rolePerms = PERMISSIONS[role as keyof typeof PERMISSIONS];
     
-    if (rolePerms) {
-      Object.entries(rolePerms).forEach(([resource, actions]) => {
-        clientPermissions.push({ resource, actions });
+    // First try dynamic permissions from backend (stored in localStorage)
+    const dynamicPerms = getStoredPermissions();
+    
+    if (dynamicPerms && Object.keys(dynamicPerms).length > 0) {
+      console.log('🔍 JWT: Using dynamic permissions from backend');
+      Object.entries(dynamicPerms).forEach(([resource, actions]) => {
+        clientPermissions.push({ resource, actions: actions as string[] });
       });
+    } else {
+      // Fallback to hardcoded permissions
+      console.log('🔍 JWT: Falling back to hardcoded permissions');
+      const rolePerms = PERMISSIONS[role as keyof typeof PERMISSIONS];
+      if (rolePerms) {
+        Object.entries(rolePerms).forEach(([resource, actions]) => {
+          clientPermissions.push({ resource, actions: actions as string[] });
+        });
+      }
     }
     
     setPermissions(clientPermissions);

@@ -2,7 +2,6 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchDashboardStats } from '../lib/api';
 import { useAuth } from '../contexts/JWTAuthContext';
-import { hasClientPermission } from '../lib/jwt-auth';
 
 interface DashboardStats {
   totalStudents: number;
@@ -27,8 +26,7 @@ interface QuickAction {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const userRole = user?.role || 'staff';
+  const { user, hasPermission } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
     totalTeachers: 0,
@@ -163,8 +161,8 @@ const Dashboard: React.FC = () => {
   ];
 
   const quickActions = useMemo(() => {
-    return allQuickActions.filter(a => hasClientPermission(userRole, a.requiredResource, a.requiredAction));
-  }, [userRole]);
+    return allQuickActions.filter(a => hasPermission(a.requiredResource, a.requiredAction));
+  }, [hasPermission]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ar-LY', {

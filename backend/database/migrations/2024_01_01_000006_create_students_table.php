@@ -27,7 +27,7 @@ return new class extends Migration
             
             // Personal Information
             $table->enum('gender', ['male', 'female'])->nullable();
-            $table->string('nationality')->default('سعودي');
+            $table->string('nationality')->default('ليبيا');
             $table->date('birth_date')->nullable();
             $table->date('enrollment_date')->default(DB::raw('CURRENT_DATE'));
             

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchDepartments } from "../lib/api";
-import { createStudent } from "../lib/jwt-api";
+import { createStudent, fetchNextStudentId } from "../lib/jwt-api";
 import { usePermissions } from "../hooks/usePermissions";
 
 export default function StudentCreate() {
@@ -13,7 +13,8 @@ export default function StudentCreate() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [transcriptFile, setTranscriptFile] = useState<File | null>(null);
-  // Removed currentSection state - now using single page format
+  const [previewStudentId, setPreviewStudentId] = useState<string>("");
+  const [createdStudent, setCreatedStudent] = useState<any>(null);
   
   const [form, setForm] = useState({
     // Personal Information
@@ -22,7 +23,8 @@ export default function StudentCreate() {
     national_id_passport: "",
     gender: "",
     birth_date: "",
-    nationality: "",
+    birth_place: "",
+    nationality: "ليبيا",
     phone: "",
     email: "",
     address: "",
@@ -33,13 +35,28 @@ export default function StudentCreate() {
     academic_history: "",
     academic_history_type: "",
     academic_score: "",
+    certification_date: "",
+    certification_school: "",
+    certification_specialization: "",
+    
+    // Foreign student fields
+    port_of_entry: "",
+    visa_type: "",
+    mother_name: "",
+    mother_nationality: "",
+    passport_number: "",
+    passport_issue_date: "",
+    passport_expiry_date: "",
+    passport_place_of_issue: "",
     
     // Enrollment
     department_id: "",
     year: "",
     status: "active",
-    enrollment_date: new Date().toISOString().split('T')[0] // Today's date
+    enrollment_date: new Date().toISOString().split('T')[0]
   });
+
+  const isLibyan = form.nationality === "ليبيا" || form.nationality === "ليبي" || form.nationality === "ليبية";
 
   // Load departments
   const { data: departments = [] } = useQuery({
@@ -47,49 +64,31 @@ export default function StudentCreate() {
     queryFn: fetchDepartments
   });
 
-  // Generate unique student ID
-  const generateStudentId = () => {
-    const year = new Date().getFullYear().toString().slice(-2);
-    const random = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
-    return `ST${year}${random}`;
-  };
-
-  // Note: QR code generation removed - will be handled by backend if needed
+  // Fetch preview student ID on mount
+  useEffect(() => {
+    fetchNextStudentId().then(res => {
+      setPreviewStudentId(res.id);
+    }).catch(() => {
+      const year = new Date().getFullYear().toString().slice(-2);
+      const random = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+      setPreviewStudentId(`ST${year}${random}`);
+    });
+  }, []);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     
-    // Personal Information validation
-    if (!form.name.trim()) {
-      newErrors.name = "الاسم مطلوب";
-    }
-    if (!form.national_id_passport.trim()) {
-      newErrors.national_id_passport = "الرقم القومي/جواز السفر مطلوب";
-    }
-    if (!form.gender) {
-      newErrors.gender = "الجنس مطلوب";
-    }
-    if (!form.birth_date) {
-      newErrors.birth_date = "تاريخ الميلاد مطلوب";
-    }
-    if (form.email && !/\S+@\S+\.\S+/.test(form.email)) {
-      newErrors.email = "البريد الإلكتروني غير صحيح";
-    }
-    
-    // Enrollment validation
-    // Department is now optional
-    if (!form.year) {
-      newErrors.year = "السنة الدراسية مطلوبة";
-    }
-    if (!form.enrollment_date) {
-      newErrors.enrollment_date = "تاريخ التسجيل مطلوب";
-    }
+    if (!form.name.trim()) newErrors.name = "الاسم مطلوب";
+    if (!form.national_id_passport.trim()) newErrors.national_id_passport = "الرقم القومي/جواز السفر مطلوب";
+    if (!form.gender) newErrors.gender = "الجنس مطلوب";
+    if (!form.birth_date) newErrors.birth_date = "تاريخ الميلاد مطلوب";
+    if (form.email && !/\S+@\S+\.\S+/.test(form.email)) newErrors.email = "البريد الإلكتروني غير صحيح";
+    if (!form.year) newErrors.year = "السنة الدراسية مطلوبة";
+    if (!form.enrollment_date) newErrors.enrollment_date = "تاريخ التسجيل مطلوب";
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-
-  // Email validation will be handled by backend
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +102,7 @@ export default function StudentCreate() {
         national_id_passport: form.national_id_passport.trim(),
         gender: form.gender || null,
         birth_date: form.birth_date || null,
+        birth_place: form.birth_place.trim() || null,
         nationality: form.nationality.trim() || null,
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
@@ -111,6 +111,10 @@ export default function StudentCreate() {
         sponsor_contact: form.sponsor_contact.trim() || null,
         academic_history: form.academic_history ? String(form.academic_history).trim() || null : null,
         academic_score: form.academic_score ? String(form.academic_score).trim() || null : null,
+        certification_type: form.academic_history_type || null,
+        certification_date: form.certification_date || null,
+        certification_school: form.certification_school.trim() || null,
+        certification_specialization: form.certification_specialization.trim() || null,
         transcript_file: transcriptFile ? transcriptFile.name : null,
         department_id: form.department_id || null,
         year: form.year ? parseInt(form.year) : null,
@@ -118,29 +122,31 @@ export default function StudentCreate() {
         enrollment_date: form.enrollment_date || null
       };
 
-      console.log('🔍 Attempting to save student data:', formData);
+      // Add foreign student fields only if not Libyan
+      if (!isLibyan) {
+        formData.port_of_entry = form.port_of_entry.trim() || null;
+        formData.visa_type = form.visa_type.trim() || null;
+        formData.mother_name = form.mother_name.trim() || null;
+        formData.mother_nationality = form.mother_nationality.trim() || null;
+        formData.passport_number = form.passport_number.trim() || null;
+        formData.passport_issue_date = form.passport_issue_date || null;
+        formData.passport_expiry_date = form.passport_expiry_date || null;
+        formData.passport_place_of_issue = form.passport_place_of_issue.trim() || null;
+      }
 
-      await createStudent(formData);
+      const result = await createStudent(formData);
+      setCreatedStudent(result);
 
       queryClient.invalidateQueries({ queryKey: ["students"] });
       navigate('/students');
     } catch (error: any) {
       console.error("Error saving student:", error);
-      console.error("Full error details:", JSON.stringify(error, null, 2));
-      
-      // Handle API errors
       const errorMessage = error.message || "خطأ في حفظ البيانات";
       
       if (errorMessage.includes('email')) {
-        setErrors({ 
-          email: "البريد الإلكتروني مستخدم بالفعل. يرجى استخدام بريد إلكتروني آخر.",
-          submit: errorMessage
-        });
+        setErrors({ email: "البريد الإلكتروني مستخدم بالفعل.", submit: errorMessage });
       } else if (errorMessage.includes('national_id') || errorMessage.includes('passport')) {
-        setErrors({ 
-          national_id_passport: "الرقم القومي/جواز السفر مستخدم بالفعل. يرجى التحقق من الرقم.",
-          submit: errorMessage
-        });
+        setErrors({ national_id_passport: "الرقم القومي/جواز السفر مستخدم بالفعل.", submit: errorMessage });
       } else {
         setErrors({ submit: errorMessage });
       }
@@ -151,12 +157,8 @@ export default function StudentCreate() {
 
   const handleInputChange = (field: string, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: "" }));
-    }
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: "" }));
   };
-
-  // Email validation will be handled on submit
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -164,13 +166,93 @@ export default function StudentCreate() {
       const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
       if (allowedTypes.includes(file.type)) {
         setTranscriptFile(file);
-        if (errors.transcript_file) {
-          setErrors(prev => ({ ...prev, transcript_file: "" }));
-        }
+        if (errors.transcript_file) setErrors(prev => ({ ...prev, transcript_file: "" }));
       } else {
         setErrors(prev => ({ ...prev, transcript_file: "يرجى اختيار ملف PDF أو صورة (JPG, PNG, GIF)" }));
       }
     }
+  };
+
+  const printRegistrationForm = () => {
+    const w = window.open('', '_blank');
+    if (!w) return;
+    const deptName = departments.find((d: any) => d.id === form.department_id)?.name || '.....................';
+    const currentYear = new Date().getFullYear();
+    const nextYear = currentYear + 1;
+    const semesterLabel = '........';
+
+    if (isLibyan) {
+      // Libyan student registration form
+      w.document.write(`<html><head><title>نموذج قبول وتسجيل طالب</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;700&display=swap');
+          *{margin:0;padding:0;box-sizing:border-box}
+          body{font-family:'Noto Sans Arabic',Arial,sans-serif;direction:rtl;padding:40px;background:#fff;color:#1a2332;font-size:14px;line-height:2}
+          .header{text-align:center;color:#1a4d8c;margin-bottom:30px}
+          .header h1{font-size:18px;font-weight:700;margin-bottom:5px}
+          .header h2{font-size:16px;font-weight:600}
+          .section-title{font-weight:700;font-size:15px;margin:20px 0 10px;text-decoration:underline}
+          .field{margin-bottom:8px}
+          .field .label{font-weight:600}
+          .field .dots{border-bottom:1px dotted #333;display:inline-block;min-width:150px;padding:0 5px}
+          .signature{margin-top:40px;text-align:center}
+          .signature .dots{display:block;margin-top:10px;border-bottom:1px dotted #333;width:200px;margin-left:auto;margin-right:auto}
+          @media print{body{padding:20px}@page{size:A4;margin:15mm}}
+        </style></head><body>
+        <div class="header">
+          <h1>نموذج قبول وتسجيل طالب للفصل الدراسي (${semesterLabel}) ....20م</h1>
+          <h2>للعام الجامعي .....20\\....20م</h2>
+        </div>
+        <div class="section-title">بيانات الطالب:</div>
+        <div class="field">اسم الطالب رباعي: <span class="dots">${form.name || '...................................................'}</span> رقم القيد الجامعي: (<span class="dots">${previewStudentId || '.............'}</span>)</div>
+        <div class="field">تاريخ ومكان والميلاد: <span class="dots">${form.birth_date || '...............'} ${form.birth_place || '...............'}</span> محل الإقامة: <span class="dots">${form.address || '...................'}</span> المدرسة المتحصل منها الطالب على</div>
+        <div class="field">الشهادة: <span class="dots">${form.certification_school || '.....................'}</span> التخصص: <span class="dots">${form.certification_specialization || '.....................'}</span> تاريخ الحصول عنها: <span class="dots">${form.certification_date || '...................'}</span> التقدير</div>
+        <div class="field">العام: <span class="dots">${form.academic_score || '.........'}</span>%.</div>
+        <div class="field">البرنامج العلمي الذي يرغب الطالب التسجيل فيه:</div>
+        <div class="field"><span class="dots" style="width:100%">${deptName}</span></div>
+        <div class="signature">
+          <div>توقيع الطالب</div>
+          <span class="dots">&nbsp;</span>
+        </div>
+      </body></html>`);
+    } else {
+      // Foreign student registration form
+      w.document.write(`<html><head><title>نموذج قبول وتسجيل طالب (وافد)</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;700&display=swap');
+          *{margin:0;padding:0;box-sizing:border-box}
+          body{font-family:'Noto Sans Arabic',Arial,sans-serif;direction:rtl;padding:40px;background:#fff;color:#1a2332;font-size:14px;line-height:2}
+          .header{text-align:center;color:#1a4d8c;margin-bottom:30px}
+          .header h1{font-size:18px;font-weight:700;margin-bottom:5px}
+          .header h2{font-size:16px;font-weight:600}
+          .field{margin-bottom:8px}
+          .field .dots{border-bottom:1px dotted #333;display:inline-block;min-width:120px;padding:0 5px}
+          .signature{margin-top:40px;text-align:center}
+          .signature .dots{display:block;margin-top:10px;border-bottom:1px dotted #333;width:200px;margin-left:auto;margin-right:auto}
+          @media print{body{padding:20px}@page{size:A4;margin:15mm}}
+        </style></head><body>
+        <div class="header">
+          <h1>نموذج قبول وتسجيل طالب (وافد)</h1>
+          <h2>للفصل الدراسي (${semesterLabel}) ....20م للعام الجامعي .....20\\....20م</h2>
+        </div>
+        <div class="field">أنا مقدم الطلب:</div>
+        <div class="field"><span class="dots" style="width:100%">${form.name || '...................................................'}</span></div>
+        <div class="field">الجنس: <span class="dots">${form.gender === 'male' ? 'ذكر' : form.gender === 'female' ? 'أنثى' : '...................'}</span> الجنسية: <span class="dots">${form.nationality || '.....................'}</span> مكان وتاريخ الميلاد: <span class="dots">${form.birth_place || '...............'} ${form.birth_date || '...............'}</span> رقم جواز</div>
+        <div class="field">السفر: <span class="dots">${form.passport_number || '...............................'}</span> مكان وتاريخ الإصدار: <span class="dots">${form.passport_place_of_issue || '...............'} ${form.passport_issue_date || '...............'}</span> تاريخ الصلاحية:</div>
+        <div class="field"><span class="dots">${form.passport_expiry_date || '...............................'}</span> معبر الدخول: <span class="dots">${form.port_of_entry || '...................'}</span> نوع الإقامة: <span class="dots">${form.visa_type || '...................'}</span> اسم الأم: <span class="dots">${form.mother_name || '.....................'}</span></div>
+        <div class="field">جنسيتها: <span class="dots">${form.mother_nationality || '.....................'}</span> محل الإقامة الحالي: <span class="dots">${form.address || '.....................'}</span> الشهادة ما قبل المرحلة الجامعية</div>
+        <div class="field">المتحصل عليها: <span class="dots">${form.certification_school || '...............................'}</span> النسبة: <span class="dots">${form.academic_score || '...................'}</span>% التقدير: <span class="dots">${form.academic_history_type || '...................'}</span> العام</div>
+        <div class="field">الدراسي: <span class="dots">${form.certification_date || '......'}</span>20م.</div>
+        <div class="field">أتقدم إليكم بطلبي هذا بشأن قبولي كطالب ببرامج الدراسة الجامعية بقسم: <span class="dots">${deptName}</span></div>
+        <div class="signature">
+          <div>توقيع مقدم الطلب</div>
+          <div>التاريخ: ......\\......\\....20م</div>
+          <span class="dots">&nbsp;</span>
+        </div>
+      </body></html>`);
+    }
+    w.document.close();
+    setTimeout(() => w.print(), 500);
   };
 
   if (!canCreate('students')) {
@@ -213,12 +295,29 @@ export default function StudentCreate() {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">تسجيل طالب جديد</h1>
                 <p className="text-sm text-gray-600 mt-1">
-                  إضافة طالب جديد إلى النظام
+                  إضافة طالب جديد إلى النظام {isLibyan ? '(طالب ليبي)' : '(طالب وافد)'}
                 </p>
               </div>
             </div>
             
             <div className="flex items-center space-x-3 space-x-reverse">
+              {/* Student ID Badge */}
+              {previewStudentId && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+                  <span className="text-xs text-blue-600 font-medium">رقم القيد الجامعي</span>
+                  <p className="text-lg font-bold text-blue-800">{previewStudentId}</p>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={printRegistrationForm}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                طباعة نموذج التسجيل
+              </button>
               <button
                 onClick={() => navigate('/students')}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
@@ -229,8 +328,6 @@ export default function StudentCreate() {
           </div>
         </div>
       </div>
-
-      {/* Removed Progress Steps - now using single page format */}
 
       {/* Content */}
       <div className="px-8 py-8">
@@ -257,7 +354,7 @@ export default function StudentCreate() {
                         }`}
                         value={form.name}
                         onChange={(e) => handleInputChange("name", e.target.value)}
-                        placeholder="أدخل الاسم الكامل للطالب"
+                        placeholder="أدخل الاسم الرباعي للطالب"
                       />
                       {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
                     </div>
@@ -288,7 +385,7 @@ export default function StudentCreate() {
                         }`}
                         value={form.national_id_passport}
                         onChange={(e) => handleInputChange("national_id_passport", e.target.value)}
-                        placeholder="أدخل الرقم القومي أو رقم جواز السفر"
+                        placeholder={isLibyan ? "أدخل الرقم القومي" : "أدخل رقم جواز السفر"}
                       />
                       {errors.national_id_passport && <p className="mt-1 text-sm text-red-600">{errors.national_id_passport}</p>}
                     </div>
@@ -319,8 +416,6 @@ export default function StudentCreate() {
                       </label>
                       <input
                         type="date"
-                        min="2000-01-01"
-                        max="2010-12-31"
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                           errors.birth_date ? 'border-red-300' : 'border-gray-300'
                         }`}
@@ -328,6 +423,20 @@ export default function StudentCreate() {
                         onChange={(e) => handleInputChange("birth_date", e.target.value)}
                       />
                       {errors.birth_date && <p className="mt-1 text-sm text-red-600">{errors.birth_date}</p>}
+                    </div>
+
+                    {/* Birth Place */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        مكان الميلاد
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={form.birth_place}
+                        onChange={(e) => handleInputChange("birth_place", e.target.value)}
+                        placeholder="مكان الميلاد"
+                      />
                     </div>
 
                     {/* Nationality */}
@@ -340,8 +449,11 @@ export default function StudentCreate() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         value={form.nationality}
                         onChange={(e) => handleInputChange("nationality", e.target.value)}
-                        placeholder="مثال: ليبي"
+                        placeholder="ليبيا"
                       />
+                      <p className="mt-1 text-xs text-gray-500">
+                        {isLibyan ? 'طالب ليبي - النموذج الأساسي' : 'طالب وافد - سيتم إظهار حقول إضافية'}
+                      </p>
                     </div>
 
                     {/* Phone */}
@@ -354,7 +466,7 @@ export default function StudentCreate() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         value={form.phone}
                         onChange={(e) => handleInputChange("phone", e.target.value)}
-                        placeholder="+966 50 123 4567"
+                        placeholder="+218 91 123 4567"
                       />
                     </div>
 
@@ -378,14 +490,14 @@ export default function StudentCreate() {
                     {/* Address */}
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        العنوان
+                        محل الإقامة
                       </label>
                       <textarea
-                        rows={3}
+                        rows={2}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         value={form.address}
                         onChange={(e) => handleInputChange("address", e.target.value)}
-                        placeholder="العنوان الكامل"
+                        placeholder="محل الإقامة الحالي"
                       />
                     </div>
 
@@ -422,6 +534,73 @@ export default function StudentCreate() {
                   </div>
           </div>
 
+          {/* Foreign Student Section - Only shown for non-Libyan */}
+          {!isLibyan && (
+            <div className="bg-white rounded-lg shadow-sm border border-orange-200 p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <svg className="h-5 w-5 text-orange-600 ml-2" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
+                </svg>
+                بيانات الطالب الوافد
+                <span className="mr-2 text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">خاص بالطلاب غير الليبيين</span>
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Mother Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">اسم الأم</label>
+                  <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={form.mother_name} onChange={(e) => handleInputChange("mother_name", e.target.value)} placeholder="اسم الأم" />
+                </div>
+                {/* Mother Nationality */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">جنسية الأم</label>
+                  <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={form.mother_nationality} onChange={(e) => handleInputChange("mother_nationality", e.target.value)} placeholder="جنسية الأم" />
+                </div>
+                {/* Port of Entry */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">معبر الدخول</label>
+                  <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={form.port_of_entry} onChange={(e) => handleInputChange("port_of_entry", e.target.value)} placeholder="معبر الدخول" />
+                </div>
+                {/* Visa Type */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">نوع الإقامة / التأشيرة</label>
+                  <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={form.visa_type} onChange={(e) => handleInputChange("visa_type", e.target.value)} placeholder="نوع الإقامة" />
+                </div>
+
+                {/* Passport Section */}
+                <div className="md:col-span-2">
+                  <h3 className="text-sm font-medium text-gray-900 mb-3 pb-2 border-b border-gray-100">بيانات جواز السفر</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">رقم جواز السفر</label>
+                      <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={form.passport_number} onChange={(e) => handleInputChange("passport_number", e.target.value)} placeholder="رقم جواز السفر" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">مكان الإصدار</label>
+                      <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={form.passport_place_of_issue} onChange={(e) => handleInputChange("passport_place_of_issue", e.target.value)} placeholder="مكان إصدار الجواز" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">تاريخ الإصدار</label>
+                      <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={form.passport_issue_date} onChange={(e) => handleInputChange("passport_issue_date", e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">تاريخ الصلاحية</label>
+                      <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={form.passport_expiry_date} onChange={(e) => handleInputChange("passport_expiry_date", e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Academic History Section */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
@@ -433,7 +612,7 @@ export default function StudentCreate() {
                   
                   <div className="mb-4">
                     <p className="text-sm text-gray-600">
-                      هذا القسم اختياري - يمكن تركه فارغاً للطلاب الجدد بدون مؤهلات سابقة
+                      الشهادة ما قبل المرحلة الجامعية
                     </p>
                   </div>
                   
@@ -441,14 +620,14 @@ export default function StudentCreate() {
                     {/* Academic History Type */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        نوع المؤهل <span className="text-xs text-gray-500">(للمرجع فقط)</span>
+                        نوع الشهادة
                       </label>
                       <select
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         value={form.academic_history_type}
                         onChange={(e) => handleInputChange("academic_history_type", e.target.value)}
                       >
-                        <option value="">اختر نوع المؤهل</option>
+                        <option value="">اختر نوع الشهادة</option>
                         <option value="high_school">الثانوية العامة</option>
                         <option value="diploma">دبلوم</option>
                         <option value="bachelor">بكالوريوس</option>
@@ -457,19 +636,59 @@ export default function StudentCreate() {
                       </select>
                     </div>
 
+                    {/* Certification Specialization */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        التخصص
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={form.certification_specialization}
+                        onChange={(e) => handleInputChange("certification_specialization", e.target.value)}
+                        placeholder="تخصص الشهادة"
+                      />
+                    </div>
+
+                    {/* Certification School */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        المدرسة / المعهد المتحصل منها
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={form.certification_school}
+                        onChange={(e) => handleInputChange("certification_school", e.target.value)}
+                        placeholder="اسم المدرسة أو المعهد"
+                      />
+                    </div>
+
+                    {/* Certification Date */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        تاريخ الحصول على الشهادة
+                      </label>
+                      <input
+                        type="date"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={form.certification_date}
+                        onChange={(e) => handleInputChange("certification_date", e.target.value)}
+                      />
+                    </div>
+
                     {/* Academic Score */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        الدرجة الأكاديمية
+                        النسبة / التقدير
                       </label>
                       <input
                         type="text"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         value={form.academic_score}
                         onChange={(e) => handleInputChange("academic_score", e.target.value)}
-                        placeholder="مثال: 85.5% أو 3.2 GPA أو A"
+                        placeholder="مثال: 85.5%"
                       />
-                      <p className="mt-1 text-sm text-gray-500">أدخل الدرجة بأي صيغة (نسبة مئوية، GPA، أو درجة حرفية)</p>
                     </div>
 
                     {/* Transcript File Upload */}
@@ -513,14 +732,14 @@ export default function StudentCreate() {
                     {/* Academic History Details */}
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        تفاصيل المؤهل الأكاديمي
+                        ملاحظات إضافية
                       </label>
                       <textarea
-                        rows={4}
+                        rows={3}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         value={form.academic_history}
                         onChange={(e) => handleInputChange("academic_history", e.target.value)}
-                        placeholder="تفاصيل إضافية حول المؤهل الأكاديمي، المدرسة/الجامعة، التخصص، إلخ..."
+                        placeholder="تفاصيل إضافية حول المؤهل الأكاديمي..."
                       />
                     </div>
                   </div>
@@ -539,7 +758,7 @@ export default function StudentCreate() {
                     {/* Department */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        القسم
+                        البرنامج العلمي / القسم
                       </label>
                       <select
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
@@ -616,7 +835,17 @@ export default function StudentCreate() {
           </div>
 
           {/* Submit Button */}
-          <div className="flex justify-end">
+          <div className="flex justify-between items-center">
+            <button
+              type="button"
+              onClick={printRegistrationForm}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              طباعة نموذج التسجيل
+            </button>
             <button
               type="submit"
               disabled={submitting}

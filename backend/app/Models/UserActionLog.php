@@ -9,6 +9,8 @@ class UserActionLog extends Model
 {
     use HasUuids;
 
+    protected $table = 'user_actions_log';
+
     public $timestamps = false;
 
     protected $fillable = [

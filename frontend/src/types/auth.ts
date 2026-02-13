@@ -1,4 +1,4 @@
-export type UserRole = 'manager' | 'staff' | 'teacher';
+export type UserRole = 'manager' | 'staff' | 'teacher' | 'student';
 
 export interface AppUser {
   id: string;
@@ -16,6 +16,11 @@ export interface AppUser {
   teacherCampusId?: string;
   departmentId?: string;
   departmentName?: string;
+  // Student-specific fields
+  studentId?: string;
+  studentName?: string;
+  studentCampusId?: string;
+  studentYear?: number;
 }
 
 export interface AuthState {

@@ -33,10 +33,11 @@ export default function DepartmentEdit() {
     queryFn: () => fetchTeachers("", true), // Only active teachers
   });
 
-  // Fetch all subjects
+  // Fetch only subjects belonging to this department
   const { data: allSubjects, isLoading: subjectsLoading } = useQuery({
-    queryKey: ["subjects"],
-    queryFn: () => fetchSubjects(),
+    queryKey: ["subjects", "department", id],
+    queryFn: () => fetchSubjects("", id),
+    enabled: !!id,
   });
 
 

@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Models\AppUser;
+use App\Traits\LogsUserActions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 
 class TeacherController extends Controller
 {
+    use LogsUserActions;
     /**
      * Display a listing of teachers
      */
@@ -107,6 +109,11 @@ class TeacherController extends Controller
 
         $teacher->load('department:id,name,name_en');
 
+        $this->logAction('create', 'teachers', $teacher->id, [
+            'teacher_name' => $teacher->name,
+            'department_id' => $teacher->department_id,
+        ]);
+
         return response()->json($teacher, 201);
     }
 
@@ -162,6 +169,12 @@ class TeacherController extends Controller
         $this->createTeacherLoginAccount($teacher, $rawPassword);
 
         $teacher->load('department:id,name,name_en');
+
+        $this->logAction('create', 'teachers', $teacher->id, [
+            'teacher_name' => $teacher->name,
+            'department_id' => $teacher->department_id,
+            'method' => 'storeWithDepartments',
+        ]);
 
         return response()->json($teacher, 201);
     }
@@ -330,6 +343,11 @@ class TeacherController extends Controller
         
         $teacher->load('department:id,name,name_en');
 
+        $this->logAction('update', 'teachers', $teacher->id, [
+            'teacher_name' => $teacher->name,
+            'updated_fields' => array_keys($request->except(['availability'])),
+        ]);
+
         return response()->json($teacher);
     }
 
@@ -339,6 +357,11 @@ class TeacherController extends Controller
     public function destroy($id)
     {
         $teacher = Teacher::findOrFail($id);
+
+        $this->logAction('delete', 'teachers', $teacher->id, [
+            'teacher_name' => $teacher->name,
+        ]);
+
         $teacher->delete();
 
         return response()->json(['message' => 'Teacher deleted successfully'], 200);

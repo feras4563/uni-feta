@@ -217,6 +217,9 @@ export default function DepartmentDetail() {
                 <div>
                   <div className="text-3xl font-bold text-gray-900">{subjects?.total || 0}</div>
                   <div className="text-sm font-medium text-gray-600 mt-1">المقررات الدراسية</div>
+                  {departmentData?.totalUnits && (
+                    <div className="text-xs text-gray-500 mt-1">{departmentData.totalUnits} وحدة دراسية</div>
+                  )}
                 </div>
                 <div className="p-3 bg-indigo-100 rounded-lg">
                   <svg className="h-6 w-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -433,65 +436,126 @@ export default function DepartmentDetail() {
             )}
           </div>
 
-          {/* Semesters and Materials Section */}
+          {/* Curriculum / Semesters Section */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                <svg className="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                </svg>
-                الفصول الدراسية والمواد ({Object.keys(subjects?.bySemester || {}).length} فصل)
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <svg className="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                  </svg>
+                  الخطة الدراسية ({Object.keys(subjects?.bySemester || {}).length} فصل)
+                </h3>
+                {departmentData?.totalUnits && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800">
+                    إجمالي الوحدات: {departmentData.totalUnits}
+                  </span>
+                )}
+              </div>
             </div>
             
             <div className="p-6">
               {subjects?.bySemester && Object.keys(subjects.bySemester).length > 0 ? (
                 <div className="space-y-6">
-                  {Object.entries(subjects.bySemester).map(([semesterName, semesterData]: [string, any]) => (
-                    <div key={semesterName} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-4">
+                  {Object.entries(subjects.bySemester)
+                    .sort(([, a]: [string, any], [, b]: [string, any]) => (a.semesterNumber || 0) - (b.semesterNumber || 0))
+                    .map(([semesterName, semesterData]: [string, any]) => (
+                    <div key={semesterName} className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-l from-indigo-50 to-white border-b border-gray-200">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                            <span className="text-sm font-semibold text-purple-700">
-                              {semesterData.semester?.code || semesterName}
+                          <div className="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center shadow-sm">
+                            <span className="text-sm font-bold text-white">
+                              {semesterData.semesterNumber}
                             </span>
                           </div>
-                          <h4 className="text-lg font-semibold text-gray-900 flex items-center">
-                            <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            الفصل الدراسي {semesterData.semester?.name || semesterName}
+                          <h4 className="text-base font-semibold text-gray-900">
+                            {semesterName}
                           </h4>
                         </div>
                         <div className="flex items-center gap-2">
-                          {semesterData.study_year && (
-                            <span className="px-3 py-1 bg-gray-100 text-gray-700 text-sm font-medium rounded-full">
-                              {semesterData.study_year.name}
-                            </span>
-                          )}
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                             {semesterData.subjects?.length || 0} مادة
+                          </span>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            {semesterData.totalCredits || 0} وحدة
                           </span>
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {semesterData.subjects?.map((subject: any, index: number) => (
-                          <div key={`${semesterName}-${subject.id}-${index}`} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors duration-200">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <h5 className="font-medium text-gray-900 text-sm">{subject.name}</h5>
-                                <p className="text-xs text-gray-600 mt-1">كود: {subject.code}</p>
-                                <div className="flex items-center mt-2">
-                                  <svg className="w-4 h-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  <span className="text-xs text-gray-500">{subject.credits || 0} ساعة معتمدة</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                      {/* Table view for subjects */}
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الكود</th>
+                              <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">اسم المقرر</th>
+                              <th className="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">الوحدات</th>
+                              <th className="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">نظري/عملي</th>
+                              <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المتطلب السابق</th>
+                              <th className="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">النوع</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-100">
+                            {semesterData.subjects?.map((subject: any, index: number) => {
+                              const typeLabels: Record<string, { label: string; color: string }> = {
+                                required: { label: 'إجباري', color: 'bg-blue-50 text-blue-700' },
+                                elective: { label: 'اختياري', color: 'bg-amber-50 text-amber-700' },
+                                university_requirement: { label: 'متطلب جامعة', color: 'bg-purple-50 text-purple-700' },
+                                department_requirement: { label: 'متطلب قسم', color: 'bg-teal-50 text-teal-700' },
+                              };
+                              const typeInfo = typeLabels[subject.subject_type] || typeLabels.required;
+                              const prereqs = subject.prerequisite_subjects || [];
+                              
+                              return (
+                                <tr key={`${semesterName}-${subject.id}-${index}`} className="hover:bg-gray-50 transition-colors duration-150">
+                                  <td className="px-4 py-3 whitespace-nowrap">
+                                    <span className="text-sm font-mono font-medium text-indigo-600">{subject.code}</span>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div>
+                                      <div className="text-sm font-medium text-gray-900">{subject.name}</div>
+                                      {subject.name_en && (
+                                        <div className="text-xs text-gray-500 mt-0.5">{subject.name_en}</div>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 text-sm font-semibold text-gray-700">
+                                      {subject.credits}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <span className="text-xs text-gray-600">
+                                      {subject.theoretical_hours ?? '-'}/{subject.practical_hours ?? '-'}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {prereqs.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {prereqs.map((p: any) => (
+                                          <span key={p.id} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700 border border-red-200">
+                                            {p.code}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : subject.min_units_required ? (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200">
+                                        {subject.min_units_required} وحدة مكتملة
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-gray-400">—</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeInfo.color}`}>
+                                      {typeInfo.label}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   ))}

@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\Student;
 use App\Models\Subject;
+use App\Traits\LogsUserActions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class DepartmentController extends Controller
 {
+    use LogsUserActions;
     /**
      * Display a listing of departments
      */
@@ -60,6 +62,10 @@ class DepartmentController extends Controller
         $department = Department::create($request->all());
         $department->load('headTeacher:id,name,name_en');
 
+        $this->logAction('create', 'departments', $department->id, [
+            'department_name' => $department->name,
+        ]);
+
         return response()->json($department, 201);
     }
 
@@ -91,15 +97,20 @@ class DepartmentController extends Controller
     {
         $department = Department::with('headTeacher:id,name,name_en')->findOrFail($id);
 
-        // Get all subjects for this department
+        // Get all subjects for this department with prerequisites
         $allSubjects = Subject::where('department_id', $id)
-            ->select('id', 'name', 'name_en', 'code', 'credits', 'semester_number', 'is_required')
+            ->with('prerequisiteSubjects:id,name,name_en,code')
+            ->select('id', 'name', 'name_en', 'code', 'credits', 'semester_number', 'is_required',
+                     'subject_type', 'theoretical_hours', 'practical_hours', 'min_units_required')
             ->orderBy('semester_number')
             ->orderBy('name')
             ->get();
 
         // Group subjects by semester
         $subjectsBySemester = $allSubjects->groupBy('semester_number');
+
+        // Calculate total units for the department curriculum
+        $totalUnits = $allSubjects->sum('credits');
 
         $semesters = $subjectsBySemester->map(function($semesterSubjects, $semesterNumber) {
             return [
@@ -109,17 +120,19 @@ class DepartmentController extends Controller
                 'totalCredits' => $semesterSubjects->sum('credits'),
                 'totalSubjects' => $semesterSubjects->count(),
             ];
-        })->values();
+        })->sortKeys()->values();
 
         // Format subjects data for frontend
         $subjectsData = [
             'total' => $allSubjects->count(),
+            'totalUnits' => $totalUnits,
             'data' => $allSubjects->toArray(),
             'bySemester' => []
         ];
 
-        // Build bySemester structure
-        foreach ($subjectsBySemester as $semesterNumber => $semesterSubjects) {
+        // Build bySemester structure (sorted by semester number)
+        $sortedSemesters = $subjectsBySemester->sortKeys();
+        foreach ($sortedSemesters as $semesterNumber => $semesterSubjects) {
             $semesterKey = "الفصل {$semesterNumber}";
             $subjectsData['bySemester'][$semesterKey] = [
                 'name' => $semesterKey,
@@ -139,6 +152,7 @@ class DepartmentController extends Controller
             'semesters' => $semesters,
             'subjects' => $subjectsData,
             'totalSubjects' => $allSubjects->count(),
+            'totalUnits' => $totalUnits,
             'totalStudents' => $totalStudents,
             'activeStudents' => $activeStudents,
             'totalSemesters' => $semesters->count(),
@@ -170,6 +184,11 @@ class DepartmentController extends Controller
         $department->update($request->all());
         $department->load('headTeacher:id,name,name_en');
 
+        $this->logAction('update', 'departments', $department->id, [
+            'department_name' => $department->name,
+            'updated_fields' => array_keys($request->all()),
+        ]);
+
         return response()->json($department);
     }
 
@@ -186,6 +205,10 @@ class DepartmentController extends Controller
                 'message' => 'Cannot delete department with enrolled students'
             ], 422);
         }
+
+        $this->logAction('delete', 'departments', $department->id, [
+            'department_name' => $department->name,
+        ]);
 
         $department->delete();
 

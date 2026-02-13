@@ -22,13 +22,19 @@ class CheckRole
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $appUser = AppUser::where('auth_user_id', $user->id)->first();
+        $appUser = AppUser::with('roleModel')->where('auth_user_id', $user->id)->first();
 
         if (!$appUser) {
             return response()->json(['error' => 'User profile not found'], 404);
         }
 
-        if (!in_array($appUser->role, $roles)) {
+        // Check against both the legacy role enum and the new role model name
+        $userRoleName = $appUser->role;
+        $userRoleModelName = $appUser->roleModel?->name;
+
+        $hasRole = in_array($userRoleName, $roles) || in_array($userRoleModelName, $roles);
+
+        if (!$hasRole) {
             return response()->json([
                 'error' => 'Forbidden',
                 'message' => 'You do not have permission to access this resource'

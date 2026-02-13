@@ -1,32 +1,58 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api-client";
-import { DollarSign, Search, Download, Receipt, CheckCircle, Clock, AlertCircle, X, CreditCard } from "lucide-react";
+import { DollarSign, Search, Download, CheckCircle, Clock, AlertCircle, X, CreditCard, Settings, ChevronDown, ChevronUp, Tag, Percent, Gift, BookOpen, Layers } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+
+interface InvoiceItem {
+  id: string;
+  subject_id: string | null;
+  fee_definition_id: string | null;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  amount: number;
+  subject?: { id: string; name: string; code: string; credits: number } | null;
+  fee_definition?: { id: string; name_ar: string; name_en: string | null; frequency: string } | null;
+}
 
 interface Invoice {
   id: string;
   invoice_number: string;
-  student: { id: string; name: string; email?: string };
+  student: { id: string; name: string; email?: string; campus_id?: string };
   semester: { id: string; name: string };
+  department?: { id: string; name: string };
+  subtotal: number;
+  discount: number;
+  discount_type: 'none' | 'percentage' | 'fixed' | 'full_waiver';
+  discount_percentage: number | null;
+  discount_reason: string | null;
   total_amount: number;
   paid_amount: number;
   balance: number;
   status: 'pending' | 'paid' | 'partial' | 'overdue';
   invoice_date: string;
   due_date: string;
+  items?: InvoiceItem[];
 }
 
 export default function FeesPage() {
   const queryClient = useQueryClient();
-  const { canCreate, canEdit } = usePermissions();
+  const navigate = useNavigate();
+  const { canCreate, canEdit, isManager } = usePermissions();
   const canManageFees = canCreate('fees') || canEdit('fees');
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [allowAttendance, setAllowAttendance] = useState(false);
+  const [discountType, setDiscountType] = useState<string>("none");
+  const [discountValue, setDiscountValue] = useState("");
+  const [discountReason, setDiscountReason] = useState("");
   
   const { data: invoices = [], isLoading, error, refetch } = useQuery({
     queryKey: ["fees"],
@@ -50,9 +76,23 @@ export default function FeesPage() {
     }
   });
 
-  const toggleAttendanceMutation = useMutation({
-    mutationFn: async ({ invoiceId, allow }: { invoiceId: string; allow: boolean }) => {
-      return api.post(`/fees/${invoiceId}/toggle-attendance`, { allow_attendance: allow });
+  const applyDiscountMutation = useMutation({
+    mutationFn: async ({ invoiceId, discount_type, discount_value, discount_reason }: { invoiceId: string; discount_type: string; discount_value?: number; discount_reason?: string }) => {
+      return api.post(`/fees/${invoiceId}/discount`, { discount_type, discount_value, discount_reason });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["fees"] });
+      setShowDiscountModal(false);
+      setSelectedInvoice(null);
+      setDiscountType("none");
+      setDiscountValue("");
+      setDiscountReason("");
+    }
+  });
+
+  const removeDiscountMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      return api.delete(`/fees/${invoiceId}/discount`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["fees"] });
@@ -62,7 +102,7 @@ export default function FeesPage() {
   const filteredInvoices = useMemo(() => {
     return invoices.filter((invoice: Invoice) => {
       if (statusFilter !== "all" && invoice.status !== statusFilter) return false;
-      if (searchTerm && !invoice.student?.name?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      if (searchTerm && !invoice.student?.name?.toLowerCase().includes(searchTerm.toLowerCase()) && !invoice.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
       return true;
     });
   }, [invoices, statusFilter, searchTerm]);
@@ -72,79 +112,68 @@ export default function FeesPage() {
     const paid = filteredInvoices.filter((f: Invoice) => f.status === "paid").length;
     const pending = filteredInvoices.filter((f: Invoice) => f.status === "pending").length;
     const partial = filteredInvoices.filter((f: Invoice) => f.status === "partial").length;
-    const totalAmount = filteredInvoices.reduce((sum: number, f: Invoice) => sum + (f.total_amount || 0), 0);
-    const paidAmount = filteredInvoices.reduce((sum: number, f: Invoice) => sum + (f.paid_amount || 0), 0);
-    const balanceAmount = filteredInvoices.reduce((sum: number, f: Invoice) => sum + (f.balance || 0), 0);
+    const totalAmount = filteredInvoices.reduce((sum: number, f: Invoice) => sum + (Number(f.total_amount) || 0), 0);
+    const paidAmount = filteredInvoices.reduce((sum: number, f: Invoice) => sum + (Number(f.paid_amount) || 0), 0);
+    const balanceAmount = filteredInvoices.reduce((sum: number, f: Invoice) => sum + (Number(f.balance) || 0), 0);
 
     return { total, paid, pending, partial, totalAmount, paidAmount, balanceAmount };
   }, [filteredInvoices]);
 
   const getStatusConfig = (status: string) => {
-    const configs = {
-      paid: { 
-        label: "مدفوع", 
-        bgColor: "bg-green-50", 
-        textColor: "text-green-700",
-        borderColor: "border-green-200",
-        icon: CheckCircle
-      },
-      pending: { 
-        label: "غير مدفوع", 
-        bgColor: "bg-yellow-50", 
-        textColor: "text-yellow-700",
-        borderColor: "border-yellow-200",
-        icon: Clock
-      },
-      partial: { 
-        label: "مدفوع جزئياً", 
-        bgColor: "bg-blue-50", 
-        textColor: "text-blue-700",
-        borderColor: "border-blue-200",
-        icon: AlertCircle
-      },
-      overdue: { 
-        label: "متأخر", 
-        bgColor: "bg-red-50", 
-        textColor: "text-red-700",
-        borderColor: "border-red-200",
-        icon: AlertCircle
-      }
+    const configs: Record<string, { label: string; color: string; icon: any }> = {
+      paid: { label: "مدفوع", color: "text-green-600", icon: CheckCircle },
+      pending: { label: "غير مدفوع", color: "text-yellow-600", icon: Clock },
+      partial: { label: "جزئي", color: "text-blue-600", icon: AlertCircle },
+      overdue: { label: "متأخر", color: "text-red-600", icon: AlertCircle },
     };
-    return configs[status as keyof typeof configs] || configs.pending;
+    return configs[status] || configs.pending;
   };
 
-  const formatCurrency = (amount: number) => {
-    return `${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} د.ل`;
+  const formatCurrency = (amount: number | string) => {
+    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+    return `${(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} د.ل`;
   };
 
   const handleRecordPayment = () => {
     if (!selectedInvoice || !paymentAmount) return;
     const amount = parseFloat(paymentAmount);
-    if (isNaN(amount) || amount <= 0 || amount > selectedInvoice.balance) {
+    if (isNaN(amount) || amount <= 0 || amount > Number(selectedInvoice.balance)) {
       alert("المبلغ غير صحيح");
       return;
     }
-    recordPaymentMutation.mutate({ 
-      invoiceId: selectedInvoice.id, 
-      amount,
-      allowAttendance: allowAttendance 
+    recordPaymentMutation.mutate({ invoiceId: selectedInvoice.id, amount, allowAttendance });
+  };
+
+  const handleApplyDiscount = () => {
+    if (!selectedInvoice) return;
+    const value = discountValue ? parseFloat(discountValue) : undefined;
+    applyDiscountMutation.mutate({
+      invoiceId: selectedInvoice.id,
+      discount_type: discountType,
+      discount_value: value,
+      discount_reason: discountReason || undefined,
     });
   };
 
   const setPartialPayment = (percentage: number) => {
     if (selectedInvoice) {
-      const amount = (selectedInvoice.balance * percentage / 100).toFixed(2);
+      const amount = (Number(selectedInvoice.balance) * percentage / 100).toFixed(2);
       setPaymentAmount(amount);
     }
+  };
+
+  const getDiscountLabel = (invoice: Invoice) => {
+    if (!invoice.discount_type || invoice.discount_type === 'none') return null;
+    if (invoice.discount_type === 'full_waiver') return 'إعفاء كامل';
+    if (invoice.discount_type === 'percentage') return `خصم ${invoice.discount_percentage}%`;
+    if (invoice.discount_type === 'fixed') return `خصم ${formatCurrency(invoice.discount)}`;
+    return null;
   };
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600 mx-auto"></div>
-          <p className="mt-4 text-sm text-gray-600">جاري تحميل بيانات الرسوم...</p>
-        </div>
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-200 border-t-gray-900"></div>
       </div>
     );
   }
@@ -152,16 +181,9 @@ export default function FeesPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
-          <h3 className="mt-4 text-lg font-semibold text-gray-900">خطأ في تحميل البيانات</h3>
-          <p className="mt-2 text-sm text-gray-600">تعذر تحميل بيانات الرسوم. يرجى المحاولة مرة أخرى.</p>
-          <button 
-            onClick={() => refetch()}
-            className="mt-6 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            إعادة المحاولة
-          </button>
+        <div className="text-center">
+          <p className="text-sm text-gray-600">تعذر تحميل بيانات الرسوم.</p>
+          <button onClick={() => refetch()} className="mt-3 text-sm text-gray-900 underline hover:no-underline">إعادة المحاولة</button>
         </div>
       </div>
     );
@@ -169,267 +191,232 @@ export default function FeesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">إدارة الرسوم والفواتير</h1>
-              <p className="mt-1 text-sm text-gray-600">متابعة وإدارة رسوم الطلاب الدراسية</p>
-            </div>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <Download className="h-4 w-4" />
-              <span>تصدير التقرير</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">إجمالي الفواتير</p>
-                <p className="mt-2 text-3xl font-bold text-gray-900">{stats.total}</p>
-              </div>
-              <div className="p-3 bg-blue-50 rounded-lg">
-                <Receipt className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">الرسوم والفواتير</h1>
+            <p className="text-sm text-gray-500 mt-0.5">متابعة وإدارة رسوم الطلاب</p>
           </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">مدفوعة بالكامل</p>
-                <p className="mt-2 text-3xl font-bold text-green-600">{stats.paid}</p>
-              </div>
-              <div className="p-3 bg-green-50 rounded-lg">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">غير مدفوعة</p>
-                <p className="mt-2 text-3xl font-bold text-yellow-600">{stats.pending}</p>
-              </div>
-              <div className="p-3 bg-yellow-50 rounded-lg">
-                <Clock className="h-6 w-6 text-yellow-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">الرصيد المتبقي</p>
-                <p className="mt-2 text-xl font-bold text-gray-900">{formatCurrency(stats.balanceAmount)}</p>
-              </div>
-              <div className="p-3 bg-gray-100 rounded-lg">
-                <DollarSign className="h-6 w-6 text-gray-600" />
-              </div>
-            </div>
+          <div className="flex items-center gap-2">
+            {canManageFees && (
+              <button type="button" onClick={() => navigate('/fee-structure')} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                <Settings className="h-4 w-4" />
+                هيكل الرسوم
+              </button>
+            )}
+            <button type="button" className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <Download className="h-4 w-4" />
+              تصدير
+            </button>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6 shadow-sm">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                البحث عن طالب
-              </label>
-              <div className="relative">
-                <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pr-10 pl-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="ابحث باسم الطالب..."
-                />
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                حالة الدفع
-              </label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">جميع الحالات</option>
-                <option value="paid">مدفوع</option>
-                <option value="pending">غير مدفوع</option>
-                <option value="partial">مدفوع جزئياً</option>
-                <option value="overdue">متأخر</option>
-              </select>
-            </div>
-
-            <div className="flex items-end">
-              <button
-                onClick={() => {
-                  setSearchTerm("");
-                  setStatusFilter("all");
-                }}
-                className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                مسح الفلاتر
-              </button>
-            </div>
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center mb-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pr-9 pl-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
+              placeholder="بحث بالاسم أو رقم الفاتورة..."
+            />
           </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
+          >
+            <option value="all">جميع الحالات</option>
+            <option value="paid">مدفوع</option>
+            <option value="pending">غير مدفوع</option>
+            <option value="partial">مدفوع جزئياً</option>
+            <option value="overdue">متأخر</option>
+          </select>
+          {(searchTerm || statusFilter !== 'all') && (
+            <button onClick={() => { setSearchTerm(""); setStatusFilter("all"); }} className="text-xs text-gray-500 hover:text-gray-700">مسح</button>
+          )}
         </div>
 
         {/* Invoices Table */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           {filteredInvoices.length === 0 ? (
-            <div className="text-center py-12">
-              <Receipt className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-4 text-lg font-medium text-gray-900">لا توجد فواتير</h3>
-              <p className="mt-2 text-sm text-gray-600">
-                {searchTerm || statusFilter !== "all" 
-                  ? "لم يتم العثور على فواتير تطابق معايير البحث"
-                  : "لا توجد فواتير مسجلة في النظام"
-                }
-              </p>
+            <div className="text-center py-16 text-gray-500">
+              <p className="text-sm">{searchTerm || statusFilter !== "all" ? "لم يتم العثور على فواتير" : "لا توجد فواتير"}</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      رقم الفاتورة
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      اسم الطالب
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      الفصل الدراسي
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      المبلغ الإجمالي
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      المبلغ المدفوع
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      الرصيد المتبقي
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      الحالة
-                    </th>
-                    {canManageFees && (
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        الإجراءات
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredInvoices.map((invoice: Invoice) => {
-                    const statusConfig = getStatusConfig(invoice.status);
-                    const StatusIcon = statusConfig.icon;
-                    
-                    return (
-                      <tr key={invoice.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-mono font-medium text-gray-900">
-                            {invoice.invoice_number}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                              <span className="text-sm font-medium text-blue-700">
-                                {invoice.student?.name?.charAt(0)?.toUpperCase() || 'ط'}
-                              </span>
-                            </div>
-                            <div className="mr-4">
-                              <div className="text-sm font-medium text-gray-900">
-                                {invoice.student?.name || "غير محدد"}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {invoice.semester?.name || "-"}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-semibold text-gray-900">
-                            {formatCurrency(invoice.total_amount)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-green-600">
-                            {formatCurrency(invoice.paid_amount)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-red-600">
-                            {formatCurrency(invoice.balance)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${statusConfig.bgColor} ${statusConfig.textColor} ${statusConfig.borderColor}`}>
-                            <StatusIcon className="h-3.5 w-3.5" />
-                            {statusConfig.label}
-                          </span>
-                        </td>
-                        {canManageFees && (
-                          <td className="px-6 py-4 whitespace-nowrap text-right">
-                            {invoice.status !== 'paid' && (
-                              <button
-                                onClick={() => {
-                                  setSelectedInvoice(invoice);
-                                  setPaymentAmount(invoice.balance.toString());
-                                  setShowPaymentModal(true);
-                                }}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                              >
-                                <CreditCard className="h-4 w-4" />
-                                <span>تسجيل دفعة</span>
-                              </button>
-                            )}
-                          </td>
+            <div className="divide-y divide-gray-100">
+              {filteredInvoices.map((invoice: Invoice) => {
+                const statusConfig = getStatusConfig(invoice.status);
+                const StatusIcon = statusConfig.icon;
+                const isExpanded = expandedInvoice === invoice.id;
+                const discountLabel = getDiscountLabel(invoice);
+                const subjectItems = invoice.items?.filter(i => i.subject_id) || [];
+                const feeItems = invoice.items?.filter(i => i.fee_definition_id) || [];
+                const academicTotal = subjectItems.reduce((s, i) => s + Number(i.amount), 0);
+                const universityTotal = feeItems.reduce((s, i) => s + Number(i.amount), 0);
+
+                return (
+                  <div key={invoice.id}>
+                    {/* Row */}
+                    <div
+                      className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-gray-50/50 transition-colors"
+                      onClick={() => setExpandedInvoice(isExpanded ? null : invoice.id)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-900 truncate">{invoice.student?.name || "—"}</span>
+                          <span className="text-xs text-gray-400 font-mono">{invoice.invoice_number}</span>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {invoice.semester?.name}{invoice.department ? ` · ${invoice.department.name}` : ''}
+                        </div>
+                      </div>
+
+                      {discountLabel && (
+                        <span className="hidden sm:inline-flex text-xs text-purple-600">{discountLabel}</span>
+                      )}
+
+                      <div className="text-left min-w-[100px]">
+                        <div className="text-sm font-semibold tabular-nums text-gray-900">{formatCurrency(invoice.total_amount)}</div>
+                        {Number(invoice.balance) > 0 && Number(invoice.balance) < Number(invoice.total_amount) && (
+                          <div className="text-xs tabular-nums text-red-500">متبقي {formatCurrency(invoice.balance)}</div>
                         )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                      </div>
+
+                      <span className={`inline-flex items-center gap-1 text-xs ${statusConfig.color}`}>
+                        <StatusIcon className="h-3.5 w-3.5" />
+                        {statusConfig.label}
+                      </span>
+
+                      {isExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                    </div>
+
+                    {/* Expanded */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          {/* Academic Fees (Subject-based) */}
+                          <div className="bg-white rounded-lg border border-gray-200">
+                            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+                              <span className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                                <BookOpen className="h-3.5 w-3.5 text-blue-600" />
+                                الرسوم الأكاديمية
+                              </span>
+                              <span className="text-xs font-semibold tabular-nums text-gray-900">{formatCurrency(academicTotal)}</span>
+                            </div>
+                            {subjectItems.length > 0 ? (
+                              <div className="divide-y divide-gray-50">
+                                {subjectItems.map(item => (
+                                  <div key={item.id} className="flex items-center justify-between px-4 py-2">
+                                    <div>
+                                      <div className="text-sm text-gray-900">{item.subject?.name || item.description}</div>
+                                      {item.subject?.code && (
+                                        <div className="text-xs text-gray-400">{item.subject.code} · {item.quantity} ساعة × {formatCurrency(item.unit_price)}</div>
+                                      )}
+                                    </div>
+                                    <span className="text-sm tabular-nums text-gray-700">{formatCurrency(item.amount)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="px-4 py-6 text-center text-xs text-gray-400">لا توجد رسوم أكاديمية</div>
+                            )}
+                          </div>
+
+                          {/* University Fees (Fee-definition-based) */}
+                          <div className="bg-white rounded-lg border border-gray-200">
+                            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+                              <span className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                                <Layers className="h-3.5 w-3.5 text-emerald-600" />
+                                الرسوم الجامعية
+                              </span>
+                              <span className="text-xs font-semibold tabular-nums text-gray-900">{formatCurrency(universityTotal)}</span>
+                            </div>
+                            {feeItems.length > 0 ? (
+                              <div className="divide-y divide-gray-50">
+                                {feeItems.map(item => (
+                                  <div key={item.id} className="flex items-center justify-between px-4 py-2">
+                                    <div>
+                                      <div className="text-sm text-gray-900">{item.fee_definition?.name_ar || item.description}</div>
+                                      {item.fee_definition?.name_en && (
+                                        <div className="text-xs text-gray-400">{item.fee_definition.name_en}</div>
+                                      )}
+                                    </div>
+                                    <span className="text-sm tabular-nums text-gray-700">{formatCurrency(item.amount)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="px-4 py-6 text-center text-xs text-gray-400">لا توجد رسوم جامعية</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Summary + Actions */}
+                        <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs">
+                            <span className="text-gray-500">المجموع: <span className="font-semibold text-gray-900">{formatCurrency(invoice.subtotal || invoice.total_amount)}</span></span>
+                            {discountLabel && (
+                              <span className="text-purple-600">الخصم: <span className="font-semibold">- {formatCurrency(invoice.discount)}</span></span>
+                            )}
+                            <span className="text-gray-500">الإجمالي: <span className="font-bold text-gray-900">{formatCurrency(invoice.total_amount)}</span></span>
+                            <span className="text-green-600">المدفوع: <span className="font-semibold">{formatCurrency(invoice.paid_amount)}</span></span>
+                            {Number(invoice.balance) > 0 && (
+                              <span className="text-red-600">المتبقي: <span className="font-bold">{formatCurrency(invoice.balance)}</span></span>
+                            )}
+                          </div>
+
+                          {canManageFees && (
+                            <div className="flex items-center gap-2">
+                              {invoice.status !== 'paid' && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setSelectedInvoice(invoice); setPaymentAmount(String(invoice.balance)); setShowPaymentModal(true); }}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-900 text-white rounded-lg text-xs hover:bg-gray-800 transition-colors"
+                                >
+                                  <CreditCard className="h-3.5 w-3.5" />
+                                  دفعة
+                                </button>
+                              )}
+                              {invoice.discount_type === 'none' || !invoice.discount_type ? (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setSelectedInvoice(invoice); setDiscountType("percentage"); setDiscountValue(""); setDiscountReason(""); setShowDiscountModal(true); }}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-gray-700 border border-gray-200 rounded-lg text-xs hover:bg-gray-50 transition-colors"
+                                >
+                                  <Tag className="h-3.5 w-3.5" />
+                                  خصم
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); if (window.confirm('هل تريد إزالة الخصم/الإعفاء؟')) removeDiscountMutation.mutate(invoice.id); }}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-red-600 border border-red-200 rounded-lg text-xs hover:bg-red-50 transition-colors"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  إزالة الخصم
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Summary */}
+        {/* Footer summary */}
         {filteredInvoices.length > 0 && (
-          <div className="mt-6 flex justify-between items-center text-sm text-gray-600">
-            <div>
-              عرض {filteredInvoices.length} من أصل {invoices.length} فاتورة
-            </div>
-            <div className="flex gap-6">
-              <div>
-                <span className="font-medium">الإجمالي:</span> {formatCurrency(stats.totalAmount)}
-              </div>
-              <div>
-                <span className="font-medium">المدفوع:</span> {formatCurrency(stats.paidAmount)}
-              </div>
-              <div>
-                <span className="font-medium">المتبقي:</span> {formatCurrency(stats.balanceAmount)}
-              </div>
+          <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
+            <span>{filteredInvoices.length} فاتورة</span>
+            <div className="flex gap-4">
+              <span>الإجمالي: <span className="font-medium text-gray-700">{formatCurrency(stats.totalAmount)}</span></span>
+              <span>المدفوع: <span className="font-medium text-green-600">{formatCurrency(stats.paidAmount)}</span></span>
+              <span>المتبقي: <span className="font-medium text-red-600">{formatCurrency(stats.balanceAmount)}</span></span>
             </div>
           </div>
         )}
@@ -437,151 +424,130 @@ export default function FeesPage() {
 
       {/* Payment Modal */}
       {showPaymentModal && selectedInvoice && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">تسجيل دفعة جديدة</h3>
-              <button
-                onClick={() => {
-                  setShowPaymentModal(false);
-                  setSelectedInvoice(null);
-                  setPaymentAmount("");
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h3 className="text-base font-semibold text-gray-900">تسجيل دفعة</h3>
+              <button onClick={() => { setShowPaymentModal(false); setSelectedInvoice(null); setPaymentAmount(""); }} className="text-gray-400 hover:text-gray-600"><X className="h-4 w-4" /></button>
             </div>
-            
-            <div className="p-6 space-y-4">
+            <div className="p-5 space-y-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">{selectedInvoice.student.name}</span>
+                <span className="font-mono text-gray-400">{selectedInvoice.invoice_number}</span>
+              </div>
+              <div className="flex justify-between text-sm border-t border-gray-100 pt-3">
+                <span className="text-gray-500">الإجمالي</span>
+                <span className="font-semibold text-gray-900">{formatCurrency(selectedInvoice.total_amount)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">المتبقي</span>
+                <span className="font-semibold text-red-600">{formatCurrency(selectedInvoice.balance)}</span>
+              </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  الطالب
-                </label>
-                <div className="text-base font-medium text-gray-900">
-                  {selectedInvoice.student.name}
+                <label className="block text-xs font-medium text-gray-600 mb-1">المبلغ المدفوع</label>
+                <input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} min="0" max={Number(selectedInvoice.balance)} step="0.01" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-gray-300 focus:border-gray-300" placeholder="0.00" dir="ltr" />
+                <div className="mt-2 flex gap-1.5">
+                  {[25, 50, 75].map(pct => (
+                    <button key={pct} type="button" onClick={() => setPartialPayment(pct)} className="flex-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200">{pct}%</button>
+                  ))}
+                  <button type="button" onClick={() => setPaymentAmount(String(selectedInvoice.balance))} className="flex-1 px-2 py-1 text-xs bg-gray-900 text-white rounded hover:bg-gray-800">كامل</button>
                 </div>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer bg-gray-50 rounded-lg p-3">
+                <input type="checkbox" checked={allowAttendance} onChange={(e) => setAllowAttendance(e.target.checked)} className="h-3.5 w-3.5 text-gray-900 focus:ring-gray-300 border-gray-300 rounded" />
+                <div className="flex-1">
+                  <div className="text-sm text-gray-700">السماح بالحضور</div>
+                  <div className="text-xs text-gray-400">{allowAttendance ? 'سيتم السماح للطالب بالحضور' : 'الطالب لن يتمكن من الحضور حتى الدفع الكامل'}</div>
+                </div>
+              </label>
+            </div>
+            <div className="flex gap-2 px-5 py-4 border-t border-gray-100">
+              <button onClick={handleRecordPayment} disabled={recordPaymentMutation.isPending} className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm disabled:opacity-50">{recordPaymentMutation.isPending ? "جاري التسجيل..." : "تسجيل الدفعة"}</button>
+              <button onClick={() => { setShowPaymentModal(false); setSelectedInvoice(null); setPaymentAmount(""); setAllowAttendance(false); }} className="px-4 py-2 text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discount/Waiver Modal */}
+      {showDiscountModal && selectedInvoice && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h3 className="text-base font-semibold text-gray-900">خصم / إعفاء</h3>
+              <button onClick={() => { setShowDiscountModal(false); setSelectedInvoice(null); }} className="text-gray-400 hover:text-gray-600"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">{selectedInvoice.student.name}</span>
+                <span className="font-semibold text-gray-900">{formatCurrency(selectedInvoice.subtotal || selectedInvoice.total_amount)}</span>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  رقم الفاتورة
-                </label>
-                <div className="text-base font-mono text-gray-900">
-                  {selectedInvoice.invoice_number}
+                <label className="block text-xs font-medium text-gray-600 mb-2">نوع الخصم</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button type="button" onClick={() => setDiscountType("percentage")} className={`p-2.5 rounded-lg border text-xs font-medium text-center transition-colors ${discountType === 'percentage' ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    نسبة مئوية
+                  </button>
+                  <button type="button" onClick={() => setDiscountType("fixed")} className={`p-2.5 rounded-lg border text-xs font-medium text-center transition-colors ${discountType === 'fixed' ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    مبلغ ثابت
+                  </button>
+                  <button type="button" onClick={() => setDiscountType("full_waiver")} className={`p-2.5 rounded-lg border text-xs font-medium text-center transition-colors ${discountType === 'full_waiver' ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    إعفاء كامل
+                  </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {discountType !== 'full_waiver' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    المبلغ الإجمالي
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    {discountType === 'percentage' ? 'نسبة الخصم (%)' : 'مبلغ الخصم (د.ل)'}
                   </label>
-                  <div className="text-base font-semibold text-gray-900">
-                    {formatCurrency(selectedInvoice.total_amount)}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    الرصيد المتبقي
-                  </label>
-                  <div className="text-base font-semibold text-red-600">
-                    {formatCurrency(selectedInvoice.balance)}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  المبلغ المدفوع
-                </label>
-                <input
-                  type="number"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  min="0"
-                  max={selectedInvoice.balance}
-                  step="0.01"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="أدخل المبلغ..."
-                />
-                <div className="mt-2 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPartialPayment(25)}
-                    className="flex-1 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                  >
-                    25%
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPartialPayment(50)}
-                    className="flex-1 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                  >
-                    50%
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPartialPayment(75)}
-                    className="flex-1 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                  >
-                    75%
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentAmount(selectedInvoice.balance.toString())}
-                    className="flex-1 px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                  >
-                    كامل
-                  </button>
-                </div>
-              </div>
-
-              {/* Attendance Permission Toggle */}
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <label className="flex items-center gap-3 cursor-pointer">
                   <input
-                    type="checkbox"
-                    checked={allowAttendance}
-                    onChange={(e) => setAllowAttendance(e.target.checked)}
-                    className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    type="number"
+                    value={discountValue}
+                    onChange={(e) => setDiscountValue(e.target.value)}
+                    min="0"
+                    max={discountType === 'percentage' ? 100 : Number(selectedInvoice.subtotal || selectedInvoice.total_amount)}
+                    step={discountType === 'percentage' ? '1' : '0.01'}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
+                    placeholder={discountType === 'percentage' ? '10' : '50.00'}
+                    dir="ltr"
                   />
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">السماح بالحضور</div>
-                    <div className="text-sm text-gray-600">
-                      {allowAttendance ? (
-                        <span className="text-green-700">✓ سيتم السماح للطالب بالحضور والتسجيل في المجموعات</span>
-                      ) : (
-                        <span>الطالب لن يتمكن من الحضور حتى الدفع الكامل</span>
-                      )}
+                  {discountType === 'percentage' && discountValue && (
+                    <div className="mt-1 text-xs text-gray-400">
+                      = {formatCurrency(Number(selectedInvoice.subtotal || selectedInvoice.total_amount) * parseFloat(discountValue || '0') / 100)}
                     </div>
-                  </div>
-                </label>
-                <div className="mt-2 text-xs text-gray-500">
-                  💡 يمكنك السماح بالحضور حتى مع الدفع الجزئي (تجاوز إداري)
+                  )}
                 </div>
-              </div>
-            </div>
+              )}
 
-            <div className="flex gap-3 p-6 border-t border-gray-200">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">السبب</label>
+                <textarea
+                  value={discountReason}
+                  onChange={(e) => setDiscountReason(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
+                  placeholder="اختياري..."
+                />
+              </div>
+
+              {discountType === 'full_waiver' && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                  سيتم إعفاء الطالب من كامل مبلغ الفاتورة.
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 px-5 py-4 border-t border-gray-100">
               <button
-                onClick={handleRecordPayment}
-                disabled={recordPaymentMutation.isPending}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                onClick={handleApplyDiscount}
+                disabled={applyDiscountMutation.isPending || (discountType !== 'full_waiver' && !discountValue)}
+                className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm disabled:opacity-50"
               >
-                {recordPaymentMutation.isPending ? "جاري التسجيل..." : "تسجيل الدفعة"}
+                {applyDiscountMutation.isPending ? "جاري التطبيق..." : "تطبيق"}
               </button>
-              <button
-                onClick={() => {
-                  setShowPaymentModal(false);
-                  setSelectedInvoice(null);
-                  setPaymentAmount("");
-                  setAllowAttendance(false);
-                }}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-              >
-                إلغاء
-              </button>
+              <button onClick={() => { setShowDiscountModal(false); setSelectedInvoice(null); }} className="px-4 py-2 text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm">إلغاء</button>
             </div>
           </div>
         </div>

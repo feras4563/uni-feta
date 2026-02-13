@@ -34,11 +34,28 @@ class Student extends Model
         'transcript_file',
         'qr_code',
         'photo_url',
+        'birth_place',
+        'certification_type',
+        'certification_date',
+        'certification_school',
+        'certification_specialization',
+        'port_of_entry',
+        'visa_type',
+        'mother_name',
+        'mother_nationality',
+        'passport_number',
+        'passport_issue_date',
+        'passport_expiry_date',
+        'passport_place_of_issue',
+        'auth_user_id',
     ];
 
     protected $casts = [
         'birth_date' => 'date',
         'enrollment_date' => 'date',
+        'certification_date' => 'date',
+        'passport_issue_date' => 'date',
+        'passport_expiry_date' => 'date',
         'academic_score' => 'decimal:2',
         'year' => 'integer',
     ];
@@ -106,5 +123,15 @@ class Student extends Model
     public function academicProgress()
     {
         return $this->hasOne(StudentAcademicProgress::class);
+    }
+
+    public function authUser()
+    {
+        return $this->belongsTo(User::class, 'auth_user_id');
+    }
+
+    public function invoices()
+    {
+        return $this->hasMany(StudentInvoice::class);
     }
 }

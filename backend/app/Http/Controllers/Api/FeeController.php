@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\StudentInvoice;
+use App\Traits\LogsUserActions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class FeeController extends Controller
 {
+    use LogsUserActions;
     /**
      * Display a listing of fees (student invoices)
      */
@@ -19,6 +21,8 @@ class FeeController extends Controller
             'semester:id,name',
             'studyYear:id,name',
             'department:id,name',
+            'items.subject:id,name,code,credits',
+            'items.feeDefinition:id,name_ar,name_en,frequency',
         ]);
 
         // Filter by status
@@ -71,6 +75,7 @@ class FeeController extends Controller
             'studyYear',
             'department',
             'items.subject',
+            'items.feeDefinition',
             'journalEntry.lines.account'
         ])->findOrFail($id);
 
@@ -129,6 +134,13 @@ class FeeController extends Controller
         // Create journal entry for payment
         $this->createPaymentJournalEntry($invoice, $paymentAmount, $request);
 
+        $this->logAction('update', 'fees', (string) $invoice->id, [
+            'action_type' => 'payment',
+            'student_name' => $invoice->student->name ?? null,
+            'amount' => $paymentAmount,
+            'invoice_number' => $invoice->invoice_number,
+        ]);
+
         return response()->json([
             'message' => 'Payment recorded successfully',
             'invoice' => $invoice->fresh(['student', 'semester', 'studyYear', 'department'])
@@ -167,6 +179,12 @@ class FeeController extends Controller
 
         $invoice = StudentInvoice::findOrFail($id);
         $this->updateAttendancePermission($invoice, $request->boolean('allow_attendance'));
+
+        $this->logAction('update', 'fees', (string) $invoice->id, [
+            'action_type' => 'toggle_attendance',
+            'allow_attendance' => $request->boolean('allow_attendance'),
+            'invoice_number' => $invoice->invoice_number,
+        ]);
 
         return response()->json([
             'message' => 'Attendance permission updated successfully',
@@ -219,6 +237,95 @@ class FeeController extends Controller
             'description' => 'تخفيض المستحقات - ' . $invoice->student->name,
             'line_number' => 2,
         ]);
+    }
+
+    /**
+     * Apply discount/waiver to an invoice
+     */
+    public function applyDiscount(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'discount_type' => 'required|in:none,percentage,fixed,full_waiver',
+            'discount_value' => 'nullable|numeric|min:0',
+            'discount_reason' => 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $invoice = StudentInvoice::findOrFail($id);
+
+        // Validate discount value based on type
+        if ($request->discount_type === 'percentage') {
+            if (!$request->discount_value || $request->discount_value > 100) {
+                return response()->json([
+                    'message' => 'نسبة الخصم يجب أن تكون بين 0 و 100'
+                ], 422);
+            }
+        } elseif ($request->discount_type === 'fixed') {
+            if (!$request->discount_value || $request->discount_value > $invoice->subtotal) {
+                return response()->json([
+                    'message' => 'مبلغ الخصم يجب أن يكون أقل من المبلغ الإجمالي'
+                ], 422);
+            }
+        }
+
+        $approvedBy = auth()->id();
+
+        $invoice = \App\Services\FeeService::applyDiscount(
+            $id,
+            $request->discount_type,
+            $request->discount_value,
+            $request->discount_reason,
+            $approvedBy
+        );
+
+        return response()->json([
+            'message' => 'تم تطبيق الخصم/الإعفاء بنجاح',
+            'invoice' => $invoice->fresh(['student', 'semester', 'studyYear', 'department', 'items.subject', 'items.feeDefinition'])
+        ]);
+    }
+
+    /**
+     * Remove discount from an invoice
+     */
+    public function removeDiscount($id)
+    {
+        $invoice = \App\Services\FeeService::removeDiscount($id);
+
+        return response()->json([
+            'message' => 'تم إزالة الخصم/الإعفاء',
+            'invoice' => $invoice->fresh(['student', 'semester', 'studyYear', 'department', 'items.subject', 'items.feeDefinition'])
+        ]);
+    }
+
+    /**
+     * Check and apply pending fees for a student
+     */
+    public function applyPendingFees(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'student_id' => 'required|exists:students,id',
+            'semester_id' => 'required|exists:semesters,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $result = \App\Services\FeeService::checkAndApplyPendingFees(
+            $request->student_id,
+            $request->semester_id
+        );
+
+        return response()->json($result);
     }
 
     /**

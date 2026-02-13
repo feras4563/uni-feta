@@ -1,12 +1,12 @@
 import { useAuth } from '../contexts/JWTAuthContext';
-import { hasClientPermission } from '../lib/jwt-auth';
 
 export function usePermissions() {
-  const { user } = useAuth();
+  const { user, hasPermission: contextHasPermission } = useAuth();
 
   const hasPermission = (resource: string, action: string): boolean => {
     if (!user) return false;
-    return hasClientPermission(user.role, resource, action);
+    // Use the context's dynamic permission check (DB-driven from backend)
+    return contextHasPermission(resource, action);
   };
 
   const canView = (resource: string): boolean => hasPermission(resource, 'view');

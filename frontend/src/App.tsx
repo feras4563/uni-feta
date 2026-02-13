@@ -4,6 +4,7 @@ import StudentsPage from "./pages/Students";
 import StudentDetail from "./pages/StudentDetail";
 import StudentCreate from "./pages/StudentCreate";
 import FeesPage from "./pages/Fees";
+import FeeStructure from "./pages/FeeStructure";
 import TeachersPage from "./pages/Teachers";
 import TeacherCreate from "./pages/TeacherCreate";
 import TeacherDetail from "./pages/TeacherDetail";
@@ -37,11 +38,19 @@ import TeacherSubjectGroups from "./pages/teacher/TeacherSubjectGroups";
 import TeacherGrades from "./pages/teacher/TeacherGrades";
 import TeacherSchedule from "./pages/teacher/TeacherSchedule";
 import TeacherStudents from "./pages/teacher/TeacherStudents";
+import StudentDashboard from "./pages/student/StudentDashboard";
+import StudentSubjects from "./pages/student/StudentSubjects";
+import StudentFees from "./pages/student/StudentFees";
+import StudentSchedule from "./pages/student/StudentSchedule";
+import StudentGrades from "./pages/student/StudentGrades";
+import StudentAttendance from "./pages/student/StudentAttendance";
 import LoginPage from "./components/auth/LoginPage";
 import RegisterPage from "./components/auth/RegisterPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import SystemSettings from "./pages/settings/SystemSettings";
 import ActionLogs from "./pages/settings/ActionLogs";
+import UsersManagement from "./pages/settings/UsersManagement";
+import RolesPermissions from "./pages/settings/RolesPermissions";
 import Rooms from "./pages/Rooms";
 import StudentGroups from "./pages/StudentGroups";
 import StudentGroupDetail from "./pages/StudentGroupDetail";
@@ -57,12 +66,11 @@ import Attendance from "./pages/Attendance";
 import Grades from "./pages/Grades";
 import { JWTAuthProvider, useAuth } from "./contexts/JWTAuthContext";
 import logo1 from "./assets/logo1.png";
-import { hasClientPermission } from "./lib/jwt-auth";
 import { useSystemSettings } from "./hooks/useSystemSettings";
 
 function AppContent() {
   const location = useLocation();
-  const { user, signOut, loading } = useAuth();
+  const { user, signOut, loading, hasPermission } = useAuth();
   const { data: systemSettings } = useSystemSettings();
 
   // Handle print routes separately - bypass main layout
@@ -143,9 +151,20 @@ function AppContent() {
                   لوحة المدرس
                 </Link>
               )}
+
+              {/* Student-specific navigation */}
+              {user.role === 'student' && (
+                <Link
+                  to="/"
+                  className={getNavLinkClass("/")}
+                >
+                  <i className="fas fa-tachometer-alt text-xs ml-2"></i>
+                  لوحة الطالب
+                </Link>
+              )}
               
-              {/* Show generic dashboard only for non-teacher users */}
-              {user.role !== 'teacher' && (
+              {/* Show generic dashboard only for non-teacher/non-student users */}
+              {user.role !== 'teacher' && user.role !== 'student' && (
                 <Link
                   to="/"
                   className={getNavLinkClass("/")}
@@ -155,8 +174,8 @@ function AppContent() {
                 </Link>
               )}
               
-              {/* Master Data Section - Manager sees everything */}
-              {user.role === 'manager' && (
+              {/* Master Data Section - Permission-driven */}
+              {user.role !== 'teacher' && user.role !== 'student' && (
                 <div className="relative group">
                   <div className="text-white px-3 py-2 rounded text-sm font-medium transition-colors duration-200 flex items-center cursor-pointer hover:bg-slate-600">
                     <i className="fas fa-database text-xs ml-2"></i>
@@ -165,82 +184,90 @@ function AppContent() {
                   </div>
                   <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                     <div className="py-2">
-                      <Link to="/students" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-user-graduate text-xs ml-2"></i>
-                        إدارة الطلاب
-                      </Link>
-                      <Link to="/teachers" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-chalkboard-teacher text-xs ml-2"></i>
-                        هيئة التدريس
-                      </Link>
-                      <Link to="/departments" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-building text-xs ml-2"></i>
-                        الأقسام والتخصصات
-                      </Link>
-                      <Link to="/study-materials" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-book text-xs ml-2"></i>
-                        المقررات الدراسية
-                      </Link>
-                      <Link to="/study-years" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-calendar-alt text-xs ml-2"></i>
-                        السنوات الدراسية
-                      </Link>
-                      <Link to="/semesters" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-calendar-week text-xs ml-2"></i>
-                        الفصول الدراسية
-                      </Link>
-                      <Link to="/rooms" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-door-open text-xs ml-2"></i>
-                        إدارة القاعات
-                      </Link>
-                      <Link to="/student-groups" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-users text-xs ml-2"></i>
-                        مجموعات الطلاب
-                      </Link>
-                      <Link to="/student-registrations" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-list text-xs ml-2"></i>
-                        قائمة التسجيلات
-                      </Link>
-                      <Link to="/timetable-generation" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-calendar-alt text-xs ml-2"></i>
-                        الجدول الدراسي
-                      </Link>
-                      <Link to="/teacher-subject-assignment" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-user-tie text-xs ml-2"></i>
-                        تكليف المدرسين بالمواد
-                      </Link>
-                      <Link to="/attendance" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-clipboard-check text-xs ml-2"></i>
-                        الحضور والغياب
-                      </Link>
-                      <Link to="/grades" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-graduation-cap text-xs ml-2"></i>
-                        الدرجات والتقييم
-                      </Link>
+                      {hasPermission('students', 'view') && (
+                        <Link to="/students" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-user-graduate text-xs ml-2"></i>
+                          إدارة الطلاب
+                        </Link>
+                      )}
+                      {hasPermission('teachers', 'view') && (
+                        <Link to="/teachers" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-chalkboard-teacher text-xs ml-2"></i>
+                          هيئة التدريس
+                        </Link>
+                      )}
+                      {hasPermission('departments', 'view') && (
+                        <Link to="/departments" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-building text-xs ml-2"></i>
+                          الأقسام والتخصصات
+                        </Link>
+                      )}
+                      {hasPermission('subjects', 'view') && (
+                        <Link to="/study-materials" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-book text-xs ml-2"></i>
+                          المقررات الدراسية
+                        </Link>
+                      )}
+                      {hasPermission('study-years', 'view') && (
+                        <Link to="/study-years" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-calendar-alt text-xs ml-2"></i>
+                          السنوات الدراسية
+                        </Link>
+                      )}
+                      {hasPermission('semesters', 'view') && (
+                        <Link to="/semesters" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-calendar-week text-xs ml-2"></i>
+                          الفصول الدراسية
+                        </Link>
+                      )}
+                      {hasPermission('rooms', 'view') && (
+                        <Link to="/rooms" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-door-open text-xs ml-2"></i>
+                          إدارة القاعات
+                        </Link>
+                      )}
+                      {hasPermission('student-groups', 'view') && (
+                        <Link to="/student-groups" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-users text-xs ml-2"></i>
+                          مجموعات الطلاب
+                        </Link>
+                      )}
+                      {hasPermission('student-registration', 'view') && (
+                        <Link to="/student-registrations" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-list text-xs ml-2"></i>
+                          قائمة التسجيلات
+                        </Link>
+                      )}
+                      {hasPermission('timetable', 'view') && (
+                        <Link to="/timetable-generation" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-calendar-alt text-xs ml-2"></i>
+                          الجدول الدراسي
+                        </Link>
+                      )}
+                      {hasPermission('teachers', 'view') && (
+                        <Link to="/teacher-subject-assignment" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-user-tie text-xs ml-2"></i>
+                          تكليف المدرسين بالمواد
+                        </Link>
+                      )}
+                      {hasPermission('attendance', 'view') && (
+                        <Link to="/attendance" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-clipboard-check text-xs ml-2"></i>
+                          الحضور والغياب
+                        </Link>
+                      )}
+                      {hasPermission('grades', 'view') && (
+                        <Link to="/grades" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-graduation-cap text-xs ml-2"></i>
+                          الدرجات والتقييم
+                        </Link>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Staff Navigation - Only allowed sections */}
-              {user.role === 'staff' && (
-                <>
-                  <Link to="/students" className={getNavLinkClass("/students")}>
-                    <i className="fas fa-user-graduate text-xs ml-2"></i>
-                    إدارة الطلاب
-                  </Link>
-                  <Link to="/student-registrations" className={getNavLinkClass("/student-registrations")}>
-                    <i className="fas fa-list text-xs ml-2"></i>
-                    تسجيل المواد
-                  </Link>
-                  <Link to="/fees" className={getNavLinkClass("/fees")}>
-                    <i className="fas fa-dollar-sign text-xs ml-2"></i>
-                    الرسوم
-                  </Link>
-                </>
-              )}
-
-              {user.role === 'manager' && (
+              {hasPermission('schedule', 'view') && (
                 <Link
                   to="/schedule"
                   className={getNavLinkClass("/schedule")}
@@ -250,7 +277,7 @@ function AppContent() {
                 </Link>
               )}
 
-              {user.role === 'manager' && (
+              {hasPermission('fees', 'view') && (
                 <Link
                   to="/fees"
                   className={getNavLinkClass("/fees")}
@@ -259,8 +286,18 @@ function AppContent() {
                   الرسوم
                 </Link>
               )}
+
+              {hasPermission('fees', 'edit') && (
+                <Link
+                  to="/fee-structure"
+                  className={getNavLinkClass("/fee-structure")}
+                >
+                  <i className="fas fa-cogs text-xs ml-2"></i>
+                  هيكل الرسوم
+                </Link>
+              )}
               
-              {user.role === 'manager' && (
+              {hasPermission('finance', 'view') && (
                 <Link
                   to="/finance"
                   className="text-white px-3 py-2 rounded text-sm font-medium transition-colors duration-200 flex items-center hover:bg-slate-600"
@@ -270,8 +307,8 @@ function AppContent() {
                 </Link>
               )}
 
-              {/* Settings Section - Manager only (staff gets no settings menu) */}
-              {user.role === 'manager' && (
+              {/* Settings Section - Permission-driven */}
+              {hasPermission('settings', 'view') && (
                 <div className="relative group">
                   <div className="text-white px-3 py-2 rounded text-sm font-medium transition-colors duration-200 flex items-center cursor-pointer hover:bg-slate-600">
                     <i className="fas fa-cog text-xs ml-2"></i>
@@ -297,18 +334,24 @@ function AppContent() {
                         النسخ الاحتياطي
                       </Link>
                       <div className="border-t border-gray-200 my-2"></div>
-                      <Link to="/settings/users" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-users text-xs ml-2"></i>
-                        إدارة المستخدمين
-                      </Link>
-                      <Link to="/settings/permissions" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-shield-alt text-xs ml-2"></i>
-                        الصلاحيات
-                      </Link>
-                      <Link to="/settings/action-logs" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-history text-xs ml-2"></i>
-                        سجل العمليات
-                      </Link>
+                      {hasPermission('users', 'view') && (
+                        <Link to="/settings/users" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-users text-xs ml-2"></i>
+                          إدارة المستخدمين
+                        </Link>
+                      )}
+                      {hasPermission('users', 'view') && (
+                        <Link to="/settings/permissions" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-shield-alt text-xs ml-2"></i>
+                          الصلاحيات
+                        </Link>
+                      )}
+                      {hasPermission('action-logs', 'view') && (
+                        <Link to="/settings/action-logs" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-history text-xs ml-2"></i>
+                          سجل العمليات
+                        </Link>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -354,6 +397,47 @@ function AppContent() {
                   </Link>
                 </>
               )}
+
+              {/* Student-specific navigation links */}
+              {user.role === 'student' && (
+                <>
+                  <Link
+                    to="/student/subjects"
+                    className={getNavLinkClass("/student/subjects")}
+                  >
+                    <i className="fas fa-book text-xs ml-2"></i>
+                    موادي
+                  </Link>
+                  <Link
+                    to="/student/grades"
+                    className={getNavLinkClass("/student/grades")}
+                  >
+                    <i className="fas fa-graduation-cap text-xs ml-2"></i>
+                    درجاتي
+                  </Link>
+                  <Link
+                    to="/student/fees"
+                    className={getNavLinkClass("/student/fees")}
+                  >
+                    <i className="fas fa-file-invoice-dollar text-xs ml-2"></i>
+                    رسومي
+                  </Link>
+                  <Link
+                    to="/student/schedule"
+                    className={getNavLinkClass("/student/schedule")}
+                  >
+                    <i className="fas fa-calendar text-xs ml-2"></i>
+                    جدولي
+                  </Link>
+                  <Link
+                    to="/student/attendance"
+                    className={getNavLinkClass("/student/attendance")}
+                  >
+                    <i className="fas fa-clipboard-check text-xs ml-2"></i>
+                    حضوري
+                  </Link>
+                </>
+              )}
               
             </div>
 
@@ -371,9 +455,11 @@ function AppContent() {
                         ? 'bg-green-100 text-green-800' 
                         : user.role === 'teacher'
                         ? 'bg-purple-100 text-purple-800'
+                        : user.role === 'student'
+                        ? 'bg-teal-100 text-teal-800'
                         : 'bg-blue-100 text-blue-800'
                     }`}>
-                      {user.role === 'manager' ? 'مدير' : user.role === 'teacher' ? 'مدرس' : 'موظف'}
+                      {user.role === 'manager' ? 'مدير' : user.role === 'teacher' ? 'مدرس' : user.role === 'student' ? 'طالب' : 'موظف'}
                     </span>
                   </div>
                 </div>
@@ -404,6 +490,10 @@ function AppContent() {
               user.role === 'teacher' ? (
                 <ProtectedRoute requiredRole="teacher">
                   <TeacherDashboard />
+                </ProtectedRoute>
+              ) : user.role === 'student' ? (
+                <ProtectedRoute requiredRole="student">
+                  <StudentDashboard />
                 </ProtectedRoute>
               ) : (
                 <Dashboard />
@@ -471,6 +561,14 @@ function AppContent() {
             element={
               <ProtectedRoute requiredResource="fees" requiredAction="view">
                 <FeesPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/fee-structure" 
+            element={
+              <ProtectedRoute requiredResource="fee-structure" requiredAction="view">
+                <FeeStructure />
               </ProtectedRoute>
             } 
           />
@@ -645,7 +743,7 @@ function AppContent() {
           <Route 
             path="/schedule" 
             element={
-              <ProtectedRoute requiredRole="manager">
+              <ProtectedRoute requiredResource="schedule" requiredAction="view">
                 <SchedulingPage />
               </ProtectedRoute>
             } 
@@ -813,6 +911,56 @@ function AppContent() {
             } 
           />
 
+          {/* Student Routes */}
+          <Route 
+            path="/student/dashboard" 
+            element={
+              <ProtectedRoute requiredRole="student">
+                <StudentDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/student/subjects" 
+            element={
+              <ProtectedRoute requiredRole="student">
+                <StudentSubjects />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/student/fees" 
+            element={
+              <ProtectedRoute requiredRole="student">
+                <StudentFees />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/student/schedule" 
+            element={
+              <ProtectedRoute requiredRole="student">
+                <StudentSchedule />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/student/grades" 
+            element={
+              <ProtectedRoute requiredRole="student">
+                <StudentGrades />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/student/attendance" 
+            element={
+              <ProtectedRoute requiredRole="student">
+                <StudentAttendance />
+              </ProtectedRoute>
+            } 
+          />
+
           {/* Settings Routes */}
           <Route 
             path="/settings/profile" 
@@ -828,7 +976,7 @@ function AppContent() {
           <Route 
             path="/settings/system" 
             element={
-              <ProtectedRoute requiredRole="manager">
+              <ProtectedRoute requiredResource="settings" requiredAction="edit">
                 <SystemSettings />
               </ProtectedRoute>
             } 
@@ -847,7 +995,7 @@ function AppContent() {
           <Route 
             path="/settings/backup" 
             element={
-              <ProtectedRoute requiredRole="manager">
+              <ProtectedRoute requiredResource="settings" requiredAction="view">
                 <div className="min-h-screen bg-gray-50 p-8">
                   <h1 className="text-3xl font-bold text-gray-900">النسخ الاحتياطي</h1>
                   <p className="text-gray-600 mt-2">إدارة النسخ الاحتياطية</p>
@@ -858,29 +1006,23 @@ function AppContent() {
           <Route 
             path="/settings/users" 
             element={
-              <ProtectedRoute requiredRole="manager">
-                <div className="min-h-screen bg-gray-50 p-8">
-                  <h1 className="text-3xl font-bold text-gray-900">إدارة المستخدمين</h1>
-                  <p className="text-gray-600 mt-2">إدارة المستخدمين والصلاحيات</p>
-                </div>
+              <ProtectedRoute requiredResource="users" requiredAction="view">
+                <UsersManagement />
               </ProtectedRoute>
             } 
           />
           <Route 
             path="/settings/permissions" 
             element={
-              <ProtectedRoute requiredRole="manager">
-                <div className="min-h-screen bg-gray-50 p-8">
-                  <h1 className="text-3xl font-bold text-gray-900">الصلاحيات</h1>
-                  <p className="text-gray-600 mt-2">إدارة الصلاحيات والأدوار</p>
-                </div>
+              <ProtectedRoute requiredResource="users" requiredAction="view">
+                <RolesPermissions />
               </ProtectedRoute>
             } 
           />
           <Route 
             path="/settings/action-logs" 
             element={
-              <ProtectedRoute requiredRole="manager">
+              <ProtectedRoute requiredResource="action-logs" requiredAction="view">
                 <ActionLogs />
               </ProtectedRoute>
             } 

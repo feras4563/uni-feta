@@ -179,6 +179,9 @@ export default function SubjectDetail() {
         teacher_id: editForm.teacher_id || null,
         semester: editForm.semester || null,
         max_students: editForm.max_students || null,
+        cost_per_credit: editForm.cost_per_credit || null,
+        semester_number: editForm.semester_number || null,
+        is_required: editForm.is_required,
       };
       
       await updateSubject(id!, subjectData);
@@ -1297,6 +1300,88 @@ export default function SubjectDetail() {
               </div>
             </div>
 
+
+            {/* Prerequisites & Dependents */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <svg className="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  المتطلبات السابقة
+                </h3>
+              </div>
+              <div className="p-6 space-y-4">
+                {/* Prerequisites */}
+                {subject.prerequisite_subjects && subject.prerequisite_subjects.length > 0 ? (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">يجب اجتياز</label>
+                    <div className="space-y-2">
+                      {subject.prerequisite_subjects.map((prereq: any) => (
+                        <div key={prereq.id} className="flex items-center justify-between p-2.5 bg-red-50 border border-red-200 rounded-lg">
+                          <div>
+                            <span className="text-sm font-medium text-red-800">{prereq.name}</span>
+                            {prereq.name_en && <span className="text-xs text-red-600 block">{prereq.name_en}</span>}
+                          </div>
+                          <span className="text-xs font-mono font-medium text-red-600 bg-red-100 px-2 py-0.5 rounded">{prereq.code}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">لا توجد متطلبات سابقة</p>
+                )}
+
+                {/* Min units required */}
+                {subject.min_units_required && (
+                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-orange-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <span className="text-sm font-medium text-orange-800">
+                        يجب إكمال {subject.min_units_required} وحدة دراسية على الأقل
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Dependent subjects */}
+                {subject.dependent_subjects && subject.dependent_subjects.length > 0 && (
+                  <div className="pt-3 border-t border-gray-200">
+                    <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">متطلب لـ</label>
+                    <div className="space-y-2">
+                      {subject.dependent_subjects.map((dep: any) => (
+                        <div key={dep.id} className="flex items-center justify-between p-2.5 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div>
+                            <span className="text-sm font-medium text-blue-800">{dep.name}</span>
+                            {dep.name_en && <span className="text-xs text-blue-600 block">{dep.name_en}</span>}
+                          </div>
+                          <span className="text-xs font-mono font-medium text-blue-600 bg-blue-100 px-2 py-0.5 rounded">{dep.code}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Hours breakdown */}
+                {(subject.theoretical_hours > 0 || subject.practical_hours > 0) && (
+                  <div className="pt-3 border-t border-gray-200">
+                    <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">توزيع الساعات</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="text-center p-2.5 bg-gray-50 rounded-lg">
+                        <div className="text-lg font-bold text-gray-900">{subject.theoretical_hours || 0}</div>
+                        <div className="text-xs text-gray-500">نظري</div>
+                      </div>
+                      <div className="text-center p-2.5 bg-gray-50 rounded-lg">
+                        <div className="text-lg font-bold text-gray-900">{subject.practical_hours || 0}</div>
+                        <div className="text-xs text-gray-500">عملي</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Statistics */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">

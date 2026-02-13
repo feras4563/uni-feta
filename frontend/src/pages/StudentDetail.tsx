@@ -23,10 +23,15 @@ export default function StudentDetail() {
   const [showCardModal, setShowCardModal] = useState(false);
   
   const [form, setForm] = useState({
-    name: "", name_en: "", national_id_passport: "", gender: "", birth_date: "",
+    name: "", name_en: "", national_id_passport: "", gender: "", birth_date: "", birth_place: "",
     nationality: "", phone: "", email: "", address: "", sponsor_name: "", sponsor_contact: "",
-    academic_history: "", academic_score: "", department_id: "", year: "", status: "active", enrollment_date: ""
+    academic_history: "", academic_score: "", department_id: "", year: "", status: "active", enrollment_date: "",
+    certification_type: "", certification_date: "", certification_school: "", certification_specialization: "",
+    port_of_entry: "", visa_type: "", mother_name: "", mother_nationality: "",
+    passport_number: "", passport_issue_date: "", passport_expiry_date: "", passport_place_of_issue: ""
   });
+
+  const isLibyan = form.nationality === "ليبيا" || form.nationality === "ليبي" || form.nationality === "ليبية";
 
   const { data: departments = [] } = useQuery({ queryKey: ["departments"], queryFn: fetchDepartments });
   const { data: student, isLoading, error } = useQuery({
@@ -38,12 +43,19 @@ export default function StudentDetail() {
       setForm({
         name: student.name || "", name_en: student.name_en || "",
         national_id_passport: student.national_id_passport || "", gender: student.gender || "",
-        birth_date: student.birth_date || "", nationality: student.nationality || "",
+        birth_date: student.birth_date || "", birth_place: student.birth_place || "",
+        nationality: student.nationality || "",
         phone: student.phone || "", email: student.email || "", address: student.address || "",
         sponsor_name: student.sponsor_name || "", sponsor_contact: student.sponsor_contact || "",
         academic_history: student.academic_history || "", academic_score: student.academic_score || "",
         department_id: String(student.department_id || ""), year: String(student.year || ""),
-        status: student.status || "active", enrollment_date: student.enrollment_date || ""
+        status: student.status || "active", enrollment_date: student.enrollment_date || "",
+        certification_type: student.certification_type || "", certification_date: student.certification_date || "",
+        certification_school: student.certification_school || "", certification_specialization: student.certification_specialization || "",
+        port_of_entry: student.port_of_entry || "", visa_type: student.visa_type || "",
+        mother_name: student.mother_name || "", mother_nationality: student.mother_nationality || "",
+        passport_number: student.passport_number || "", passport_issue_date: student.passport_issue_date || "",
+        passport_expiry_date: student.passport_expiry_date || "", passport_place_of_issue: student.passport_place_of_issue || ""
       });
       generateQR(student);
     }
@@ -81,18 +93,32 @@ export default function StudentDetail() {
     if (!validateForm()) return;
     setSubmitting(true);
     try {
-      await updateStudent(id!, {
+      const updateData: any = {
         name: form.name.trim(), name_en: form.name_en.trim() || null,
         national_id_passport: form.national_id_passport.trim(),
         gender: form.gender || null, birth_date: form.birth_date || null,
+        birth_place: form.birth_place.trim() || null,
         nationality: form.nationality.trim() || null, phone: form.phone.trim() || null,
         email: form.email.trim() || null, address: form.address.trim() || null,
         sponsor_name: form.sponsor_name.trim() || null, sponsor_contact: form.sponsor_contact.trim() || null,
         academic_history: form.academic_history?.trim() || null,
         academic_score: form.academic_score?.trim() || null,
+        certification_type: form.certification_type || null,
+        certification_date: form.certification_date || null,
+        certification_school: form.certification_school.trim() || null,
+        certification_specialization: form.certification_specialization.trim() || null,
         department_id: form.department_id || null, year: form.year ? parseInt(form.year) : null,
-        status: form.status, enrollment_date: form.enrollment_date || null
-      });
+        status: form.status, enrollment_date: form.enrollment_date || null,
+        port_of_entry: form.port_of_entry.trim() || null,
+        visa_type: form.visa_type.trim() || null,
+        mother_name: form.mother_name.trim() || null,
+        mother_nationality: form.mother_nationality.trim() || null,
+        passport_number: form.passport_number.trim() || null,
+        passport_issue_date: form.passport_issue_date || null,
+        passport_expiry_date: form.passport_expiry_date || null,
+        passport_place_of_issue: form.passport_place_of_issue.trim() || null,
+      };
+      await updateStudent(id!, updateData);
       queryClient.invalidateQueries({ queryKey: ["student", id] });
       queryClient.invalidateQueries({ queryKey: ["students"] });
       setIsEditing(false);
@@ -146,6 +172,85 @@ export default function StudentDetail() {
     };
     const s = m[status] || m.inactive;
     return <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${s.c}`}>{s.l}</span>;
+  };
+
+  const printRegistrationForm = () => {
+    if (!student) return;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    const deptName = getDepartmentName(student.department_id);
+    const semesterLabel = '........';
+    const studentIsLibyan = student.nationality === 'ليبيا' || student.nationality === 'ليبي' || student.nationality === 'ليبية';
+
+    if (studentIsLibyan) {
+      w.document.write(`<html><head><title>نموذج قبول وتسجيل طالب</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;700&display=swap');
+          *{margin:0;padding:0;box-sizing:border-box}
+          body{font-family:'Noto Sans Arabic',Arial,sans-serif;direction:rtl;padding:40px;background:#fff;color:#1a2332;font-size:14px;line-height:2}
+          .header{text-align:center;color:#1a4d8c;margin-bottom:30px}
+          .header h1{font-size:18px;font-weight:700;margin-bottom:5px}
+          .header h2{font-size:16px;font-weight:600}
+          .section-title{font-weight:700;font-size:15px;margin:20px 0 10px;text-decoration:underline}
+          .field{margin-bottom:8px}
+          .field .dots{border-bottom:1px dotted #333;display:inline-block;min-width:150px;padding:0 5px}
+          .signature{margin-top:40px;text-align:center}
+          .signature .dots{display:block;margin-top:10px;border-bottom:1px dotted #333;width:200px;margin-left:auto;margin-right:auto}
+          @media print{body{padding:20px}@page{size:A4;margin:15mm}}
+        </style></head><body>
+        <div class="header">
+          <h1>نموذج قبول وتسجيل طالب للفصل الدراسي (${semesterLabel}) ....20م</h1>
+          <h2>للعام الجامعي .....20\\\\....20م</h2>
+        </div>
+        <div class="section-title">بيانات الطالب:</div>
+        <div class="field">اسم الطالب رباعي: <span class="dots">${student.name || '...................................................'}</span> رقم القيد الجامعي: (<span class="dots">${student.campus_id || student.id || '.............'}</span>)</div>
+        <div class="field">تاريخ ومكان والميلاد: <span class="dots">${student.birth_date ? formatDate(student.birth_date) : '...............'} ${student.birth_place || '...............'}</span> محل الإقامة: <span class="dots">${student.address || '...................'}</span> المدرسة المتحصل منها الطالب على</div>
+        <div class="field">الشهادة: <span class="dots">${student.certification_school || '.....................'}</span> التخصص: <span class="dots">${student.certification_specialization || '.....................'}</span> تاريخ الحصول عنها: <span class="dots">${student.certification_date ? formatDate(student.certification_date) : '...................'}</span> التقدير</div>
+        <div class="field">العام: <span class="dots">${student.academic_score || '.........'}</span>%.</div>
+        <div class="field">البرنامج العلمي الذي يرغب الطالب التسجيل فيه:</div>
+        <div class="field"><span class="dots" style="width:100%">${deptName}</span></div>
+        <div class="signature">
+          <div>توقيع الطالب</div>
+          <span class="dots">&nbsp;</span>
+        </div>
+      </body></html>`);
+    } else {
+      w.document.write(`<html><head><title>نموذج قبول وتسجيل طالب (وافد)</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;700&display=swap');
+          *{margin:0;padding:0;box-sizing:border-box}
+          body{font-family:'Noto Sans Arabic',Arial,sans-serif;direction:rtl;padding:40px;background:#fff;color:#1a2332;font-size:14px;line-height:2}
+          .header{text-align:center;color:#1a4d8c;margin-bottom:30px}
+          .header h1{font-size:18px;font-weight:700;margin-bottom:5px}
+          .header h2{font-size:16px;font-weight:600}
+          .field{margin-bottom:8px}
+          .field .dots{border-bottom:1px dotted #333;display:inline-block;min-width:120px;padding:0 5px}
+          .signature{margin-top:40px;text-align:center}
+          .signature .dots{display:block;margin-top:10px;border-bottom:1px dotted #333;width:200px;margin-left:auto;margin-right:auto}
+          @media print{body{padding:20px}@page{size:A4;margin:15mm}}
+        </style></head><body>
+        <div class="header">
+          <h1>نموذج قبول وتسجيل طالب (وافد)</h1>
+          <h2>للفصل الدراسي (${semesterLabel}) ....20م للعام الجامعي .....20\\\\....20م</h2>
+        </div>
+        <div class="field">أنا مقدم الطلب:</div>
+        <div class="field"><span class="dots" style="width:100%">${student.name || '...................................................'}</span></div>
+        <div class="field">الجنس: <span class="dots">${student.gender === 'male' ? 'ذكر' : student.gender === 'female' ? 'أنثى' : '...................'}</span> الجنسية: <span class="dots">${student.nationality || '.....................'}</span> مكان وتاريخ الميلاد: <span class="dots">${student.birth_place || '...............'} ${student.birth_date ? formatDate(student.birth_date) : '...............'}</span> رقم جواز</div>
+        <div class="field">السفر: <span class="dots">${student.passport_number || '...............................'}</span> مكان وتاريخ الإصدار: <span class="dots">${student.passport_place_of_issue || '...............'} ${student.passport_issue_date ? formatDate(student.passport_issue_date) : '...............'}</span> تاريخ الصلاحية:</div>
+        <div class="field"><span class="dots">${student.passport_expiry_date ? formatDate(student.passport_expiry_date) : '...............................'}</span> معبر الدخول: <span class="dots">${student.port_of_entry || '...................'}</span> نوع الإقامة: <span class="dots">${student.visa_type || '...................'}</span> اسم الأم: <span class="dots">${student.mother_name || '.....................'}</span></div>
+        <div class="field">جنسيتها: <span class="dots">${student.mother_nationality || '.....................'}</span> محل الإقامة الحالي: <span class="dots">${student.address || '.....................'}</span> الشهادة ما قبل المرحلة الجامعية</div>
+        <div class="field">المتحصل عليها: <span class="dots">${student.certification_school || '...............................'}</span> النسبة: <span class="dots">${student.academic_score || '...................'}</span>% التقدير: <span class="dots">${student.certification_type || '...................'}</span> العام</div>
+        <div class="field">الدراسي: <span class="dots">${student.certification_date ? formatDate(student.certification_date) : '......'}</span>20م.</div>
+        <div class="field">أتقدم إليكم بطلبي هذا بشأن قبولي كطالب ببرامج الدراسة الجامعية بقسم: <span class="dots">${deptName}</span></div>
+        <div class="signature">
+          <div>توقيع مقدم الطلب</div>
+          <div>التاريخ: ......\\\\......\\\\....20م</div>
+          <span class="dots">&nbsp;</span>
+        </div>
+      </body></html>`);
+    }
+    w.document.close();
+    setTimeout(() => w.print(), 500);
   };
 
   const printStudentCard = () => {
@@ -256,6 +361,10 @@ export default function StudentDetail() {
             </>
           ) : (
             <>
+              <button onClick={printRegistrationForm} className="px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                نموذج التسجيل
+              </button>
               {canEdit('students') && (
                 <button onClick={() => setIsEditing(true)} className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800">تعديل</button>
               )}
@@ -283,6 +392,7 @@ export default function StudentDetail() {
                 { key: 'name_en', label: 'الاسم (إنجليزي)', val: student.name_en },
                 { key: 'national_id_passport', label: 'الرقم القومي', required: true, val: student.national_id_passport },
                 { key: 'birth_date', label: 'تاريخ الميلاد', required: true, type: 'date', val: formatDate(student.birth_date) },
+                { key: 'birth_place', label: 'مكان الميلاد', val: student.birth_place },
                 { key: 'nationality', label: 'الجنسية', val: student.nationality },
                 { key: 'phone', label: 'الهاتف', val: student.phone },
                 { key: 'email', label: 'البريد الإلكتروني', type: 'email', val: student.email },
@@ -321,6 +431,38 @@ export default function StudentDetail() {
               </div>
             </div>
           </div>
+
+          {/* Foreign Student Info - only for non-Libyan */}
+          {!isLibyan && (
+            <div className="bg-white border border-orange-200 rounded-lg p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-5 pb-3 border-b border-orange-100 flex items-center gap-2">
+                بيانات الطالب الوافد
+                <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">خاص بالطلاب غير الليبيين</span>
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {[
+                  { key: 'mother_name', label: 'اسم الأم', val: student.mother_name },
+                  { key: 'mother_nationality', label: 'جنسية الأم', val: student.mother_nationality },
+                  { key: 'port_of_entry', label: 'معبر الدخول', val: student.port_of_entry },
+                  { key: 'visa_type', label: 'نوع الإقامة / التأشيرة', val: student.visa_type },
+                  { key: 'passport_number', label: 'رقم جواز السفر', val: student.passport_number },
+                  { key: 'passport_place_of_issue', label: 'مكان إصدار الجواز', val: student.passport_place_of_issue },
+                  { key: 'passport_issue_date', label: 'تاريخ إصدار الجواز', type: 'date', val: student.passport_issue_date ? formatDate(student.passport_issue_date) : '' },
+                  { key: 'passport_expiry_date', label: 'تاريخ صلاحية الجواز', type: 'date', val: student.passport_expiry_date ? formatDate(student.passport_expiry_date) : '' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">{f.label}</label>
+                    {isEditing ? (
+                      <input type={f.type || 'text'} value={(form as any)[f.key]} onChange={e => handleInputChange(f.key, e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400" />
+                    ) : (
+                      <p className="text-sm text-gray-900">{f.val || 'غير محدد'}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Academic Info */}
           <div className="bg-white border border-gray-200 rounded-lg p-6">
@@ -365,6 +507,27 @@ export default function StudentDetail() {
                     className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-gray-400 ${errors.enrollment_date ? 'border-red-300' : 'border-gray-200'}`} />
                 ) : <p className="text-sm text-gray-900">{formatDate(student.enrollment_date)}</p>}
                 {errors.enrollment_date && <p className="text-xs text-red-500 mt-1">{errors.enrollment_date}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">المدرسة / المعهد المتحصل منها</label>
+                {isEditing ? (
+                  <input type="text" value={form.certification_school} onChange={e => handleInputChange('certification_school', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400" placeholder="اسم المدرسة أو المعهد" />
+                ) : <p className="text-sm text-gray-900">{student.certification_school || 'غير محدد'}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">تاريخ الحصول على الشهادة</label>
+                {isEditing ? (
+                  <input type="date" value={form.certification_date} onChange={e => handleInputChange('certification_date', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400" />
+                ) : <p className="text-sm text-gray-900">{student.certification_date ? formatDate(student.certification_date) : 'غير محدد'}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">التخصص</label>
+                {isEditing ? (
+                  <input type="text" value={form.certification_specialization} onChange={e => handleInputChange('certification_specialization', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-gray-400" placeholder="تخصص الشهادة" />
+                ) : <p className="text-sm text-gray-900">{student.certification_specialization || 'غير محدد'}</p>}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">الدرجة الأكاديمية</label>

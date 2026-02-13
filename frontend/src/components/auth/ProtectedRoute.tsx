@@ -1,12 +1,11 @@
 import React from 'react';
 import { useAuth } from '../../contexts/JWTAuthContext';
-import { hasClientPermission } from '../../lib/jwt-auth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requiredResource?: string;
   requiredAction?: string;
-  requiredRole?: 'manager' | 'staff' | 'teacher';
+  requiredRole?: 'manager' | 'staff' | 'teacher' | 'student';
   fallback?: React.ReactNode;
 }
 
@@ -17,7 +16,7 @@ export default function ProtectedRoute({
   requiredRole,
   fallback,
 }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
+  const { user, loading, hasPermission } = useAuth();
 
   if (loading) {
     return (
@@ -39,9 +38,9 @@ export default function ProtectedRoute({
     return fallback || <UnauthorizedAccess />;
   }
 
-  // Check resource/action permission
+  // Check resource/action permission using dynamic DB-driven permissions
   if (requiredResource) {
-    const hasAccess = hasClientPermission(user.role, requiredResource, requiredAction);
+    const hasAccess = hasPermission(requiredResource, requiredAction);
     if (!hasAccess) {
       return fallback || <UnauthorizedAccess />;
     }

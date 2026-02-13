@@ -4,14 +4,32 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Student;
+use App\Models\User;
+use App\Models\AppUser;
 use App\Models\StudentSemesterRegistration;
 use App\Traits\LogsUserActions;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 
 class StudentController extends Controller
 {
     use LogsUserActions;
+
+    /**
+     * Generate and return the next student ID (preview before creation)
+     */
+    public function nextId()
+    {
+        $year = date('y');
+        $random = str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
+        $studentId = "ST{$year}{$random}";
+        while (Student::where('id', $studentId)->exists()) {
+            $random = str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
+            $studentId = "ST{$year}{$random}";
+        }
+        return response()->json(['id' => $studentId]);
+    }
 
     /**
      * Display a listing of students
@@ -88,6 +106,20 @@ class StudentController extends Controller
             'academic_score' => 'nullable|numeric|min:0|max:100',
             'transcript_file' => 'nullable|string',
             'qr_code' => 'nullable|string',
+            // New enrollment fields
+            'birth_place' => 'nullable|string|max:255',
+            'certification_type' => 'nullable|string|max:255',
+            'certification_date' => 'nullable|date',
+            'certification_school' => 'nullable|string|max:255',
+            'certification_specialization' => 'nullable|string|max:255',
+            'port_of_entry' => 'nullable|string|max:255',
+            'visa_type' => 'nullable|string|max:255',
+            'mother_name' => 'nullable|string|max:255',
+            'mother_nationality' => 'nullable|string|max:255',
+            'passport_number' => 'nullable|string|max:100',
+            'passport_issue_date' => 'nullable|date',
+            'passport_expiry_date' => 'nullable|date',
+            'passport_place_of_issue' => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -111,12 +143,27 @@ class StudentController extends Controller
         $student = Student::create($data);
         $student->load('department:id,name,name_en');
 
+        // Auto-create login account if student has email
+        $generatedPassword = null;
+        if ($student->email) {
+            $generatedPassword = $request->input('password', $student->campus_id ?? 'student123');
+            $this->createStudentLoginAccount($student, $generatedPassword);
+        }
+
         $this->logAction('create', 'students', $student->id, [
             'student_name' => $student->name,
             'department_id' => $student->department_id,
         ]);
 
-        return response()->json($student, 201);
+        $response = $student->toArray();
+        if ($generatedPassword) {
+            $response['login_credentials'] = [
+                'email' => $student->email,
+                'password' => $generatedPassword,
+            ];
+        }
+
+        return response()->json($response, 201);
     }
 
     /**
@@ -164,6 +211,20 @@ class StudentController extends Controller
             'academic_score' => 'nullable|numeric|min:0|max:100',
             'transcript_file' => 'nullable|string',
             'qr_code' => 'nullable|string',
+            // New enrollment fields
+            'birth_place' => 'nullable|string|max:255',
+            'certification_type' => 'nullable|string|max:255',
+            'certification_date' => 'nullable|date',
+            'certification_school' => 'nullable|string|max:255',
+            'certification_specialization' => 'nullable|string|max:255',
+            'port_of_entry' => 'nullable|string|max:255',
+            'visa_type' => 'nullable|string|max:255',
+            'mother_name' => 'nullable|string|max:255',
+            'mother_nationality' => 'nullable|string|max:255',
+            'passport_number' => 'nullable|string|max:100',
+            'passport_issue_date' => 'nullable|date',
+            'passport_expiry_date' => 'nullable|date',
+            'passport_place_of_issue' => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -420,92 +481,69 @@ class StudentController extends Controller
             }
         }
 
-        // Create invoice and journal entry if there are new enrollments
+        // Create/update invoice if there are new enrollments
         $invoice = null;
         $journalEntry = null;
         
         if (count($enrollments) > 0) {
-            // Create invoice
-            $subtotal = 0;
-            foreach ($subjects as $subject) {
-                $subtotal += ($subject->credits * $subject->cost_per_credit);
-            }
-            
             $isPaying = $request->boolean('is_paying', false);
             
-            $invoice = \App\Models\StudentInvoice::create([
-                'student_id' => $id,
-                'semester_id' => $request->semester_id,
-                'study_year_id' => $request->study_year_id,
-                'department_id' => $request->department_id,
-                'semester_number' => $request->semester_number,
-                'invoice_date' => now(),
-                'due_date' => now()->addDays(30),
-                'subtotal' => $subtotal,
-                'discount' => 0,
-                'tax' => 0,
-                'total_amount' => $subtotal,
-                'paid_amount' => $isPaying ? $subtotal : 0,
-                'balance' => $isPaying ? 0 : $subtotal,
-                'status' => $isPaying ? 'paid' : 'pending',
-            ]);
+            // Calculate total credits for ALL enrollments in this semester (not just new ones)
+            $totalCredits = \App\Models\StudentSubjectEnrollment::where('student_id', $id)
+                ->where('semester_id', $request->semester_id)
+                ->whereHas('subject')
+                ->with('subject')
+                ->get()
+                ->sum(fn($e) => $e->subject->credits ?? 0);
             
-            // Create invoice items
-            foreach ($enrollments as $index => $enrollment) {
-                $subject = $subjects[$index];
-                $amount = $subject->credits * $subject->cost_per_credit;
-                
-                \App\Models\StudentInvoiceItem::create([
-                    'invoice_id' => $invoice->id,
-                    'subject_id' => $subject->id,
-                    'enrollment_id' => $enrollment->id,
-                    'description' => $subject->name . ' - ' . $subject->code,
-                    'quantity' => $subject->credits,
-                    'unit_price' => $subject->cost_per_credit,
-                    'amount' => $amount,
-                ]);
+            // Use FeeService to find or reuse existing invoice
+            $invoice = \App\Services\FeeService::findOrCreateInvoice(
+                $id,
+                $request->semester_id,
+                $request->study_year_id,
+                $request->department_id,
+                $request->semester_number,
+                $isPaying
+            );
+            
+            // Add subject items to invoice
+            \App\Services\FeeService::addSubjectItemsToInvoice($invoice, $enrollments, $subjects);
+            
+            // Get NEW fees to charge (prevents duplicates across invoices)
+            $newFees = \App\Services\FeeService::getNewFeesToCharge(
+                $id,
+                $request->semester_id,
+                $request->department_id,
+                $request->semester_number,
+                $totalCredits,
+                $student,
+                $request->study_year_id
+            );
+            
+            // Add fee items to invoice
+            if (!empty($newFees)) {
+                \App\Services\FeeService::addFeeItemsToInvoice($invoice, $newFees, $totalCredits);
             }
             
-            // Create journal entry
-            $journalEntry = \App\Models\JournalEntry::create([
-                'entry_type' => 'قيد يومية',
-                'reference_number' => $invoice->invoice_number,
-                'entry_date' => now(),
-                'posting_date' => now(),
-                'notes' => 'تسجيل رسوم دراسية للطالب: ' . $student->name,
-                'status' => 'posted',
-                'total_debit' => $subtotal,
-                'total_credit' => $subtotal,
-                'posted_at' => now(),
-            ]);
+            // Recalculate invoice totals
+            $invoice = \App\Services\FeeService::recalculateInvoice($invoice);
             
-            // Create journal entry lines using the accounts we already validated
-            // Debit: حساب العملاء (المدينون) - Accounts Receivable
-            \App\Models\JournalEntryLine::create([
-                'journal_entry_id' => $journalEntry->id,
-                'account_id' => $studentReceivableAccount->account_id,
-                'debit' => $subtotal,
-                'credit' => 0,
-                'description' => 'رسوم دراسية - ' . $student->name,
-                'line_number' => 1,
-            ]);
+            // If paying immediately, update paid amount
+            if ($isPaying) {
+                $invoice->update([
+                    'paid_amount' => $invoice->total_amount,
+                    'balance' => 0,
+                    'status' => 'paid',
+                ]);
+                $invoice = $invoice->fresh();
+            }
             
-            // Credit: حساب الإيرادات - المبيعات - Sales Revenue
-            \App\Models\JournalEntryLine::create([
-                'journal_entry_id' => $journalEntry->id,
-                'account_id' => $tuitionRevenueAccount->account_id,
-                'debit' => 0,
-                'credit' => $subtotal,
-                'description' => 'إيرادات رسوم دراسية - ' . $student->name,
-                'line_number' => 2,
-            ]);
-            
-            // Link journal entry to invoice
-            $invoice->update(['journal_entry_id' => $journalEntry->id]);
+            // Create or update journal entry for the invoice
+            \App\Services\FeeService::updateOrCreateInvoiceJournalEntry($invoice);
             
             // If paying immediately, create payment journal entry
             if ($isPaying) {
-                $this->createPaymentJournalEntry($invoice, $subtotal, $student);
+                $this->createPaymentJournalEntry($invoice, (float) $invoice->total_amount, $student);
             }
         }
 
@@ -519,8 +557,7 @@ class StudentController extends Controller
         return response()->json([
             'message' => 'Student enrolled successfully',
             'enrollments' => $enrollments,
-            'invoice' => $invoice,
-            'journal_entry' => $journalEntry,
+            'invoice' => $invoice ? $invoice->fresh(['items.subject', 'items.feeDefinition']) : null,
             'count' => count($enrollments)
         ], 201);
     }
@@ -553,13 +590,31 @@ class StudentController extends Controller
             'semester',
             'studyYear',
             'department',
-            'items.subject'
+            'items.subject',
+            'items.feeDefinition'
         ])
         ->where('student_id', $id)
         ->orderBy('invoice_date', 'desc')
         ->get();
 
         return response()->json($invoices);
+    }
+
+    /**
+     * Get fee summary for a student in a semester (charged + pending fees)
+     */
+    public function feeSummary($id, Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'semester_id' => 'required|exists:semesters,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        $summary = \App\Services\FeeService::getStudentFeeSummary($id, $request->semester_id);
+        return response()->json($summary);
     }
 
     /**
@@ -640,5 +695,60 @@ class StudentController extends Controller
         ]);
         
         return $journalEntry;
+    }
+
+    /**
+     * Create a login account (User + AppUser) for a student
+     */
+    private function createStudentLoginAccount(Student $student, string $rawPassword): void
+    {
+        try {
+            // Check if a User already exists with this email
+            $user = User::where('email', $student->email)->first();
+
+            if (!$user) {
+                $user = User::create([
+                    'name' => $student->name,
+                    'email' => $student->email,
+                    'password' => Hash::make($rawPassword),
+                ]);
+            }
+
+            // Check if AppUser already exists
+            $appUser = AppUser::where('auth_user_id', $user->id)->first();
+
+            if (!$appUser) {
+                AppUser::create([
+                    'auth_user_id' => $user->id,
+                    'email' => $student->email,
+                    'full_name' => $student->name,
+                    'role' => 'student',
+                    'status' => 'active',
+                    'student_id' => $student->id,
+                    'department_id' => $student->department_id,
+                ]);
+            } else {
+                // Update existing AppUser to link to student
+                $appUser->update([
+                    'role' => 'student',
+                    'student_id' => $student->id,
+                    'department_id' => $student->department_id,
+                ]);
+            }
+
+            // Link auth_user_id back to student
+            $student->update(['auth_user_id' => $user->id]);
+
+            \Log::info('Student login account created', [
+                'student_id' => $student->id,
+                'user_id' => $user->id,
+                'email' => $student->email,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to create student login account', [
+                'student_id' => $student->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

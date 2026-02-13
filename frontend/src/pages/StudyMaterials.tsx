@@ -14,6 +14,7 @@ export default function StudyMaterials() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [selectedSemester, setSelectedSemester] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showTeachersModal, setShowTeachersModal] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<any | null>(null);
@@ -37,9 +38,13 @@ export default function StudyMaterials() {
     if (selectedDepartment) {
       filtered = filtered.filter(subject => subject.department_id === selectedDepartment);
     }
+
+    if (selectedSemester) {
+      filtered = filtered.filter(subject => String(subject.semester_number) === selectedSemester);
+    }
     
     return filtered;
-  }, [subjects, selectedDepartment]);
+  }, [subjects, selectedDepartment, selectedSemester]);
 
   const paginatedSubjects = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -135,7 +140,7 @@ export default function StudyMaterials() {
             </h3>
           </div>
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-2">
                   البحث
@@ -157,12 +162,30 @@ export default function StudyMaterials() {
                   id="department"
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors duration-200"
                   value={selectedDepartment}
-                  onChange={(e) => setSelectedDepartment(e.target.value)}
+                  onChange={(e) => { setSelectedDepartment(e.target.value); setCurrentPage(1); }}
                 >
                   <option value="">جميع الأقسام</option>
                   {departments?.map((dept: any) => (
                     <option key={dept.id} value={dept.id}>
                       {dept.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="semester" className="block text-sm font-medium text-gray-700 mb-2">
+                  الفصل الدراسي
+                </label>
+                <select
+                  id="semester"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors duration-200"
+                  value={selectedSemester}
+                  onChange={(e) => { setSelectedSemester(e.target.value); setCurrentPage(1); }}
+                >
+                  <option value="">جميع الفصول</option>
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => (
+                    <option key={num} value={String(num)}>
+                      الفصل {num}
                     </option>
                   ))}
                 </select>
@@ -237,13 +260,13 @@ export default function StudyMaterials() {
                       <div className="text-sm font-medium text-gray-900">{subject.code}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{subject.departments?.name || 'غير محدد'}</div>
+                      <div className="text-sm text-gray-900">{subject.department?.name || 'غير محدد'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{subject.credits || 0} ساعة</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{subject.semester || 'غير محدد'}</div>
+                      <div className="text-sm text-gray-900">{subject.semester_number ? `الفصل ${subject.semester_number}` : 'غير محدد'}</div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">

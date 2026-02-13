@@ -141,10 +141,23 @@ class AuthController extends Controller
             }
         }
 
+        // Enrich with student data if applicable
+        if ($appUser && $appUser->role === 'student' && $appUser->student_id) {
+            $student = \App\Models\Student::with('department:id,name,name_en')->find($appUser->student_id);
+            if ($student) {
+                $appUserData['student_id'] = $student->id;
+                $appUserData['student_name'] = $student->name;
+                $appUserData['student_campus_id'] = $student->campus_id;
+                $appUserData['department_id'] = $student->department_id;
+                $appUserData['department_name'] = $student->department?->name;
+                $appUserData['student_year'] = $student->year;
+            }
+        }
+
         return response()->json([
             'user' => $user,
             'app_user' => $appUserData,
-            'permissions' => $appUser ? $this->getUserPermissions($appUser->role) : []
+            'permissions' => $appUser ? $this->getUserPermissions($appUser) : []
         ]);
     }
 
@@ -188,48 +201,42 @@ class AuthController extends Controller
             }
         }
 
+        // Enrich app_user with student data if role is student
+        if ($appUser && $appUser->role === 'student' && $appUser->student_id) {
+            $student = \App\Models\Student::with('department:id,name,name_en')->find($appUser->student_id);
+            if ($student) {
+                $appUserData['student_id'] = $student->id;
+                $appUserData['student_name'] = $student->name;
+                $appUserData['student_campus_id'] = $student->campus_id;
+                $appUserData['department_id'] = $student->department_id;
+                $appUserData['department_name'] = $student->department?->name;
+                $appUserData['student_year'] = $student->year;
+            }
+        }
+
         return response()->json([
             'access_token' => $token,
             'token_type' => 'bearer',
             'expires_in' => auth('api')->factory()->getTTL() * 60,
             'user' => $user ?? auth('api')->user(),
             'app_user' => $appUserData,
-            'permissions' => $appUser ? $this->getUserPermissions($appUser->role) : []
+            'permissions' => $appUser ? $this->getUserPermissions($appUser) : []
         ]);
     }
 
     /**
-     * Get user permissions based on role
+     * Get user permissions from the DB role
      */
-    protected function getUserPermissions($role)
+    protected function getUserPermissions($appUser)
     {
-        $permissions = [
-            'manager' => [
-                'students' => ['view', 'create', 'edit', 'delete'],
-                'fees' => ['view', 'create', 'edit', 'delete'],
-                'teachers' => ['view', 'create', 'edit', 'delete'],
-                'departments' => ['view', 'create', 'edit', 'delete'],
-                'subjects' => ['view', 'create', 'edit', 'delete'],
-                'finance' => ['view', 'create', 'edit', 'delete'],
-                'users' => ['view', 'create', 'edit', 'delete'],
-            ],
-            'staff' => [
-                'students' => ['view', 'create'],
-                'fees' => ['view'],
-                'student-registration' => ['view', 'create'],
-                'student-enrollments' => ['view', 'create'],
-            ],
-            'teacher' => [
-                'sessions' => ['view', 'create', 'edit', 'delete'],
-                'attendance' => ['view', 'create', 'edit'],
-                'grades' => ['view', 'create', 'edit', 'delete'],
-                'students' => ['view'],
-                'subjects' => ['view'],
-                'schedule' => ['view', 'edit'],
-            ],
-        ];
+        if (!$appUser) return [];
 
-        return $permissions[$role] ?? [];
+        // Load role if not loaded
+        if (!$appUser->relationLoaded('roleModel')) {
+            $appUser->load('roleModel');
+        }
+
+        return $appUser->getPermissions();
     }
 
     /**

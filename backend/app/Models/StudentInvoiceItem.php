@@ -14,6 +14,7 @@ class StudentInvoiceItem extends Model
         'invoice_id',
         'subject_id',
         'enrollment_id',
+        'fee_definition_id',
         'description',
         'quantity',
         'unit_price',
@@ -49,5 +50,10 @@ class StudentInvoiceItem extends Model
     public function enrollment()
     {
         return $this->belongsTo(StudentSubjectEnrollment::class, 'enrollment_id');
+    }
+
+    public function feeDefinition()
+    {
+        return $this->belongsTo(FeeDefinition::class);
     }
 }
