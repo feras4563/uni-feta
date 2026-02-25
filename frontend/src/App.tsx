@@ -1,4 +1,4 @@
-import { Link, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import StudentsPage from "./pages/Students";
 import StudentDetail from "./pages/StudentDetail";
@@ -32,6 +32,7 @@ import PaymentModeCreate from "./pages/PaymentModeCreate";
 import PaymentEntryCreate from "./pages/PaymentEntryCreate";
 import PaymentEntryDetail from "./pages/PaymentEntryDetail";
 import SchedulingPage from "./pages/Scheduling";
+import HolidayManagement from "./pages/HolidayManagement";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import ClassSessions from "./pages/teacher/ClassSessions";
 import TeacherSubjectGroups from "./pages/teacher/TeacherSubjectGroups";
@@ -44,6 +45,7 @@ import StudentFees from "./pages/student/StudentFees";
 import StudentSchedule from "./pages/student/StudentSchedule";
 import StudentGrades from "./pages/student/StudentGrades";
 import StudentAttendance from "./pages/student/StudentAttendance";
+import StudentTeachers from "./pages/student/StudentTeachers";
 import LoginPage from "./components/auth/LoginPage";
 import RegisterPage from "./components/auth/RegisterPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
@@ -267,7 +269,7 @@ function AppContent() {
                 </div>
               )}
 
-              {hasPermission('schedule', 'view') && (
+              {user.role !== 'student' && user.role !== 'teacher' && hasPermission('schedule', 'view') && (
                 <Link
                   to="/schedule"
                   className={getNavLinkClass("/schedule")}
@@ -277,23 +279,13 @@ function AppContent() {
                 </Link>
               )}
 
-              {hasPermission('fees', 'view') && (
+              {user.role !== 'student' && user.role !== 'teacher' && hasPermission('fees', 'view') && (
                 <Link
                   to="/fees"
                   className={getNavLinkClass("/fees")}
                 >
                   <i className="fas fa-dollar-sign text-xs ml-2"></i>
                   الرسوم
-                </Link>
-              )}
-
-              {hasPermission('fees', 'edit') && (
-                <Link
-                  to="/fee-structure"
-                  className={getNavLinkClass("/fee-structure")}
-                >
-                  <i className="fas fa-cogs text-xs ml-2"></i>
-                  هيكل الرسوم
                 </Link>
               )}
               
@@ -312,7 +304,7 @@ function AppContent() {
                 <div className="relative group">
                   <div className="text-white px-3 py-2 rounded text-sm font-medium transition-colors duration-200 flex items-center cursor-pointer hover:bg-slate-600">
                     <i className="fas fa-cog text-xs ml-2"></i>
-                    الإعدادات
+                    الإدارة العـامة
                     <i className="fas fa-chevron-down text-xs mr-2"></i>
                   </div>
                   <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
@@ -350,6 +342,21 @@ function AppContent() {
                         <Link to="/settings/action-logs" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
                           <i className="fas fa-history text-xs ml-2"></i>
                           سجل العمليات
+                        </Link>
+                      )}
+                      {hasPermission('fees', 'edit') && (
+                        <>
+                          <div className="border-t border-gray-200 my-2"></div>
+                          <Link to="/fee-structure" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                            <i className="fas fa-cogs text-xs ml-2"></i>
+                            هيكل الرسوم
+                          </Link>
+                        </>
+                      )}
+                      {user.role === 'manager' && (
+                        <Link to="/holidays" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-calendar-check text-xs ml-2"></i>
+                          إدارة العطل
                         </Link>
                       )}
                     </div>
@@ -435,6 +442,13 @@ function AppContent() {
                   >
                     <i className="fas fa-clipboard-check text-xs ml-2"></i>
                     حضوري
+                  </Link>
+                  <Link
+                    to="/student/teachers"
+                    className={getNavLinkClass("/student/teachers")}
+                  >
+                    <i className="fas fa-chalkboard-teacher text-xs ml-2"></i>
+                    مدرسي
                   </Link>
                 </>
               )}
@@ -559,9 +573,13 @@ function AppContent() {
           <Route 
             path="/fees" 
             element={
-              <ProtectedRoute requiredResource="fees" requiredAction="view">
-                <FeesPage />
-              </ProtectedRoute>
+              user.role === 'student' ? (
+                <Navigate to="/student/fees" replace />
+              ) : (
+                <ProtectedRoute requiredResource="fees" requiredAction="view">
+                  <FeesPage />
+                </ProtectedRoute>
+              )
             } 
           />
           <Route 
@@ -743,10 +761,22 @@ function AppContent() {
           <Route 
             path="/schedule" 
             element={
-              <ProtectedRoute requiredResource="schedule" requiredAction="view">
-                <SchedulingPage />
-              </ProtectedRoute>
+              user.role === 'student' ? (
+                <Navigate to="/student/schedule" replace />
+              ) : (
+                <ProtectedRoute requiredResource="schedule" requiredAction="view">
+                  <SchedulingPage />
+                </ProtectedRoute>
+              )
             } 
+          />
+          <Route
+            path="/holidays"
+            element={
+              <ProtectedRoute requiredRole="manager">
+                <HolidayManagement />
+              </ProtectedRoute>
+            }
           />
           <Route 
             path="/finance" 
@@ -957,6 +987,14 @@ function AppContent() {
             element={
               <ProtectedRoute requiredRole="student">
                 <StudentAttendance />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/student/teachers" 
+            element={
+              <ProtectedRoute requiredRole="student">
+                <StudentTeachers />
               </ProtectedRoute>
             } 
           />

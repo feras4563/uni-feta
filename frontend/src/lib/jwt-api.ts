@@ -294,7 +294,7 @@ export async function deleteStudentRegistration(id: string | number) {
 // TEACHER SUBJECTS API
 // ============================================
 
-export async function fetchTeacherSubjects(teacherId?: number) {
+export async function fetchTeacherSubjects(teacherId?: string | number) {
   const params = teacherId ? { teacher_id: teacherId } : undefined;
   return api.get<any[]>('/teacher-subjects', params);
 }
@@ -312,23 +312,33 @@ export async function deleteTeacherSubjectAssignment(id: string | number) {
 // ============================================
 
 export async function fetchTimetable(params?: any) {
-  return api.get<any[]>('/timetable', params);
+  return api.get<any[]>('/timetable/entries', params);
 }
 
 export async function createTimetableEntry(data: any) {
-  return api.post<any>('/timetable', data);
+  return api.post<any>('/timetable/entries', data);
 }
 
 export async function updateTimetableEntry(id: string | number, data: any) {
-  return api.put<any>(`/timetable/${id}`, data);
+  return api.put<any>(`/timetable/entries/${id}`, data);
 }
 
 export async function deleteTimetableEntry(id: string | number) {
-  return api.delete<any>(`/timetable/${id}`);
+  return api.delete<any>(`/timetable/entries/${id}`);
 }
 
 export async function generateTimetable(data: any) {
-  return api.post<any>('/timetable/generate', data);
+  return api.post<any>('/timetable/auto-generate', data);
+}
+
+export async function fetchScheduleOverview(params?: {
+  department_id?: string;
+  teacher_id?: string;
+  study_year_id?: string;
+  semester_id?: string;
+  include_inactive?: boolean;
+}) {
+  return api.get<any>('/schedule/overview', params);
 }
 
 // ============================================
@@ -456,42 +466,56 @@ export async function updateGrade(id: string | number, data: any) {
 // ============================================
 
 export interface ClassSession {
-  id: number;
-  subject_id: number;
+  id: string | number;
+  timetable_id?: string | null;
+  teacher_id?: string | number;
+  subject_id: string | number;
   session_name: string;
   session_date: string;
   start_time: string;
   end_time: string;
   room?: string;
   notes?: string;
-  qr_code?: string;
+  qr_code_data?: string;
+  qr_signature?: string;
+  qr_generated_at?: string;
+  qr_expires_at?: string;
   status?: string;
+  max_students?: number;
   subject?: any;
 }
 
 export interface TeacherSubject {
-  id: number;
-  subject_id: number;
-  teacher_id: number;
+  id: string | number;
+  subject_id: string | number;
+  teacher_id: string | number;
+  department_id?: string;
   subject?: any;
   name?: string;
 }
 
 export interface AttendanceRecord {
-  id: number;
-  session_id: number;
-  student_id: number;
+  id: string | number;
+  session_id: string | number;
+  student_id: string | number;
+  marked_by_id?: number | null;
   status: string;
-  check_in_time?: string;
+  scan_time?: string;
+  notes?: string;
+  is_override?: boolean;
   student?: any;
+  markedBy?: { id: number; name: string; email: string };
 }
 
 export async function getTeacherDashboard(teacherId: number) {
   return api.get<any>(`/teachers/${teacherId}/dashboard`);
 }
 
-export async function getTeacherSessions(teacherId: number) {
-  return api.get<any[]>(`/teachers/${teacherId}/sessions`);
+export async function getTeacherSessions(
+  teacherId: string | number,
+  params?: { status?: string; start_date?: string; end_date?: string }
+) {
+  return api.get<ClassSession[]>(`/teachers/${teacherId}/sessions`, params);
 }
 
 export async function getTeacherSubjectGroups(teacherId: number) {
@@ -502,28 +526,75 @@ export async function fetchTeacherStats(teacherId: number) {
   return api.get<any>(`/teachers/${teacherId}/stats`);
 }
 
-export async function fetchTeacherSessions(teacherId: number) {
-  return api.get<any[]>(`/teachers/${teacherId}/sessions`);
+export async function fetchTeacherSessions(
+  teacherId: string | number,
+  params?: { status?: string; start_date?: string; end_date?: string }
+) {
+  return api.get<ClassSession[]>(`/teachers/${teacherId}/sessions`, params);
 }
 
 export async function createClassSession(data: any) {
   return api.post<any>('/class-sessions', data);
 }
 
-export async function updateClassSession(sessionId: number, data: any) {
+export async function updateClassSession(sessionId: string | number, data: any) {
   return api.put<any>(`/class-sessions/${sessionId}`, data);
 }
 
-export async function deleteClassSession(sessionId: number) {
+export async function deleteClassSession(sessionId: string | number) {
   return api.delete<any>(`/class-sessions/${sessionId}`);
 }
 
-export async function generateSessionQR(sessionId: number) {
-  return api.post<any>(`/class-sessions/${sessionId}/generate-qr`);
+export async function generateSessionQR(sessionId: string | number) {
+  return api.post<any>(`/teacher-portal/sessions/${sessionId}/generate-qr`);
 }
 
-export async function fetchSessionAttendance(sessionId: number) {
+export async function fetchSessionAttendance(sessionId: string | number) {
   return api.get<any[]>(`/class-sessions/${sessionId}/attendance`);
+}
+
+// ============================================
+// HOLIDAYS API
+// ============================================
+
+export interface Holiday {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_recurring: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchHolidays() {
+  return api.get<Holiday[]>('/holidays');
+}
+
+export async function createHoliday(data: {
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_recurring?: boolean;
+}) {
+  return api.post<Holiday>('/holidays', data);
+}
+
+export async function deleteHoliday(id: string) {
+  return api.delete<{ message: string }>(`/holidays/${id}`);
+}
+
+export async function syncHolidaySchedule(semesterId: string) {
+  return api.post<{
+    message: string;
+    result: {
+      created: number;
+      updated: number;
+      cancelled: number;
+      skipped_holidays: number;
+      total_entries: number;
+    };
+  }>('/holidays/sync-schedule', { semester_id: semesterId });
 }
 
 // ============================================
@@ -640,11 +711,11 @@ export async function deleteSubjectPDF(subjectId: number) {
 }
 
 // Department Curriculum
-export async function fetchDepartmentCurriculum(departmentId: number) {
+export async function fetchDepartmentCurriculum(departmentId: string | number) {
   return api.get<any>(`/departments/${departmentId}/curriculum`);
 }
 
-export async function fetchDepartmentCurriculumBySemesterNumber(departmentId: number, semesterNumber: number) {
+export async function fetchDepartmentCurriculumBySemesterNumber(departmentId: string | number, semesterNumber: number) {
   return api.get<any>(`/departments/${departmentId}/curriculum/semester/${semesterNumber}`);
 }
 
@@ -660,7 +731,8 @@ export async function enrollStudentInSubjects(
   studyYearId: string,
   departmentId: string,
   semesterNumber: number,
-  isPaying: boolean = false
+  isPaying: boolean = false,
+  specializationTrack?: 'fine_arts_media' | 'advertising_design' | 'photography_cinema' | 'multimedia_media'
 ) {
   return api.post<any>(`/students/${studentId}/enroll-subjects`, {
     subject_ids: subjectIds,
@@ -669,6 +741,7 @@ export async function enrollStudentInSubjects(
     department_id: departmentId,
     semester_number: semesterNumber,
     is_paying: isPaying,
+    specialization_track: specializationTrack,
   });
 }
 
@@ -730,7 +803,7 @@ export async function fetchBasicInvoices(params?: any) {
   return api.get<any[]>('/invoices/basic', params);
 }
 
-export async function fetchStudentInvoices(studentId: number) {
+export async function fetchStudentInvoices(studentId: string | number) {
   return api.get<any[]>(`/students/${studentId}/invoices`);
 }
 
@@ -870,8 +943,27 @@ export async function updateTeacherGrade(gradeId: string, data: any) {
   return api.put<any>(`/teacher-portal/grades/${gradeId}`, data);
 }
 
+export async function publishTeacherGrades(gradeIds: string[], isPublished: boolean) {
+  return api.post<any>('/teacher-portal/grades/publish', {
+    grade_ids: gradeIds,
+    is_published: isPublished,
+  });
+}
+
 export async function deleteTeacherGrade(gradeId: string) {
   return api.delete<any>(`/teacher-portal/grades/${gradeId}`);
+}
+
+export async function fetchMySessions(params?: { date?: string; start_date?: string; end_date?: string; status?: string; subject_id?: string }) {
+  return api.get<any[]>('/teacher-portal/my-sessions', params);
+}
+
+export async function fetchSessionDetail(sessionId: string) {
+  return api.get<any>(`/teacher-portal/sessions/${sessionId}`);
+}
+
+export async function markSessionAttendance(sessionId: string, records: { student_id: string; status: string; notes?: string }[]) {
+  return api.post<any>(`/teacher-portal/sessions/${sessionId}/attendance`, { records });
 }
 
 // ============================================
@@ -884,6 +976,10 @@ export async function fetchStudentPortalDashboard() {
 
 export async function fetchStudentMySubjects(params?: { semester_id?: string; status?: string }) {
   return api.get<any[]>('/student-portal/my-subjects', params);
+}
+
+export async function fetchStudentMyTeachers() {
+  return api.get<any>('/student-portal/my-teachers');
 }
 
 export async function fetchStudentMyFees(params?: { semester_id?: string; status?: string }) {

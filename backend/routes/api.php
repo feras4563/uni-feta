@@ -37,6 +37,8 @@ use App\Http\Controllers\Api\TeacherPortalController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\UserManagementController;
 use App\Http\Controllers\Api\StudentPortalController;
+use App\Http\Controllers\Api\HolidayController;
+use App\Http\Controllers\Api\ScheduleOverviewController;
 
 /*
 |--------------------------------------------------------------------------
@@ -181,9 +183,9 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('attendance')->group(function () {
         Route::get('/', [AttendanceController::class, 'index']);
         Route::post('/', [AttendanceController::class, 'store']);
-        Route::post('/sessions', [AttendanceController::class, 'createSession']);
-        Route::get('/sessions/{sessionId}', [AttendanceController::class, 'getSession']);
-        Route::get('/sessions/{sessionId}/attendance', [AttendanceController::class, 'getSessionAttendance']);
+        Route::post('/sessions', [AttendanceController::class, 'createSession'])->middleware('permission:sessions,create');
+        Route::get('/sessions/{sessionId}', [AttendanceController::class, 'getSession'])->middleware('permission:sessions,view');
+        Route::get('/sessions/{sessionId}/attendance', [AttendanceController::class, 'getSessionAttendance'])->middleware('permission:attendance,view');
         Route::get('/session/{sessionId}', [AttendanceController::class, 'bySession']);
         Route::get('/session/{sessionId}/statistics', [AttendanceController::class, 'statistics']);
         Route::get('/student/{studentId}', [AttendanceController::class, 'byStudent']);
@@ -191,6 +193,17 @@ Route::middleware('auth:api')->group(function () {
         Route::put('/{id}', [AttendanceController::class, 'update']);
         Route::patch('/{id}', [AttendanceController::class, 'update']);
         Route::delete('/{id}', [AttendanceController::class, 'destroy']);
+    });
+
+    // Class Sessions Routes
+    Route::prefix('class-sessions')->group(function () {
+        Route::post('/', [AttendanceController::class, 'createSession'])->middleware('permission:sessions,create');
+        Route::get('/{sessionId}', [AttendanceController::class, 'getSession'])->middleware('permission:sessions,view');
+        Route::put('/{sessionId}', [AttendanceController::class, 'updateSession'])->middleware('permission:sessions,edit');
+        Route::patch('/{sessionId}', [AttendanceController::class, 'updateSession'])->middleware('permission:sessions,edit');
+        Route::delete('/{sessionId}', [AttendanceController::class, 'destroySession'])->middleware('permission:sessions,delete');
+        Route::post('/{sessionId}/generate-qr', [AttendanceController::class, 'generateSessionQR'])->middleware('permission:sessions,edit');
+        Route::get('/{sessionId}/attendance', [AttendanceController::class, 'getSessionAttendance'])->middleware('permission:attendance,view');
     });
 
     // Grades Routes
@@ -262,6 +275,12 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/teacher/{teacherId}', [ClassScheduleController::class, 'saveTeacherSchedule']);
     });
 
+    // Unified schedule overview
+    Route::prefix('schedule')->group(function () {
+        Route::get('/overview', [ScheduleOverviewController::class, 'overview'])
+            ->middleware('permission:schedule,view');
+    });
+
     // Timetable Routes
     Route::prefix('timetable')->group(function () {
         Route::get('/entries', [TimetableController::class, 'entries']);
@@ -282,6 +301,14 @@ Route::middleware('auth:api')->group(function () {
         Route::put('/{id}', [TimeSlotController::class, 'update']);
         Route::patch('/{id}', [TimeSlotController::class, 'update']);
         Route::delete('/{id}', [TimeSlotController::class, 'destroy']);
+    });
+
+    // Holidays Routes (manager only)
+    Route::prefix('holidays')->middleware('role:manager')->group(function () {
+        Route::get('/', [HolidayController::class, 'index']);
+        Route::post('/', [HolidayController::class, 'store']);
+        Route::delete('/{id}', [HolidayController::class, 'destroy']);
+        Route::post('/sync-schedule', [HolidayController::class, 'syncSchedule']);
     });
 
     // Teacher Subject Assignments Routes
@@ -444,8 +471,13 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/my-students', [TeacherPortalController::class, 'myStudents']);
         Route::get('/my-schedule', [TeacherPortalController::class, 'mySchedule']);
         Route::get('/my-attendance', [TeacherPortalController::class, 'myAttendance']);
+        Route::get('/my-sessions', [TeacherPortalController::class, 'mySessions']);
+        Route::get('/sessions/{sessionId}', [TeacherPortalController::class, 'getSessionDetail']);
+        Route::post('/sessions/{sessionId}/attendance', [TeacherPortalController::class, 'markSessionAttendance']);
+        Route::post('/sessions/{sessionId}/generate-qr', [TeacherPortalController::class, 'generateSessionQR']);
         Route::get('/subjects/{subjectId}/grades', [TeacherPortalController::class, 'subjectGrades']);
         Route::post('/grades', [TeacherPortalController::class, 'storeGrades']);
+        Route::post('/grades/publish', [TeacherPortalController::class, 'publishGrades']);
         Route::put('/grades/{gradeId}', [TeacherPortalController::class, 'updateGrade']);
         Route::delete('/grades/{gradeId}', [TeacherPortalController::class, 'deleteGrade']);
     });
@@ -454,6 +486,7 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('student-portal')->middleware('role:student')->group(function () {
         Route::get('/dashboard', [StudentPortalController::class, 'dashboard']);
         Route::get('/my-subjects', [StudentPortalController::class, 'mySubjects']);
+        Route::get('/my-teachers', [StudentPortalController::class, 'myTeachers']);
         Route::get('/my-fees', [StudentPortalController::class, 'myFees']);
         Route::get('/my-schedule', [StudentPortalController::class, 'mySchedule']);
         Route::get('/my-grades', [StudentPortalController::class, 'myGrades']);

@@ -59,6 +59,10 @@ class TeacherPortalController extends Controller
             ->distinct('student_id')
             ->count('student_id');
 
+        // Auto-generate class sessions for today from timetable entries
+        $today = now()->toDateString();
+        $this->ensureSessionsForDate($teacher, $today);
+
         // Today's timetable entries (from the weekly schedule)
         // day_of_week: 0=Sunday, 1=Monday, ... 6=Saturday
         $todayDayOfWeek = now()->dayOfWeek; // Carbon: 0=Sunday
@@ -73,10 +77,10 @@ class TeacherPortalController extends Controller
             ->orderBy('start_time')
             ->get();
 
-        // Also get any manually-created class sessions for today
-        $today = now()->toDateString();
-        $todayManualSessions = ClassSession::where('teacher_id', $teacher->id)
-            ->where('session_date', $today)
+        // Also get any class sessions for today (includes auto-generated ones)
+        $todaySessions = ClassSession::where('teacher_id', $teacher->id)
+            ->whereDate('session_date', $today)
+            ->where('status', '!=', 'cancelled')
             ->with('subject:id,name,code')
             ->orderBy('start_time')
             ->get();
@@ -125,11 +129,11 @@ class TeacherPortalController extends Controller
             'stats' => [
                 'total_subjects' => $activeSubjects->count(),
                 'total_students' => $totalStudents,
-                'today_sessions' => $todayTimetable->count() + $todayManualSessions->count(),
+                'today_sessions' => max($todayTimetable->count(), $todaySessions->count()),
                 'total_grades' => StudentGrade::where('teacher_id', $teacher->id)->count(),
             ],
             'today_timetable' => $todayTimetable,
-            'today_sessions' => $todayManualSessions,
+            'today_sessions' => $todaySessions,
             'upcoming_classes' => $upcomingEntries->take(5)->values(),
             'recent_grades' => $recentGrades,
         ]);
@@ -344,6 +348,13 @@ class TeacherPortalController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // Ensure grade_value does not exceed max_grade for each entry
+        foreach ($request->grades as $i => $g) {
+            if (isset($g['grade_value'], $g['max_grade']) && $g['grade_value'] > $g['max_grade']) {
+                return response()->json(['errors' => ["grades.{$i}.grade_value" => ['الدرجة لا يمكن أن تتجاوز الدرجة القصوى']]], 422);
+            }
+        }
+
         $subjectId = $request->subject_id;
 
         // Verify teacher teaches this subject
@@ -351,22 +362,36 @@ class TeacherPortalController extends Controller
             return response()->json(['error' => 'You do not teach this subject'], 403);
         }
 
+        // Auto-resolve semester_id from teacher_subject assignment or current semester
+        $semesterId = TeacherSubject::where('teacher_id', $teacher->id)
+            ->where('subject_id', $subjectId)
+            ->where('is_active', true)
+            ->value('semester_id');
+
+        if (!$semesterId) {
+            $semesterId = \App\Models\Semester::where('is_current', true)->value('id');
+        }
+
+        // Batch-load existing grades for this subject/teacher (1 query instead of N)
+        $studentIds = collect($request->grades)->pluck('student_id')->unique()->values()->all();
+        $existingGrades = StudentGrade::where('subject_id', $subjectId)
+            ->where('teacher_id', $teacher->id)
+            ->whereIn('student_id', $studentIds)
+            ->get()
+            ->keyBy(fn ($g) => $g->student_id . '|' . $g->grade_type . '|' . $g->grade_name);
+
         $created = [];
         $updated = [];
 
         foreach ($request->grades as $gradeData) {
-            // Check if grade already exists for this student/subject/type/name
-            $existing = StudentGrade::where('student_id', $gradeData['student_id'])
-                ->where('subject_id', $subjectId)
-                ->where('teacher_id', $teacher->id)
-                ->where('grade_type', $gradeData['grade_type'])
-                ->where('grade_name', $gradeData['grade_name'])
-                ->first();
+            $lookupKey = $gradeData['student_id'] . '|' . $gradeData['grade_type'] . '|' . $gradeData['grade_name'];
+            $existing = $existingGrades->get($lookupKey);
 
             $gradePayload = [
                 'student_id' => $gradeData['student_id'],
                 'subject_id' => $subjectId,
                 'teacher_id' => $teacher->id,
+                'semester_id' => $semesterId,
                 'grade_type' => $gradeData['grade_type'],
                 'grade_name' => $gradeData['grade_name'],
                 'grade_value' => $gradeData['grade_value'],
@@ -380,7 +405,7 @@ class TeacherPortalController extends Controller
 
             if ($existing) {
                 $existing->update($gradePayload);
-                $updated[] = $existing->fresh();
+                $updated[] = $existing;
             } else {
                 $grade = StudentGrade::create($gradePayload);
                 $created[] = $grade;
@@ -437,6 +462,36 @@ class TeacherPortalController extends Controller
     }
 
     /**
+     * Bulk publish or unpublish grades for a subject
+     */
+    public function publishGrades(Request $request)
+    {
+        $teacher = $this->getTeacher($request);
+        if (!$teacher) {
+            return response()->json(['error' => 'Teacher profile not found'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'grade_ids' => 'required|array|min:1',
+            'grade_ids.*' => 'required|string',
+            'is_published' => 'required|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $updated = StudentGrade::whereIn('id', $request->grade_ids)
+            ->where('teacher_id', $teacher->id)
+            ->update(['is_published' => $request->is_published]);
+
+        return response()->json([
+            'message' => $request->is_published ? 'تم نشر الدرجات بنجاح' : 'تم إلغاء نشر الدرجات',
+            'updated' => $updated,
+        ]);
+    }
+
+    /**
      * Delete a grade
      */
     public function deleteGrade(Request $request, $gradeId)
@@ -459,26 +514,363 @@ class TeacherPortalController extends Controller
         return response()->json(['message' => 'Grade deleted successfully']);
     }
 
+    // =========================================================================
+    // SESSION & ATTENDANCE METHODS
+    // =========================================================================
+
     /**
-     * Get attendance summary for teacher's subjects
+     * Get teacher's class sessions with attendance stats.
+     * Supports ?date=YYYY-MM-DD (defaults to today), ?start_date & ?end_date for range,
+     * ?status=scheduled|completed|cancelled, ?subject_id filter.
+     *
+     * Auto-generates class sessions from timetable entries for a single date
+     * if none exist yet, so teachers can always take attendance.
      */
-    public function myAttendance(Request $request)
+    public function mySessions(Request $request)
     {
         $teacher = $this->getTeacher($request);
         if (!$teacher) {
             return response()->json(['error' => 'Teacher profile not found'], 404);
         }
 
-        $sessions = ClassSession::where('teacher_id', $teacher->id)
+        // Determine the target date for auto-generation
+        $targetDate = $request->has('date') ? $request->date : now()->toDateString();
+        $isSingleDate = $request->has('date') || (!$request->has('start_date') && !$request->has('end_date'));
+
+        // Auto-generate sessions from timetable entries for the target date if needed
+        if ($isSingleDate) {
+            $this->ensureSessionsForDate($teacher, $targetDate);
+        }
+
+        $query = ClassSession::where('teacher_id', $teacher->id)
             ->with([
                 'subject:id,name,name_en,code',
                 'department:id,name,name_en',
             ])
-            ->withCount('attendanceRecords')
-            ->orderBy('session_date', 'desc')
+            ->withCount([
+                'attendanceRecords',
+                'attendanceRecords as present_count' => fn ($q) => $q->where('status', 'present'),
+                'attendanceRecords as late_count' => fn ($q) => $q->where('status', 'late'),
+                'attendanceRecords as absent_count' => fn ($q) => $q->where('status', 'absent'),
+                'attendanceRecords as excused_count' => fn ($q) => $q->where('status', 'excused'),
+            ]);
+
+        // Date filtering
+        if ($request->has('date')) {
+            $query->whereDate('session_date', $request->date);
+        } elseif ($request->has('start_date') || $request->has('end_date')) {
+            if ($request->has('start_date')) $query->whereDate('session_date', '>=', $request->start_date);
+            if ($request->has('end_date')) $query->whereDate('session_date', '<=', $request->end_date);
+        } else {
+            // Default: today's sessions
+            $query->whereDate('session_date', now()->toDateString());
+        }
+
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->has('subject_id')) {
+            $query->where('subject_id', $request->subject_id);
+        }
+
+        $sessions = $query->orderBy('session_date')
+            ->orderBy('start_time')
             ->get();
 
+        // Attach enrolled student count per subject (batch)
+        $subjectIds = $sessions->pluck('subject_id')->unique()->values()->all();
+        $enrolledCounts = [];
+        if (!empty($subjectIds)) {
+            $enrolledCounts = StudentSubjectEnrollment::whereIn('subject_id', $subjectIds)
+                ->whereIn('status', ['enrolled', 'active'])
+                ->selectRaw('subject_id, COUNT(DISTINCT student_id) as count')
+                ->groupBy('subject_id')
+                ->pluck('count', 'subject_id')
+                ->all();
+        }
+
+        $sessions->each(function ($session) use ($enrolledCounts) {
+            $session->enrolled_count = $enrolledCounts[$session->subject_id] ?? 0;
+        });
+
         return response()->json($sessions);
+    }
+
+    /**
+     * Auto-generate class sessions from timetable entries for a specific date.
+     * Only creates sessions that don't already exist (idempotent).
+     */
+    private function ensureSessionsForDate(Teacher $teacher, string $dateString): void
+    {
+        $date = \Carbon\Carbon::parse($dateString);
+        $dayOfWeek = $date->dayOfWeek; // 0=Sunday ... 6=Saturday
+
+        // Find timetable entries for this teacher on this day of week
+        $entries = TimetableEntry::where('teacher_id', $teacher->id)
+            ->where('day_of_week', $dayOfWeek)
+            ->where('is_active', true)
+            ->with(['subject:id,name,code', 'room:id,name,code,room_number'])
+            ->get();
+
+        if ($entries->isEmpty()) {
+            return;
+        }
+
+        // Check which sessions already exist for this date
+        $existingTimetableIds = ClassSession::where('teacher_id', $teacher->id)
+            ->whereDate('session_date', $dateString)
+            ->whereNotNull('timetable_id')
+            ->pluck('timetable_id')
+            ->all();
+
+        // Check if date is a holiday
+        $isHoliday = \App\Models\Holiday::where(function ($q) use ($dateString) {
+            $q->where('start_date', '<=', $dateString)
+              ->where('end_date', '>=', $dateString);
+        })->exists();
+
+        if ($isHoliday) {
+            return;
+        }
+
+        foreach ($entries as $entry) {
+            if (in_array($entry->id, $existingTimetableIds)) {
+                continue; // Already has a session for this date
+            }
+
+            ClassSession::create([
+                'timetable_id' => $entry->id,
+                'teacher_id' => $entry->teacher_id,
+                'subject_id' => $entry->subject_id,
+                'department_id' => $entry->department_id,
+                'session_name' => ($entry->subject?->name ?? 'Session') . ' - ' . $dateString,
+                'session_date' => $dateString,
+                'start_time' => $entry->start_time,
+                'end_time' => $entry->end_time,
+                'room' => $entry->room?->room_number ?? $entry->room?->name ?? $entry->room?->code,
+                'status' => 'scheduled',
+                'notes' => 'Auto-generated from timetable',
+            ]);
+        }
+    }
+
+    /**
+     * Get full session detail with enrolled students and their attendance records.
+     * This is the main endpoint for the attendance marking UI.
+     */
+    public function getSessionDetail(Request $request, string $sessionId)
+    {
+        $teacher = $this->getTeacher($request);
+        if (!$teacher) {
+            return response()->json(['error' => 'Teacher profile not found'], 404);
+        }
+
+        $session = ClassSession::where('id', $sessionId)
+            ->where('teacher_id', $teacher->id)
+            ->with(['subject:id,name,name_en,code', 'department:id,name,name_en'])
+            ->first();
+
+        if (!$session) {
+            return response()->json(['error' => 'Session not found or not yours'], 404);
+        }
+
+        // Get enrolled students for this subject
+        $enrolledStudents = StudentSubjectEnrollment::where('subject_id', $session->subject_id)
+            ->whereIn('status', ['enrolled', 'active'])
+            ->with('student:id,name,name_en,campus_id,photo_url')
+            ->get()
+            ->pluck('student')
+            ->unique('id')
+            ->values();
+
+        // Get existing attendance records for this session (keyed by student_id)
+        $records = AttendanceRecord::where('session_id', $sessionId)
+            ->with('markedBy:id,name,email')
+            ->get()
+            ->keyBy('student_id');
+
+        // Merge: for each enrolled student, attach their attendance record (or null)
+        $studentList = $enrolledStudents->map(function ($student) use ($records) {
+            $record = $records->get($student->id);
+            return [
+                'student_id' => $student->id,
+                'name' => $student->name,
+                'name_en' => $student->name_en,
+                'campus_id' => $student->campus_id,
+                'photo_url' => $student->photo_url,
+                'attendance' => $record ? [
+                    'id' => $record->id,
+                    'status' => $record->status,
+                    'scan_time' => $record->scan_time,
+                    'notes' => $record->notes,
+                    'is_manual_entry' => $record->is_manual_entry,
+                    'is_override' => $record->is_override,
+                    'marked_by' => $record->markedBy ? [
+                        'id' => $record->markedBy->id,
+                        'name' => $record->markedBy->name,
+                    ] : null,
+                ] : null,
+            ];
+        });
+
+        return response()->json([
+            'session' => $session,
+            'students' => $studentList,
+            'stats' => [
+                'enrolled' => $enrolledStudents->count(),
+                'marked' => $records->count(),
+                'present' => $records->where('status', 'present')->count(),
+                'late' => $records->where('status', 'late')->count(),
+                'absent' => $records->where('status', 'absent')->count(),
+                'excused' => $records->where('status', 'excused')->count(),
+                'unmarked' => $enrolledStudents->count() - $records->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * Batch mark attendance for a session.
+     * Accepts an array of { student_id, status, notes? } entries.
+     * Creates or updates attendance records in bulk.
+     */
+    public function markSessionAttendance(Request $request, string $sessionId)
+    {
+        $teacher = $this->getTeacher($request);
+        if (!$teacher) {
+            return response()->json(['error' => 'Teacher profile not found'], 404);
+        }
+
+        $session = ClassSession::where('id', $sessionId)
+            ->where('teacher_id', $teacher->id)
+            ->first();
+
+        if (!$session) {
+            return response()->json(['error' => 'Session not found or not yours'], 404);
+        }
+
+        if ($session->status === 'cancelled') {
+            return response()->json(['error' => 'Cannot mark attendance for a cancelled session'], 422);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'records' => 'required|array|min:1',
+            'records.*.student_id' => 'required|exists:students,id',
+            'records.*.status' => 'required|in:present,late,absent,excused',
+            'records.*.notes' => 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $authUserId = auth('api')->id();
+
+        // Batch-load existing records for this session (1 query)
+        $studentIds = collect($request->records)->pluck('student_id')->unique()->all();
+        $existingRecords = AttendanceRecord::where('session_id', $sessionId)
+            ->whereIn('student_id', $studentIds)
+            ->get()
+            ->keyBy('student_id');
+
+        $created = 0;
+        $updated = 0;
+
+        foreach ($request->records as $entry) {
+            $existing = $existingRecords->get($entry['student_id']);
+
+            $payload = [
+                'session_id' => $sessionId,
+                'student_id' => $entry['student_id'],
+                'status' => $entry['status'],
+                'scan_time' => now(),
+                'marked_by_id' => $authUserId,
+                'is_manual_entry' => true,
+                'is_override' => false,
+                'notes' => $entry['notes'] ?? null,
+            ];
+
+            if ($existing) {
+                $existing->update($payload);
+                $updated++;
+            } else {
+                AttendanceRecord::create($payload);
+                $created++;
+            }
+        }
+
+        // Auto-complete session if all enrolled students are marked
+        $enrolledCount = StudentSubjectEnrollment::where('subject_id', $session->subject_id)
+            ->whereIn('status', ['enrolled', 'active'])
+            ->distinct('student_id')
+            ->count('student_id');
+        $markedCount = AttendanceRecord::where('session_id', $sessionId)->count();
+
+        if ($markedCount >= $enrolledCount && $session->status === 'scheduled') {
+            $session->update(['status' => 'completed']);
+        }
+
+        return response()->json([
+            'message' => 'تم حفظ الحضور بنجاح',
+            'created' => $created,
+            'updated' => $updated,
+            'session_status' => $session->fresh()->status,
+        ]);
+    }
+
+    /**
+     * Generate QR code for a session owned by this teacher.
+     */
+    public function generateSessionQR(Request $request, string $sessionId)
+    {
+        $teacher = $this->getTeacher($request);
+        if (!$teacher) {
+            return response()->json(['error' => 'Teacher profile not found'], 404);
+        }
+
+        $session = ClassSession::where('id', $sessionId)
+            ->where('teacher_id', $teacher->id)
+            ->first();
+
+        if (!$session) {
+            return response()->json(['error' => 'Session not found or not yours'], 404);
+        }
+
+        $expiresAt = \Carbon\Carbon::parse($session->session_date->toDateString() . ' ' . $session->end_time)->addHour();
+
+        $payload = [
+            'type' => 'class_session',
+            'session_id' => $session->id,
+            'teacher_id' => $session->teacher_id,
+            'subject_id' => $session->subject_id,
+            'session_date' => $session->session_date->toDateString(),
+            'expires_at' => $expiresAt->toIso8601String(),
+            'generated_at' => now()->toIso8601String(),
+        ];
+
+        $signature = hash_hmac('sha256', json_encode($payload), config('app.key'));
+        $qrData = json_encode(array_merge($payload, ['signature' => $signature]));
+
+        $session->update([
+            'qr_code_data' => $qrData,
+            'qr_signature' => $signature,
+            'qr_generated_at' => now(),
+            'qr_expires_at' => $expiresAt,
+        ]);
+
+        return response()->json([
+            'session_id' => $session->id,
+            'qrData' => $qrData,
+            'expiresAt' => $expiresAt->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Legacy: Get attendance summary for teacher's subjects (kept for backward compat)
+     */
+    public function myAttendance(Request $request)
+    {
+        return $this->mySessions($request);
     }
 
     /**
@@ -486,7 +878,6 @@ class TeacherPortalController extends Controller
      */
     private function teachesSubject(Teacher $teacher, string $subjectId): bool
     {
-        // Check via teacher_subjects table
         $viaAssignment = TeacherSubject::where('teacher_id', $teacher->id)
             ->where('subject_id', $subjectId)
             ->where('is_active', true)
@@ -494,7 +885,6 @@ class TeacherPortalController extends Controller
 
         if ($viaAssignment) return true;
 
-        // Check via subjects.teacher_id
         return Subject::where('id', $subjectId)
             ->where('teacher_id', $teacher->id)
             ->exists();
