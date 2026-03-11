@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/JWTAuthContext';
-import { fetchMySubjects, fetchSubjectGrades, storeTeacherGrades, deleteTeacherGrade } from '../../lib/jwt-api';
+import { fetchMySubjects, fetchSubjectGrades, storeTeacherGrades, deleteTeacherGrade, publishTeacherGrades } from '../../lib/jwt-api';
 
 interface GradeEntry {
   student_id: string;
@@ -14,9 +14,10 @@ interface GradeEntry {
 
 const GRADE_TYPES = [
   { value: 'classwork', label: 'درجة أعمال الفصل', icon: 'fa-clipboard-list', color: 'green', defaultMax: 30 },
+  { value: 'homework', label: 'واجبات منزلية', icon: 'fa-home', color: 'teal', defaultMax: 10 },
   { value: 'midterm', label: 'درجة الامتحان النصفي', icon: 'fa-file-alt', color: 'blue', defaultMax: 30 },
   { value: 'final', label: 'درجة الامتحان النهائي', icon: 'fa-file-signature', color: 'red', defaultMax: 40 },
-  { value: 'assignment', label: 'واجب / تكليف', icon: 'fa-tasks', color: 'teal', defaultMax: 15 },
+  { value: 'assignment', label: 'واجب / تكليف', icon: 'fa-tasks', color: 'cyan', defaultMax: 15 },
   { value: 'participation', label: 'حضور ومشاركة', icon: 'fa-clipboard-check', color: 'purple', defaultMax: 15 },
   { value: 'quiz', label: 'اختبار قصير', icon: 'fa-question-circle', color: 'yellow', defaultMax: 10 },
   { value: 'project', label: 'مشروع', icon: 'fa-project-diagram', color: 'indigo', defaultMax: 20 },
@@ -37,6 +38,7 @@ export default function TeacherGrades() {
   const [loadingGrades, setLoadingGrades] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [viewMode, setViewMode] = useState<'input' | 'overview'>('input');
+  const [publishing, setPublishing] = useState(false);
 
   useEffect(() => {
     loadSubjects();
@@ -126,8 +128,44 @@ export default function TeacherGrades() {
     setMessage(null);
     try {
       const result = await storeTeacherGrades(selectedSubject, grades);
-      setMessage({ type: 'success', text: `تم حفظ ${result.created + result.updated} درجة بنجاح (${result.created} جديدة، ${result.updated} محدثة)` });
+      setMessage({ type: 'success', text: `تم حفظ ${result.created + result.updated} درجة كمسودة (${result.created} جديدة، ${result.updated} محدثة). يجب نشرها ليراها الطلاب.` });
       // Reload grades
+      await loadSubjectGrades(selectedSubject);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'فشل حفظ الدرجات' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveAndPublish = async () => {
+    if (!selectedSubject) return;
+
+    const grades: GradeEntry[] = [];
+    Object.entries(gradeInputs).forEach(([studentId, value]) => {
+      if (value !== '' && value !== undefined) {
+        grades.push({
+          student_id: studentId,
+          grade_type: selectedGradeType,
+          grade_name: gradeName || GRADE_TYPES.find(t => t.value === selectedGradeType)?.label || selectedGradeType,
+          grade_value: parseFloat(value),
+          max_grade: maxGrade,
+          weight: 1.0,
+          is_published: true,
+        });
+      }
+    });
+
+    if (grades.length === 0) {
+      setMessage({ type: 'error', text: 'لا توجد درجات لحفظها' });
+      return;
+    }
+
+    setSaving(true);
+    setMessage(null);
+    try {
+      const result = await storeTeacherGrades(selectedSubject, grades);
+      setMessage({ type: 'success', text: `تم حفظ ونشر ${result.created + result.updated} درجة بنجاح` });
       await loadSubjectGrades(selectedSubject);
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'فشل حفظ الدرجات' });
@@ -147,6 +185,34 @@ export default function TeacherGrades() {
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'فشل حذف الدرجة' });
     }
+  };
+
+  const handlePublishGrades = async (gradeIds: string[], publish: boolean) => {
+    if (gradeIds.length === 0) return;
+    setPublishing(true);
+    setMessage(null);
+    try {
+      const result = await publishTeacherGrades(gradeIds, publish);
+      setMessage({ type: 'success', text: result.message || (publish ? 'تم نشر الدرجات' : 'تم إلغاء نشر الدرجات') });
+      if (selectedSubject) {
+        await loadSubjectGrades(selectedSubject);
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'فشل تحديث حالة النشر' });
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handlePublishAll = async (publish: boolean) => {
+    const ids = existingGrades
+      .filter((g: any) => g.is_published !== publish)
+      .map((g: any) => g.id);
+    if (ids.length === 0) {
+      setMessage({ type: 'error', text: publish ? 'جميع الدرجات منشورة بالفعل' : 'لا توجد درجات منشورة لإلغاء نشرها' });
+      return;
+    }
+    await handlePublishGrades(ids, publish);
   };
 
   // Filter existing grades by selected type for pre-filling
@@ -182,6 +248,19 @@ export default function TeacherGrades() {
 
   const selectedSubjectData = subjects.find(s => s.subject_id === selectedSubject);
   const currentGradeType = GRADE_TYPES.find(t => t.value === selectedGradeType);
+
+  // Grading helpers
+  const getLetterGrade = (percentage: number) => {
+    if (percentage >= 90) return { letter: 'A', label: 'ممتاز', color: 'text-green-700 bg-green-100' };
+    if (percentage >= 80) return { letter: 'B', label: 'جيد جداً', color: 'text-blue-700 bg-blue-100' };
+    if (percentage >= 70) return { letter: 'C', label: 'جيد', color: 'text-cyan-700 bg-cyan-100' };
+    if (percentage >= 60) return { letter: 'D', label: 'مقبول', color: 'text-yellow-700 bg-yellow-100' };
+    if (percentage >= 50) return { letter: 'D-', label: 'مقبول ضعيف', color: 'text-orange-700 bg-orange-100' };
+    return { letter: 'F', label: 'راسب', color: 'text-red-700 bg-red-100' };
+  };
+
+  const draftCount = existingGrades.filter((g: any) => !g.is_published).length;
+  const publishedCount = existingGrades.filter((g: any) => g.is_published).length;
 
   if (loading) {
     return (
@@ -286,7 +365,37 @@ export default function TeacherGrades() {
               </div>
             </div>
 
-            {/* View Toggle */}
+            {/* Draft/Published Status Bar */}
+            {existingGrades.length > 0 && (
+              <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-200">
+                {draftCount > 0 && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                    <i className="fas fa-file-alt ml-1"></i>
+                    {draftCount} مسودة
+                  </span>
+                )}
+                {publishedCount > 0 && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <i className="fas fa-check-circle ml-1"></i>
+                    {publishedCount} منشورة
+                  </span>
+                )}
+                {(() => {
+                  const failCount = existingGrades.filter((g: any) => {
+                    const pct = (parseFloat(g.grade_value) / parseFloat(g.max_grade)) * 100;
+                    return pct < 50;
+                  }).length;
+                  return failCount > 0 ? (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                      <i className="fas fa-exclamation-triangle ml-1"></i>
+                      {failCount} أقل من 50%
+                    </span>
+                  ) : null;
+                })()}
+              </div>
+            )}
+
+            {/* View Toggle + Actions */}
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
               <div className="flex space-x-2 space-x-reverse">
                 <button
@@ -309,25 +418,70 @@ export default function TeacherGrades() {
                 </button>
               </div>
 
-              {viewMode === 'input' && (
-                <button
-                  onClick={handleSaveGrades}
-                  disabled={saving || students.length === 0}
-                  className="px-6 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition-colors flex items-center"
-                >
-                  {saving ? (
-                    <>
-                      <i className="fas fa-spinner fa-spin ml-2"></i>
-                      جاري الحفظ...
-                    </>
-                  ) : (
-                    <>
-                      <i className="fas fa-save ml-2"></i>
-                      حفظ الدرجات
-                    </>
-                  )}
-                </button>
-              )}
+              <div className="flex items-center space-x-2 space-x-reverse">
+                {viewMode === 'overview' && existingGrades.length > 0 && (
+                  <>
+                    {draftCount > 0 && (
+                      <button
+                        onClick={() => handlePublishAll(true)}
+                        disabled={publishing}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition-colors flex items-center"
+                      >
+                        {publishing ? <i className="fas fa-spinner fa-spin ml-1"></i> : <i className="fas fa-paper-plane ml-1"></i>}
+                        نشر الكل ({draftCount})
+                      </button>
+                    )}
+                    {publishedCount > 0 && (
+                      <button
+                        onClick={() => handlePublishAll(false)}
+                        disabled={publishing}
+                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition-colors flex items-center"
+                      >
+                        <i className="fas fa-eye-slash ml-1"></i>
+                        إلغاء نشر الكل
+                      </button>
+                    )}
+                  </>
+                )}
+                {viewMode === 'input' && (
+                  <>
+                    <button
+                      onClick={handleSaveGrades}
+                      disabled={saving || students.length === 0}
+                      className="px-5 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition-colors flex items-center"
+                    >
+                      {saving ? (
+                        <>
+                          <i className="fas fa-spinner fa-spin ml-2"></i>
+                          جاري الحفظ...
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-save ml-2"></i>
+                          حفظ كمسودة
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleSaveAndPublish}
+                      disabled={saving || students.length === 0}
+                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition-colors flex items-center"
+                    >
+                      {saving ? (
+                        <>
+                          <i className="fas fa-spinner fa-spin ml-2"></i>
+                          جاري النشر...
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-paper-plane ml-2"></i>
+                          حفظ ونشر
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -471,17 +625,36 @@ export default function TeacherGrades() {
                         </th>
                       ))}
                       <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 bg-gray-100">المجموع</th>
+                      <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 bg-gray-100">التقدير</th>
+                      <th className="px-3 py-3 text-center text-xs font-medium text-gray-500">النشر</th>
                       <th className="px-3 py-3 text-center text-xs font-medium text-gray-500">إجراءات</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {students.map((student: any, index: number) => {
                       const { summary, total, totalMax } = getStudentGradeSummary(student.id);
+                      const overallPct = totalMax > 0 ? (total / totalMax) * 100 : -1;
+                      const letterInfo = overallPct >= 0 ? getLetterGrade(overallPct) : null;
+                      const isFailing = overallPct >= 0 && overallPct < 50;
+                      const studentGrades = existingGrades.filter((g: any) => g.student_id === student.id);
+                      const allPublished = studentGrades.length > 0 && studentGrades.every((g: any) => g.is_published);
+                      const somePublished = studentGrades.some((g: any) => g.is_published);
+                      const studentDrafts = studentGrades.filter((g: any) => !g.is_published).length;
                       return (
-                        <tr key={student.id} className="hover:bg-gray-50">
+                        <tr key={student.id} className={`hover:bg-gray-50 ${isFailing ? 'bg-red-50/40' : ''}`}>
                           <td className="px-3 py-2 text-sm text-gray-500">{index + 1}</td>
                           <td className="px-3 py-2 text-sm font-mono text-gray-700">{student.campus_id}</td>
-                          <td className="px-3 py-2 text-sm font-medium text-gray-900">{student.name}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center">
+                              <span className="text-sm font-medium text-gray-900">{student.name}</span>
+                              {isFailing && (
+                                <span className="mr-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">
+                                  <i className="fas fa-exclamation-triangle ml-0.5"></i>
+                                  راسب
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           {GRADE_TYPES.map(type => {
                             const s = summary[type.value];
                             return (
@@ -500,19 +673,58 @@ export default function TeacherGrades() {
                             );
                           })}
                           <td className="px-3 py-2 text-center bg-gray-50">
-                            <span className={`text-sm font-bold ${
-                              totalMax > 0 && (total / totalMax) >= 0.6 ? 'text-green-700' :
-                              totalMax > 0 && (total / totalMax) >= 0.5 ? 'text-yellow-700' : 'text-red-700'
-                            }`}>
-                              {totalMax > 0 ? `${total}/${totalMax}` : '—'}
-                            </span>
+                            <div>
+                              <span className={`text-sm font-bold ${
+                                overallPct >= 60 ? 'text-green-700' :
+                                overallPct >= 50 ? 'text-yellow-700' :
+                                overallPct >= 0 ? 'text-red-700' : 'text-gray-400'
+                              }`}>
+                                {totalMax > 0 ? `${total}/${totalMax}` : '—'}
+                              </span>
+                              {overallPct >= 0 && (
+                                <div className="text-[10px] text-gray-400">{overallPct.toFixed(0)}%</div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-center bg-gray-50">
+                            {letterInfo ? (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${letterInfo.color}`}>
+                                {letterInfo.letter} — {letterInfo.label}
+                              </span>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
                           </td>
                           <td className="px-3 py-2 text-center">
-                            {existingGrades.filter((g: any) => g.student_id === student.id).length > 0 && (
+                            {studentGrades.length === 0 ? (
+                              <span className="text-gray-300">—</span>
+                            ) : (
+                              <div className="flex flex-col items-center gap-1">
+                                <button
+                                  onClick={() => handlePublishGrades(studentGrades.map((g: any) => g.id), !allPublished)}
+                                  disabled={publishing}
+                                  className={`px-2 py-1 text-xs rounded-full font-medium transition-colors ${
+                                    allPublished
+                                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                      : somePublished
+                                      ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                  }`}
+                                  title={allPublished ? 'إلغاء النشر' : 'نشر الدرجات'}
+                                >
+                                  <i className={`fas ${allPublished ? 'fa-check-circle' : somePublished ? 'fa-adjust' : 'fa-file-alt'} ml-1`}></i>
+                                  {allPublished ? 'منشور' : somePublished ? 'جزئي' : 'مسودة'}
+                                </button>
+                                {studentDrafts > 0 && (
+                                  <span className="text-[10px] text-amber-600">{studentDrafts} غير منشورة</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {studentGrades.length > 0 && (
                               <div className="flex items-center justify-center space-x-1 space-x-reverse">
-                                {existingGrades
-                                  .filter((g: any) => g.student_id === student.id)
-                                  .map((g: any) => (
+                                {studentGrades.map((g: any) => (
                                     <button
                                       key={g.id}
                                       onClick={() => handleDeleteGrade(g.id)}

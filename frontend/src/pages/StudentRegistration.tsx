@@ -11,6 +11,7 @@ import {
   fetchStudentGroups
 } from "@/lib/api";
 import { Plus, Search, Edit, UserCheck, DollarSign, Users, CheckCircle, Clock, AlertCircle, Building, Calendar, Filter, X } from "lucide-react";
+import { formatDate } from "@/lib/utils";
 
 export default function StudentRegistration() {
   const queryClient = useQueryClient();
@@ -149,57 +150,6 @@ export default function StudentRegistration() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">إجمالي التسجيلات</p>
-                <p className="mt-2 text-3xl font-bold text-gray-900">{stats.total}</p>
-              </div>
-              <div className="p-3 bg-blue-50 rounded-lg">
-                <Users className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">التسجيلات النشطة</p>
-                <p className="mt-2 text-3xl font-bold text-green-600">{stats.active}</p>
-              </div>
-              <div className="p-3 bg-green-50 rounded-lg">
-                <UserCheck className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">الرسوم المدفوعة</p>
-                <p className="mt-2 text-3xl font-bold text-blue-600">{stats.paid}</p>
-              </div>
-              <div className="p-3 bg-blue-50 rounded-lg">
-                <CheckCircle className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">رسوم غير مدفوعة</p>
-                <p className="mt-2 text-3xl font-bold text-red-600">{stats.unpaid}</p>
-              </div>
-              <div className="p-3 bg-red-50 rounded-lg">
-                <DollarSign className="h-6 w-6 text-red-600" />
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Filters */}
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
@@ -362,7 +312,7 @@ export default function StudentRegistration() {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{groupName}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {registration.registration_date 
-                              ? new Date(registration.registration_date).toLocaleDateString('ar-SA') 
+                              ? formatDate(registration.registration_date) 
                               : '-'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">

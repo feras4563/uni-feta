@@ -1,13 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/JWTAuthContext';
 import { fetchStudentMyGrades } from '../../lib/jwt-api';
+import { formatDate } from '../../lib/utils';
+
+// Grade type columns shown in the summary table
+const GRADE_COLUMNS = [
+  { key: 'classwork', label: 'أعمال الفصل' },
+  { key: 'homework', label: 'واجبات منزلية' },
+  { key: 'assignment', label: 'واجبات' },
+  { key: 'quiz', label: 'اختبارات قصيرة' },
+  { key: 'midterm', label: 'نصفي' },
+  { key: 'final', label: 'نهائي' },
+  { key: 'project', label: 'مشاريع' },
+  { key: 'participation', label: 'مشاركة' },
+] as const;
 
 export default function StudentGrades() {
   const { user } = useAuth();
-  const [grades, setGrades] = useState<any[]>([]);
   const [bySubject, setBySubject] = useState<any[]>([]);
+  const [overallGPA, setOverallGPA] = useState<number>(0);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'subjects' | 'all'>('subjects');
+  const [expandedSubject, setExpandedSubject] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) loadGrades();
@@ -17,8 +30,8 @@ export default function StudentGrades() {
     try {
       setLoading(true);
       const data = await fetchStudentMyGrades();
-      setGrades(data.grades || []);
       setBySubject(data.by_subject || []);
+      setOverallGPA(data.overall_gpa || 0);
     } catch (error) {
       console.error('Failed to load grades:', error);
     } finally {
@@ -26,219 +39,246 @@ export default function StudentGrades() {
     }
   };
 
-  const getGradeColor = (percentage: number) => {
-    if (percentage >= 90) return 'text-green-600 bg-green-100';
-    if (percentage >= 80) return 'text-blue-600 bg-blue-100';
-    if (percentage >= 70) return 'text-yellow-600 bg-yellow-100';
-    if (percentage >= 60) return 'text-orange-600 bg-orange-100';
-    return 'text-red-600 bg-red-100';
+  // Aggregate grades by type for a subject: sum value / sum max
+  const getTypeAggregate = (subjectGrades: any[], type: string) => {
+    const matched = subjectGrades.filter((g: any) => g.grade_type === type);
+    if (matched.length === 0) return null;
+    const totalVal = matched.reduce((s: number, g: any) => s + parseFloat(g.grade_value), 0);
+    const totalMax = matched.reduce((s: number, g: any) => s + parseFloat(g.max_grade), 0);
+    return { value: totalVal, max: totalMax, count: matched.length };
   };
 
-  const getGradeTypeLabel = (type: string) => {
-    const map: Record<string, string> = {
-      midterm: 'اختبار نصفي',
-      final: 'اختبار نهائي',
-      assignment: 'واجب',
-      quiz: 'اختبار قصير',
-      project: 'مشروع',
-      participation: 'مشاركة',
-      homework: 'واجب منزلي',
-      classwork: 'عمل صفي',
-    };
-    return map[type] || type;
-  };
+  // Which columns actually have data across all subjects
+  const activeColumns = GRADE_COLUMNS.filter(col =>
+    bySubject.some((s: any) => s.grades.some((g: any) => g.grade_type === col.key))
+  );
+
+  const failedCount = bySubject.filter((s: any) => s.needs_retake).length;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            <i className="fas fa-graduation-cap ml-2 text-purple-500"></i>
-            درجاتي
-          </h1>
-          <p className="text-gray-600 mt-1">عرض جميع الدرجات المنشورة</p>
-        </div>
-        <div className="flex items-center space-x-2 space-x-reverse">
-          <button
-            onClick={() => setViewMode('subjects')}
-            className={`px-3 py-2 text-sm rounded-md transition-colors ${
-              viewMode === 'subjects' ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            <i className="fas fa-th-large ml-1"></i>
-            حسب المادة
-          </button>
-          <button
-            onClick={() => setViewMode('all')}
-            className={`px-3 py-2 text-sm rounded-md transition-colors ${
-              viewMode === 'all' ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            <i className="fas fa-list ml-1"></i>
-            عرض الكل
-          </button>
+    <div className="min-h-screen bg-gray-50 p-6 md:p-8">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-gray-900">
+          <i className="fas fa-graduation-cap ml-2 text-gray-500"></i>
+          كشف الدرجات
+        </h1>
+        <div className="flex items-center gap-4 mt-1">
+          <p className="text-sm text-gray-500">الدرجات المنشورة للفصل الحالي</p>
+          {bySubject.length > 0 && (
+            <span className="text-sm text-gray-500">
+              المعدل التراكمي: <span className="font-bold text-gray-800">{overallGPA.toFixed(2)}</span>
+              <span className="text-gray-400"> / 4.0</span>
+            </span>
+          )}
         </div>
       </div>
 
       {loading ? (
-        <div className="space-y-6">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="animate-pulse bg-white rounded-lg shadow p-6">
-              <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
-              <div className="space-y-3">
-                <div className="h-12 bg-gray-200 rounded"></div>
-                <div className="h-12 bg-gray-200 rounded"></div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : viewMode === 'subjects' ? (
-        /* By Subject View */
-        bySubject.length > 0 ? (
-          <div className="space-y-6">
-            {bySubject.map((subjectGroup: any, idx: number) => (
-              <div key={idx} className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
-                <div className="p-5 border-b border-gray-200 bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center ml-3">
-                        <i className="fas fa-book text-purple-600"></i>
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-gray-900">{subjectGroup.subject?.name || 'مادة'}</h3>
-                        {subjectGroup.subject?.code && (
-                          <span className="text-xs text-gray-500">{subjectGroup.subject.code}</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-4 space-x-reverse">
-                      <span className="text-sm text-gray-500">{subjectGroup.grade_count} درجة</span>
-                      <div className={`px-3 py-1.5 rounded-lg text-sm font-bold ${getGradeColor(subjectGroup.average)}`}>
-                        المعدل: {subjectGroup.average}%
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {subjectGroup.grades.map((grade: any) => {
-                    const percentage = grade.max_grade > 0 ? Math.round((grade.grade_value / grade.max_grade) * 100) : 0;
-                    return (
-                      <div key={grade.id} className="p-4 hover:bg-gray-50 transition-colors">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center space-x-2 space-x-reverse">
-                              <span className="font-medium text-gray-900">{grade.grade_name}</span>
-                              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-                                {getGradeTypeLabel(grade.grade_type)}
-                              </span>
-                            </div>
-                            {grade.feedback && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                <i className="fas fa-comment ml-1"></i>
-                                {grade.feedback}
-                              </p>
-                            )}
-                            {grade.grade_date && (
-                              <p className="text-xs text-gray-400 mt-1">
-                                {new Date(grade.grade_date).toLocaleDateString('ar-SA')}
-                              </p>
-                            )}
-                          </div>
-                          <div className="text-left">
-                            <div className={`px-3 py-1.5 rounded-lg text-sm font-bold ${getGradeColor(percentage)}`}>
-                              {grade.grade_value} / {grade.max_grade}
-                            </div>
-                            <p className="text-xs text-gray-400 mt-1 text-center">{percentage}%</p>
-                          </div>
-                        </div>
-                        {/* Progress bar */}
-                        <div className="mt-2">
-                          <div className="w-full bg-gray-200 rounded-full h-1.5">
-                            <div
-                              className={`h-1.5 rounded-full transition-all ${
-                                percentage >= 70 ? 'bg-green-500' :
-                                percentage >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${Math.min(percentage, 100)}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+        <div className="bg-white rounded-lg shadow p-8">
+          <div className="animate-pulse space-y-4">
+            <div className="h-8 bg-gray-200 rounded w-full"></div>
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="h-12 bg-gray-100 rounded w-full"></div>
             ))}
           </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gray-100 mb-4">
-              <i className="fas fa-graduation-cap text-gray-400 text-2xl"></i>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">لا توجد درجات منشورة</h3>
-            <p className="text-gray-500">لم يتم نشر أي درجات بعد</p>
-          </div>
-        )
+        </div>
+      ) : bySubject.length === 0 ? (
+        <div className="bg-white rounded-lg shadow p-12 text-center">
+          <i className="fas fa-graduation-cap text-gray-300 text-4xl mb-4"></i>
+          <h3 className="text-base font-medium text-gray-900 mb-1">لا توجد درجات منشورة</h3>
+          <p className="text-sm text-gray-500">لم يتم نشر أي درجات بعد</p>
+        </div>
       ) : (
-        /* All Grades View */
-        grades.length > 0 ? (
-          <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+        <>
+          {/* Main Grades Table */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">المادة</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">الدرجة</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">النوع</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">العلامة</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">النسبة</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">المدرس</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">التاريخ</th>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-right px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">المادة</th>
+                    <th className="text-right px-3 py-3 font-semibold text-gray-600 whitespace-nowrap">الرمز</th>
+                    {activeColumns.map(col => (
+                      <th key={col.key} className="text-center px-3 py-3 font-semibold text-gray-600 whitespace-nowrap">{col.label}</th>
+                    ))}
+                    <th className="text-center px-3 py-3 font-semibold text-gray-600 whitespace-nowrap bg-gray-100">المجموع</th>
+                    <th className="text-center px-3 py-3 font-semibold text-gray-600 whitespace-nowrap bg-gray-100">النسبة</th>
+                    <th className="text-center px-3 py-3 font-semibold text-gray-600 whitespace-nowrap">التقدير</th>
+                    <th className="text-center px-3 py-3 font-semibold text-gray-600 whitespace-nowrap">الحالة</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {grades.map((grade: any) => {
-                    const percentage = grade.max_grade > 0 ? Math.round((grade.grade_value / grade.max_grade) * 100) : 0;
+                  {bySubject.map((subjectGroup: any) => {
+                    const subjectId = subjectGroup.subject?.id;
+                    const isFailing = subjectGroup.needs_retake;
+                    const isExpanded = expandedSubject === subjectId;
+                    const letterGrade = subjectGroup.letter_grade;
+
                     return (
-                      <tr key={grade.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          {grade.subject?.name || '-'}
-                          {grade.subject?.code && <span className="text-xs text-gray-400 mr-1">({grade.subject.code})</span>}
+                      <tr
+                        key={subjectId}
+                        className={`hover:bg-gray-50 cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50/30' : ''}`}
+                        onClick={() => setExpandedSubject(isExpanded ? null : subjectId)}
+                      >
+                        <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <i className={`fas fa-chevron-${isExpanded ? 'down' : 'left'} text-gray-400 text-[10px] ml-2 transition-transform`}></i>
+                            {subjectGroup.subject?.name || '—'}
+                          </div>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-900">{grade.grade_name}</td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-                            {getGradeTypeLabel(grade.grade_type)}
+                        <td className="px-3 py-3 text-gray-500 font-mono text-xs">{subjectGroup.subject?.code || '—'}</td>
+                        {activeColumns.map(col => {
+                          const agg = getTypeAggregate(subjectGroup.grades, col.key);
+                          if (!agg) return <td key={col.key} className="px-3 py-3 text-center text-gray-300">—</td>;
+                          const pct = agg.max > 0 ? (agg.value / agg.max) * 100 : 0;
+                          return (
+                            <td key={col.key} className="px-3 py-3 text-center">
+                              <span className={`font-medium ${pct < 50 ? 'text-red-600' : 'text-gray-800'}`}>
+                                {agg.value}/{agg.max}
+                              </span>
+                            </td>
+                          );
+                        })}
+                        <td className="px-3 py-3 text-center bg-gray-50/50">
+                          <span className={`font-bold ${isFailing ? 'text-red-600' : 'text-gray-900'}`}>
+                            {subjectGroup.total_value}/{subjectGroup.total_max}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm font-bold text-gray-900">
-                          {grade.grade_value} / {grade.max_grade}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 text-xs rounded-full font-bold ${getGradeColor(percentage)}`}>
-                            {percentage}%
+                        <td className="px-3 py-3 text-center bg-gray-50/50">
+                          <span className={`font-bold ${isFailing ? 'text-red-600' : subjectGroup.average >= 70 ? 'text-green-700' : 'text-gray-900'}`}>
+                            {subjectGroup.average}%
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{grade.teacher?.name || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
-                          {grade.grade_date ? new Date(grade.grade_date).toLocaleDateString('ar-SA') : '-'}
+                        <td className="px-3 py-3 text-center">
+                          {letterGrade && (
+                            <span className={`font-bold ${isFailing ? 'text-red-600' : 'text-gray-800'}`}>
+                              {letterGrade.letter}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-center whitespace-nowrap">
+                          {isFailing ? (
+                            <span className="text-red-600 text-xs font-medium">راسب — إعادة</span>
+                          ) : (
+                            <span className="text-green-700 text-xs font-medium">ناجح</span>
+                          )}
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
+                {/* Footer row: overall */}
+                {bySubject.length > 1 && (
+                  <tfoot>
+                    <tr className="bg-gray-50 border-t-2 border-gray-200">
+                      <td className="px-4 py-3 font-bold text-gray-700" colSpan={2 + activeColumns.length}>المعدل العام</td>
+                      <td className="px-3 py-3 text-center bg-gray-100" colSpan={2}>
+                        <span className="font-bold text-gray-900">
+                          GPA {overallGPA.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center" colSpan={2}>
+                        {failedCount > 0 && (
+                          <span className="text-xs text-red-600">{failedCount} مادة تحتاج إعادة</span>
+                        )}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gray-100 mb-4">
-              <i className="fas fa-graduation-cap text-gray-400 text-2xl"></i>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">لا توجد درجات منشورة</h3>
-            <p className="text-gray-500">لم يتم نشر أي درجات بعد</p>
+
+          {/* Expanded detail panel — shows below the table when a subject is clicked */}
+          {expandedSubject && (() => {
+            const subjectGroup = bySubject.find((s: any) => s.subject?.id === expandedSubject);
+            if (!subjectGroup) return null;
+            return (
+              <div className="mt-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-700">
+                    تفاصيل درجات: {subjectGroup.subject?.name}
+                    {subjectGroup.subject?.code && <span className="text-gray-400 font-normal mr-2">({subjectGroup.subject.code})</span>}
+                  </h3>
+                  <button onClick={(e) => { e.stopPropagation(); setExpandedSubject(null); }} className="text-gray-400 hover:text-gray-600">
+                    <i className="fas fa-times"></i>
+                  </button>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50/50">
+                      <th className="text-right px-4 py-2 font-medium text-gray-500">التقييم</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-500">النوع</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-500">الدرجة</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-500">النسبة</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-500">التقدير</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-500">المدرس</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-500">التاريخ</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-500">ملاحظات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {subjectGroup.grades.map((grade: any) => {
+                      const pct = grade.percentage ?? (grade.max_grade > 0 ? Math.round((grade.grade_value / grade.max_grade) * 100) : 0);
+                      const lg = grade.letter_grade;
+                      const typeLabels: Record<string, string> = {
+                        midterm: 'نصفي', final: 'نهائي', assignment: 'واجب', quiz: 'اختبار قصير',
+                        project: 'مشروع', participation: 'مشاركة', homework: 'واجب منزلي', classwork: 'أعمال فصل',
+                      };
+                      return (
+                        <tr key={grade.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-2.5 text-gray-900">{grade.grade_name}</td>
+                          <td className="px-3 py-2.5 text-gray-500 text-xs">{typeLabels[grade.grade_type] || grade.grade_type}</td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span className={`font-medium ${pct < 50 ? 'text-red-600' : 'text-gray-900'}`}>
+                              {grade.grade_value}/{grade.max_grade}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span className={`font-medium ${pct < 50 ? 'text-red-600' : pct >= 70 ? 'text-green-700' : 'text-gray-700'}`}>
+                              {pct}%
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span className={`font-medium ${pct < 50 ? 'text-red-600' : 'text-gray-700'}`}>
+                              {lg?.letter || '—'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-gray-500 text-xs">{grade.teacher?.name || '—'}</td>
+                          <td className="px-3 py-2.5 text-gray-400 text-xs">
+                            {grade.grade_date ? formatDate(grade.grade_date) : '—'}
+                          </td>
+                          <td className="px-3 py-2.5 text-xs text-gray-500">
+                            {grade.feedback || '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+
+          {/* Compact grade scale — inline, not a big card */}
+          <div className="mt-4 flex items-center gap-3 text-[11px] text-gray-400">
+            <span className="font-medium text-gray-500">سلم التقديرات:</span>
+            {[
+              { letter: 'A', range: '90+' },
+              { letter: 'B', range: '80-89' },
+              { letter: 'C', range: '70-79' },
+              { letter: 'D', range: '60-69' },
+              { letter: 'D-', range: '50-59' },
+              { letter: 'F', range: '<50' },
+            ].map((g, i) => (
+              <span key={g.letter}>
+                <span className="font-bold text-gray-500">{g.letter}</span> {g.range}%
+                {i < 5 && <span className="mx-1 text-gray-300">|</span>}
+              </span>
+            ))}
           </div>
-        )
+        </>
       )}
     </div>
   );

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/JWTAuthContext';
 import { fetchStudentPortalDashboard } from '../../lib/jwt-api';
+import { formatCurrency, formatLongDate, formatNumber, formatPercent, toLatinDigits } from '../../lib/utils';
 
 const DAY_NAMES: Record<number, string> = {
   0: 'الأحد',
@@ -62,10 +63,6 @@ export default function StudentDashboard() {
 
   const todayName = DAY_NAMES[new Date().getDay()] || '';
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ar-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       {/* Header */}
@@ -86,12 +83,12 @@ export default function StudentDashboard() {
                 </h1>
                 <p className="text-gray-600 mt-1">
                   {studentInfo?.department?.name ? `قسم ${studentInfo.department.name}` : user?.departmentName ? `قسم ${user.departmentName}` : 'طالب'}
-                  {studentInfo?.year && <span className="text-gray-400 mr-2">• السنة {studentInfo.year}</span>}
+                  {studentInfo?.year && <span className="text-gray-400 mr-2">• السنة {formatNumber(studentInfo.year)}</span>}
                 </p>
                 {(studentInfo?.campus_id || user?.studentCampusId) && (
                   <div className="mt-1 text-sm text-gray-500">
                     <i className="fas fa-id-badge ml-1"></i>
-                    الرقم الجامعي: {studentInfo?.campus_id || user?.studentCampusId}
+                    الرقم الجامعي: {toLatinDigits(studentInfo?.campus_id || user?.studentCampusId)}
                   </div>
                 )}
               </div>
@@ -100,12 +97,7 @@ export default function StudentDashboard() {
               <div className="text-left ml-6">
                 <div className="text-sm text-gray-500">اليوم</div>
                 <div className="text-lg font-semibold text-gray-900">
-                  {new Date().toLocaleDateString('ar-SA', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
+                  {formatLongDate(new Date())}
                 </div>
               </div>
               <button
@@ -147,61 +139,10 @@ export default function StudentDashboard() {
                 <i className="fas fa-clipboard-check ml-2"></i>
                 حضوري
               </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <i className="fas fa-book text-blue-600 text-xl"></i>
-            </div>
-            <div className="mr-4">
-              <h3 className="text-sm font-medium text-gray-500">المواد المسجلة</h3>
-              <p className="text-2xl font-bold text-gray-900">{loading ? '...' : stats.enrolledSubjects}</p>
-              <p className="text-xs text-gray-400">{stats.totalCredits} ساعة معتمدة</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <i className="fas fa-check-circle text-green-600 text-xl"></i>
-            </div>
-            <div className="mr-4">
-              <h3 className="text-sm font-medium text-gray-500">نسبة الحضور</h3>
-              <p className="text-2xl font-bold text-gray-900">{loading ? '...' : `${stats.attendanceRate}%`}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <i className="fas fa-graduation-cap text-purple-600 text-xl"></i>
-            </div>
-            <div className="mr-4">
-              <h3 className="text-sm font-medium text-gray-500">الدرجات المنشورة</h3>
-              <p className="text-2xl font-bold text-gray-900">{loading ? '...' : stats.publishedGrades}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className={`p-2 rounded-lg ${stats.totalBalance > 0 ? 'bg-red-100' : 'bg-green-100'}`}>
-              <i className={`fas fa-file-invoice-dollar text-xl ${stats.totalBalance > 0 ? 'text-red-600' : 'text-green-600'}`}></i>
-            </div>
-            <div className="mr-4">
-              <h3 className="text-sm font-medium text-gray-500">الرصيد المتبقي</h3>
-              <p className={`text-2xl font-bold ${stats.totalBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {loading ? '...' : formatCurrency(stats.totalBalance)}
-              </p>
-              <p className="text-xs text-gray-400">من {formatCurrency(stats.totalFees)} إجمالي</p>
+              <button onClick={() => navigate('/student/teachers')} className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                <i className="fas fa-chalkboard-teacher ml-2"></i>
+                مدرسي
+              </button>
             </div>
           </div>
         </div>
@@ -260,7 +201,7 @@ export default function StudentDashboard() {
                   <i className="fas fa-coffee text-gray-400"></i>
                 </div>
                 <h3 className="text-sm font-medium text-gray-900 mb-2">لا توجد محاضرات اليوم</h3>
-                <p className="text-xs text-gray-500">يمكنك الاطلاع على جدولك الكامل من صفحة الجدول</p>
+                <p className="text-xs text-gray-500">يمكنك الاطلاع على جدولك الكامل من صفحة جدولي</p>
               </div>
             )}
           </div>
@@ -297,7 +238,7 @@ export default function StudentDashboard() {
                       </h3>
                       <div className="flex items-center space-x-3 space-x-reverse text-xs text-gray-500 mt-1">
                         {enrollment.subject?.code && <span className="bg-gray-100 px-2 py-0.5 rounded">{enrollment.subject.code}</span>}
-                        {enrollment.subject?.credits && <span>{enrollment.subject.credits} ساعات</span>}
+                        {enrollment.subject?.credits && <span>{formatNumber(enrollment.subject.credits)} ساعات</span>}
                       </div>
                     </div>
                   </div>
@@ -338,15 +279,15 @@ export default function StudentDashboard() {
             <div className="space-y-4">
               <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                 <span className="text-sm text-gray-600">إجمالي الرسوم</span>
-                <span className="font-bold text-gray-900">{formatCurrency(stats.totalFees)}</span>
+                <span className="font-bold text-gray-900">{formatCurrency(stats.totalFees, 'دينار')}</span>
               </div>
               <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
                 <span className="text-sm text-green-700">المبلغ المدفوع</span>
-                <span className="font-bold text-green-700">{formatCurrency(stats.totalPaid)}</span>
+                <span className="font-bold text-green-700">{formatCurrency(stats.totalPaid, 'دينار')}</span>
               </div>
               <div className={`flex justify-between items-center p-3 rounded-lg ${stats.totalBalance > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
                 <span className={`text-sm ${stats.totalBalance > 0 ? 'text-red-700' : 'text-green-700'}`}>المتبقي</span>
-                <span className={`font-bold ${stats.totalBalance > 0 ? 'text-red-700' : 'text-green-700'}`}>{formatCurrency(stats.totalBalance)}</span>
+                <span className={`font-bold ${stats.totalBalance > 0 ? 'text-red-700' : 'text-green-700'}`}>{formatCurrency(stats.totalBalance, 'دينار')}</span>
               </div>
               <button
                 onClick={() => navigate('/student/fees')}
@@ -386,7 +327,7 @@ export default function StudentDashboard() {
             >
               <div className="flex items-center">
                 <i className="fas fa-calendar-alt text-teal-600 ml-3"></i>
-                <span className="font-medium text-gray-900">عرض الجدول الكامل</span>
+                <span className="font-medium text-gray-900">عرض جدولي</span>
               </div>
               <i className="fas fa-chevron-left text-gray-500"></i>
             </button>
@@ -406,7 +347,17 @@ export default function StudentDashboard() {
             >
               <div className="flex items-center">
                 <i className="fas fa-file-invoice-dollar text-orange-600 ml-3"></i>
-                <span className="font-medium text-gray-900">الرسوم والفواتير</span>
+                <span className="font-medium text-gray-900">رسومي</span>
+              </div>
+              <i className="fas fa-chevron-left text-gray-500"></i>
+            </button>
+            <button
+              onClick={() => navigate('/student/teachers')}
+              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+            >
+              <div className="flex items-center">
+                <i className="fas fa-chalkboard-teacher text-indigo-600 ml-3"></i>
+                <span className="font-medium text-gray-900">مدرسي</span>
               </div>
               <i className="fas fa-chevron-left text-gray-500"></i>
             </button>

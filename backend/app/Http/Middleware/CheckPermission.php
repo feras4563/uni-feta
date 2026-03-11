@@ -3,10 +3,10 @@
 namespace App\Http\Middleware;
 
 use Closure;
-use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 use App\Models\AppUser;
 use App\Models\Permission;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 class CheckPermission
 {
@@ -29,11 +29,20 @@ class CheckPermission
             return response()->json(['error' => 'User profile not found'], 404);
         }
 
-        // Check if user has permission
-        $hasPermission = Permission::where('role', $appUser->role)
-            ->where('resource', $resource)
-            ->whereJsonContains('actions', $action)
-            ->exists();
+        if ($appUser->role === 'manager') {
+            return $next($request);
+        }
+
+        $appUser->loadMissing('roleModel');
+
+        $hasPermission = (bool) $appUser->roleModel?->hasPermission($resource, $action);
+
+        if (!$hasPermission) {
+            $hasPermission = Permission::where('role', $appUser->role)
+                ->where('resource', $resource)
+                ->whereJsonContains('actions', $action)
+                ->exists();
+        }
 
         if (!$hasPermission) {
             return response()->json([

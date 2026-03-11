@@ -2,6 +2,22 @@ import { getToken, removeToken } from './jwt-auth';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
+export type APIClientError = Error & {
+  status?: number;
+  details?: string[];
+  fields?: Record<string, string[]>;
+};
+
+function buildAPIError(message: string, status?: number, fields?: Record<string, string[]>) {
+  const error = new Error(message) as APIClientError;
+  error.status = status;
+  error.fields = fields;
+  error.details = fields
+    ? Object.values(fields).flat().filter((value): value is string => Boolean(value))
+    : undefined;
+  return error;
+}
+
 // API client with JWT authentication
 class APIClient {
   private baseURL: string;
@@ -53,10 +69,14 @@ class APIClient {
         // Handle Laravel validation errors
         if (error.errors && typeof error.errors === 'object') {
           const validationMessages = Object.values(error.errors).flat().join(', ');
-          throw new Error(validationMessages || `HTTP ${response.status}`);
+          throw buildAPIError(
+            error.message || validationMessages || `HTTP ${response.status}`,
+            response.status,
+            error.errors as Record<string, string[]>
+          );
         }
         
-        throw new Error(error.message || error.error || `HTTP ${response.status}`);
+        throw buildAPIError(error.message || error.error || `HTTP ${response.status}`, response.status);
       }
 
       // Handle empty responses
@@ -132,9 +152,13 @@ class APIClient {
       }
       const error = await response.json().catch(() => ({ message: `HTTP ${response.status}` }));
       if (error.errors && typeof error.errors === 'object') {
-        throw new Error(Object.values(error.errors).flat().join(', '));
+        throw buildAPIError(
+          error.message || Object.values(error.errors).flat().join(', '),
+          response.status,
+          error.errors as Record<string, string[]>
+        );
       }
-      throw new Error(error.message || `HTTP ${response.status}`);
+      throw buildAPIError(error.message || `HTTP ${response.status}`, response.status);
     }
 
     const contentType = response.headers.get('content-type');

@@ -28,6 +28,7 @@ import {
   DollarSign,
   Ban
 } from "lucide-react";
+import { formatDate, toLatinDigits } from "@/lib/utils";
 
 export default function StudentGroupDetail() {
   const { id } = useParams<{ id: string }>();
@@ -327,7 +328,7 @@ export default function StudentGroupDetail() {
                 filteredStudentsInGroup.map((registration: any) => (
                   <tr key={registration.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {registration.student?.national_id_passport || '-'}
+                      {registration.student?.national_id_passport ? toLatinDigits(registration.student.national_id_passport) : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {registration.student?.name || '-'}
@@ -340,7 +341,7 @@ export default function StudentGroupDetail() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {registration.registration_date 
-                        ? new Date(registration.registration_date).toLocaleDateString('ar-SA') 
+                        ? formatDate(registration.registration_date) 
                         : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -601,7 +602,7 @@ function AddStudentModal({
                           <FeeStatusBadge student={student} />
                         </div>
                         <div className="text-xs text-gray-500 truncate mt-0.5">
-                          {student.national_id_passport || '-'} | {student.email || '-'}
+                          {student.national_id_passport ? toLatinDigits(student.national_id_passport) : '-'} | {student.email || '-'}
                         </div>
                       </div>
                     </label>

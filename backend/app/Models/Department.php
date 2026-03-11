@@ -15,6 +15,8 @@ class Department extends Model
         'name',
         'name_en',
         'description',
+        'location',
+        'structure',
         'head',
         'head_teacher_id',
         'semester_count',

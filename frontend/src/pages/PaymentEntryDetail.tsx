@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, FileText, Calendar, DollarSign, User } from 'lucide-react';
 import { api } from '../lib/api-client';
+import { formatCurrency, formatDate, formatDateTime, toLatinDigits } from '../lib/utils';
 
 interface PaymentEntry {
   id: string;
@@ -102,7 +103,7 @@ export default function PaymentEntryDetail() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">تفاصيل قيد الدفع</h1>
             <p className="text-sm text-gray-500 mt-1">
-              {entry.reference_number || `قيد ${entry.payment_type === 'receive' ? 'قبض' : 'دفع'}`}
+              {entry.reference_number ? toLatinDigits(entry.reference_number) : `قيد ${entry.payment_type === 'receive' ? 'قبض' : 'دفع'}`}
             </p>
           </div>
           <span
@@ -142,7 +143,7 @@ export default function PaymentEntryDetail() {
               <div>
                 <label className="block text-sm font-medium text-gray-500 mb-1">المبلغ</label>
                 <p className="text-2xl font-bold text-gray-900">
-                  {Number(entry.amount).toLocaleString()} د.ل
+                  {formatCurrency(Number(entry.amount), 'د.ل')}
                 </p>
               </div>
 
@@ -150,13 +151,13 @@ export default function PaymentEntryDetail() {
                 <label className="block text-sm font-medium text-gray-500 mb-1">تاريخ الدفع</label>
                 <div className="flex items-center gap-2 text-gray-900">
                   <Calendar className="h-4 w-4 text-gray-400" />
-                  {new Date(entry.payment_date).toLocaleDateString('ar-LY')}
+                  {formatDate(entry.payment_date)}
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-500 mb-1">رقم المرجع</label>
-                <p className="text-gray-900">{entry.reference_number || '-'}</p>
+                <p className="text-gray-900">{entry.reference_number ? toLatinDigits(entry.reference_number) : '-'}</p>
               </div>
 
               <div>
@@ -172,7 +173,7 @@ export default function PaymentEntryDetail() {
                 <label className="block text-sm font-medium text-gray-500 mb-1">معرف الطرف</label>
                 <div className="flex items-center gap-2 text-gray-900">
                   <User className="h-4 w-4 text-gray-400" />
-                  {entry.party_id}
+                  {toLatinDigits(entry.party_id)}
                 </div>
               </div>
 
@@ -185,7 +186,7 @@ export default function PaymentEntryDetail() {
                 <div>
                   <label className="block text-sm font-medium text-gray-500 mb-1">حساب طريقة الدفع</label>
                   <p className="text-gray-900">
-                    {entry.paymentMode.account.account_number} - {entry.paymentMode.account.account_name}
+                    {toLatinDigits(entry.paymentMode.account.account_number)} - {entry.paymentMode.account.account_name}
                   </p>
                 </div>
               )}
@@ -198,7 +199,7 @@ export default function PaymentEntryDetail() {
                     className="text-blue-600 hover:text-blue-800 font-medium hover:underline flex items-center gap-1"
                   >
                     <FileText className="h-4 w-4" />
-                    {entry.journalEntry.entry_number}
+                    {toLatinDigits(entry.journalEntry.entry_number)}
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
@@ -231,7 +232,7 @@ export default function PaymentEntryDetail() {
                       onClick={() => navigate(`/finance/journal-entry/${entry.journalEntry!.id}`)}
                       className="text-blue-600 hover:text-blue-800 font-medium hover:underline flex items-center gap-1"
                     >
-                      {entry.journalEntry.entry_number}
+                      {toLatinDigits(entry.journalEntry.entry_number)}
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
@@ -243,11 +244,11 @@ export default function PaymentEntryDetail() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">إجمالي المدين</label>
-                    <p className="text-gray-900">{Number(entry.journalEntry.total_debit).toLocaleString()} د.ل</p>
+                    <p className="text-gray-900">{formatCurrency(Number(entry.journalEntry.total_debit), 'د.ل')}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">إجمالي الدائن</label>
-                    <p className="text-gray-900">{Number(entry.journalEntry.total_credit).toLocaleString()} د.ل</p>
+                    <p className="text-gray-900">{formatCurrency(Number(entry.journalEntry.total_credit), 'د.ل')}</p>
                   </div>
                 </div>
               </div>
@@ -267,14 +268,14 @@ export default function PaymentEntryDetail() {
                       {entry.journalEntry.lines.map((line) => (
                         <tr key={line.id}>
                           <td className="px-4 py-3 text-sm text-gray-900">
-                            {line.account?.account_number} - {line.account?.account_name}
+                            {toLatinDigits(line.account?.account_number)} - {line.account?.account_name}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500">{line.description}</td>
                           <td className="px-4 py-3 text-sm text-gray-900">
-                            {Number(line.debit) > 0 ? Number(line.debit).toLocaleString() : '-'}
+                            {Number(line.debit) > 0 ? formatCurrency(Number(line.debit), 'د.ل') : '-'}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900">
-                            {Number(line.credit) > 0 ? Number(line.credit).toLocaleString() : '-'}
+                            {Number(line.credit) > 0 ? formatCurrency(Number(line.credit), 'د.ل') : '-'}
                           </td>
                         </tr>
                       ))}
@@ -295,18 +296,18 @@ export default function PaymentEntryDetail() {
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">تاريخ الإنشاء</label>
                 <p className="text-sm text-gray-900">
-                  {new Date(entry.created_at).toLocaleString('ar-LY')}
+                  {formatDateTime(entry.created_at)}
                 </p>
               </div>
               {entry.journal_entry_id && (
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">رقم القيد اليومي</label>
-                  <p className="text-sm text-gray-900">#{entry.journal_entry_id}</p>
+                  <p className="text-sm text-gray-900">#{toLatinDigits(entry.journal_entry_id)}</p>
                 </div>
               )}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">معرف قيد الدفع</label>
-                <p className="text-xs text-gray-500 font-mono break-all">{entry.id}</p>
+                <p className="text-xs text-gray-500 font-mono break-all">{toLatinDigits(entry.id)}</p>
               </div>
             </div>
           </div>

@@ -46,10 +46,11 @@ export async function uploadTeacherPhoto(id: string | number, file: File) {
 // TEACHERS API
 // ============================================
 
-export async function fetchTeachers(search?: string, activeOnly: boolean = true) {
+export async function fetchTeachers(search?: string, activeOnly: boolean = true, departmentId?: string) {
   const params: any = { paginate: 'false' };
   if (search) params.search = search.trim();
-  if (activeOnly) params.active_only = true;
+  if (activeOnly) params.is_active = true;
+  if (departmentId) params.department_id = departmentId;
   return api.get<any[]>('/teachers', params);
 }
 
@@ -234,8 +235,10 @@ export async function deleteRoom(id: string | number) {
 // STUDENT GROUPS API
 // ============================================
 
-export async function fetchStudentGroups() {
-  return api.get<any[]>('/student-groups', { paginate: 'false' });
+export async function fetchStudentGroups(departmentId?: string | number) {
+  const params: any = { paginate: 'false' };
+  if (departmentId) params.department_id = departmentId;
+  return api.get<any[]>('/student-groups', params);
 }
 
 export async function getStudentGroup(id: string | number) {
@@ -518,8 +521,15 @@ export async function getTeacherSessions(
   return api.get<ClassSession[]>(`/teachers/${teacherId}/sessions`, params);
 }
 
-export async function getTeacherSubjectGroups(teacherId: number) {
-  return api.get<any[]>(`/teachers/${teacherId}/subject-groups`);
+export async function getTeacherSubjectGroups(teacherId?: string | number, academicYear?: string) {
+  if (!teacherId) {
+    return [] as any[];
+  }
+
+  const params: any = {};
+  if (academicYear) params.academic_year = academicYear;
+
+  return api.get<any[]>(`/teachers/${teacherId}/subject-groups`, params);
 }
 
 export async function fetchTeacherStats(teacherId: number) {
@@ -655,7 +665,7 @@ export async function createAutoGroupsForDepartment(departmentId: string, semest
 }
 
 // Subject Management
-export async function createSubjectWithDepartments(subjectData: any, departmentIds: number[], primaryDepartmentId?: number) {
+export async function createSubjectWithDepartments(subjectData: any, departmentIds: Array<number | string>, primaryDepartmentId?: number | string) {
   return api.post<any>('/subjects', {
     ...subjectData,
     department_ids: departmentIds,
@@ -664,9 +674,27 @@ export async function createSubjectWithDepartments(subjectData: any, departmentI
 }
 
 export async function getSubjectDepartments(subjectId: string) {
-  // Get subject details which includes departments
   const subject = await api.get<any>(`/subjects/${subjectId}`);
-  return subject.departments || [];
+
+  if (Array.isArray(subject.subject_departments) && subject.subject_departments.length > 0) {
+    return subject.subject_departments;
+  }
+
+  if (Array.isArray(subject.subjectDepartments) && subject.subjectDepartments.length > 0) {
+    return subject.subjectDepartments;
+  }
+
+  if (Array.isArray(subject.departments) && subject.departments.length > 0) {
+    return subject.departments.map((department: any) => ({
+      id: `${subjectId}-${department.id}`,
+      subject_id: subjectId,
+      department_id: department.id,
+      is_primary_department: subject.department_id === department.id,
+      department,
+    }));
+  }
+
+  return [];
 }
 
 export async function updateSubjectDepartments(subjectId: string, departmentIds: number[] | string[], primaryDepartmentId?: string) {
@@ -696,17 +724,17 @@ export async function updateSubjectTitle(id: number, data: any) {
   return api.put<any>(`/subject-titles/${id}`, data);
 }
 
-export async function deleteSubjectTitle(id: number) {
+export async function deleteSubjectTitle(id: string | number) {
   return api.delete<any>(`/subject-titles/${id}`);
 }
 
-export async function uploadSubjectPDF(subjectId: number, file: File) {
+export async function uploadSubjectPDF(subjectId: string | number, file: File) {
   const formData = new FormData();
   formData.append('pdf', file);
-  return api.post<any>(`/subjects/${subjectId}/pdf`, formData);
+  return api.upload<any>(`/subjects/${subjectId}/pdf`, formData);
 }
 
-export async function deleteSubjectPDF(subjectId: number) {
+export async function deleteSubjectPDF(subjectId: string | number) {
   return api.delete<any>(`/subjects/${subjectId}/pdf`);
 }
 
@@ -777,7 +805,24 @@ export async function fetchTimeSlots() {
 }
 
 // Timetable
-export async function fetchTimetableEntries(params?: any) {
+export async function fetchTimetableEntries(
+  paramsOrSemester?: any,
+  departmentId?: string | number,
+  groupId?: string | number
+) {
+  let params: any = paramsOrSemester;
+
+  if (
+    typeof paramsOrSemester !== 'object' ||
+    paramsOrSemester === null ||
+    Array.isArray(paramsOrSemester)
+  ) {
+    params = {};
+    if (paramsOrSemester) params.semester_id = paramsOrSemester;
+    if (departmentId) params.department_id = departmentId;
+    if (groupId) params.group_id = groupId;
+  }
+
   return api.get<any[]>('/timetable/entries', params);
 }
 
@@ -825,8 +870,11 @@ export async function applyPendingFees(studentId: string, semesterId: string) {
   return api.post<any>('/fees/apply-pending', { student_id: studentId, semester_id: semesterId });
 }
 
-export async function updateInvoiceStatus(invoiceId: number, status: string) {
-  return api.put<any>(`/invoices/${invoiceId}/status`, { status });
+export async function updateInvoiceStatus(invoiceId: string | number, status: string, paymentData?: any) {
+  return api.put<any>(`/invoices/${invoiceId}/status`, {
+    status,
+    ...(paymentData || {}),
+  });
 }
 
 export async function getInvoiceStatistics() {
@@ -834,11 +882,11 @@ export async function getInvoiceStatistics() {
 }
 
 // Current Academic Period
-export async function setCurrentSemester(semesterId: number) {
+export async function setCurrentSemester(semesterId: string | number) {
   return api.post<any>('/semesters/set-current', { semester_id: semesterId });
 }
 
-export async function setCurrentStudyYear(yearId: number) {
+export async function setCurrentStudyYear(yearId: string | number) {
   return api.post<any>('/study-years/set-current', { year_id: yearId });
 }
 
@@ -976,6 +1024,10 @@ export async function fetchStudentPortalDashboard() {
 
 export async function fetchStudentMySubjects(params?: { semester_id?: string; status?: string }) {
   return api.get<any[]>('/student-portal/my-subjects', params);
+}
+
+export async function fetchStudentMySubjectDetail(subjectId: string) {
+  return api.get<any>(`/student-portal/my-subjects/${subjectId}`);
 }
 
 export async function fetchStudentMyTeachers() {

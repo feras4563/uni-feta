@@ -4,7 +4,6 @@ import {
   fetchStudents,
   fetchDepartments, 
   fetchSemesters,
-  fetchDepartmentCurriculum,
   fetchDepartmentCurriculumBySemesterNumber,
   enrollStudentInSubjects,
   fetchStudentSubjectEnrollments,
@@ -14,9 +13,6 @@ import {
 import { 
   Plus, 
   Search, 
-  Edit, 
-  UserCheck, 
-  DollarSign, 
   Users,
   BookOpen,
   Calculator,
@@ -28,29 +24,69 @@ import {
   Info
 } from "lucide-react";
 
+type CurriculumItem = {
+  id: string;
+  code?: string;
+  name?: string;
+  credits?: number;
+  cost_per_credit?: number;
+  is_required?: boolean;
+};
+
+ const toLatinDigits = (value: string | number | null | undefined) => {
+   const input = String(value ?? "");
+   return input
+     .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+     .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+ };
+
+ const formatNumber = (value: number) => new Intl.NumberFormat("en-US").format(value);
+
+ const formatCurrency = (value: number) => `${formatNumber(value)} دينار`;
+
 export default function EnhancedStudentRegistration() {
+  const TRACK_LABELS: Record<string, string> = {
+    fine_arts_media: "الفنون الجميلة والإعلام",
+    advertising_design: "الإعلان والتصميم",
+    photography_cinema: "التصوير والسينما",
+    multimedia_media: "الوسائط المتعددة والإعلام",
+  };
+
+  const TRACK_PREFIXES: Record<string, string[]> = {
+    fine_arts_media: ["FA "],
+    advertising_design: ["AD "],
+    photography_cinema: ["PH "],
+    multimedia_media: ["MM "],
+  };
+
+  const SHARED_TRACK_PREFIXES = ["EL ", "SUP DE "];
+
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [selectedSemesterNumber, setSelectedSemesterNumber] = useState<number | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [specializationTrack, setSpecializationTrack] = useState<string>("");
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [studySemester, setStudySemester] = useState<string>("");
   const [academicYear, setAcademicYear] = useState<string>("");
   const [isPaying, setIsPaying] = useState(false);
+  const trimmedSearchTerm = searchTerm.trim();
+  const shouldSearchStudents = trimmedSearchTerm.length >= 2;
 
-  const { data: students, isLoading: loadingStudents } = useQuery({
-    queryKey: ["students"],
-    queryFn: () => fetchStudents(),
+  const { data: searchedStudents, isFetching: searchingStudents } = useQuery<any[]>({
+    queryKey: ["students", "search", trimmedSearchTerm],
+    queryFn: () => fetchStudents(trimmedSearchTerm),
+    enabled: shouldSearchStudents,
   });
 
-  const { data: departments } = useQuery({
+  const { data: departments } = useQuery<any[]>({
     queryKey: ["departments"],
     queryFn: () => fetchDepartments(),
   });
 
-  const { data: semesters } = useQuery({
+  const { data: semesters } = useQuery<any[]>({
     queryKey: ["semesters"],
     queryFn: () => fetchSemesters(),
   });
@@ -66,7 +102,7 @@ export default function EnhancedStudentRegistration() {
   }, [semesters]);
 
   // Fetch curriculum when department and semester number are selected
-  const { data: curriculum, isLoading: loadingCurriculum } = useQuery({
+  const { data: curriculum, isLoading: loadingCurriculum } = useQuery<CurriculumItem[]>({
     queryKey: ["curriculum", selectedDepartment, selectedSemesterNumber],
     queryFn: () => {
       console.log('🔍 Fetching curriculum for:', { selectedDepartment, selectedSemesterNumber });
@@ -76,7 +112,7 @@ export default function EnhancedStudentRegistration() {
   });
 
   // Fetch student enrollments when student is selected
-  const { data: enrollments, isLoading: loadingEnrollments } = useQuery({
+  const { data: enrollments, isLoading: loadingEnrollments } = useQuery<any[]>({
     queryKey: ["student-enrollments", selectedStudent?.id],
     queryFn: () => fetchStudentSubjectEnrollments(selectedStudent?.id),
     enabled: !!selectedStudent?.id,
@@ -85,14 +121,14 @@ export default function EnhancedStudentRegistration() {
   });
 
   // Fetch student invoices
-  const { data: invoices } = useQuery({
+  const { data: invoices } = useQuery<any[]>({
     queryKey: ["student-invoices", selectedStudent?.id],
     queryFn: () => fetchStudentInvoices(selectedStudent?.id),
     enabled: !!selectedStudent?.id,
   });
 
   // Fetch applicable fees for preview
-  const { data: applicableFees } = useQuery({
+  const { data: applicableFees } = useQuery<any[]>({
     queryKey: ["applicable-fees", selectedDepartment, selectedSemesterNumber, selectedStudent?.year, selectedStudent?.nationality],
     queryFn: () => fetchApplicableFees(
       selectedDepartment,
@@ -105,13 +141,66 @@ export default function EnhancedStudentRegistration() {
   });
 
   const filteredStudents = useMemo(() => {
-    if (!students) return [];
-    return students.filter(student => 
-      student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.national_id_passport?.toLowerCase().includes(searchTerm.toLowerCase())
+    if (!shouldSearchStudents || !searchedStudents) return [];
+    return searchedStudents;
+  }, [shouldSearchStudents, searchedStudents]);
+
+  const selectedDepartmentData = useMemo(() => {
+    if (!departments || !selectedDepartment) return null;
+    return departments.find((department) => department.id === selectedDepartment) || null;
+  }, [departments, selectedDepartment]);
+
+  const isVisualArtsDigitalMediaDepartment = useMemo(() => {
+    if (!selectedDepartmentData) return false;
+
+    return (
+      selectedDepartmentData.name === "قسم الفنون البصرية والإعلام الرقمي" ||
+      selectedDepartmentData.name_en === "Department of Visual Arts and Digital Media"
     );
-  }, [students, searchTerm]);
+  }, [selectedDepartmentData]);
+
+  const requiresTrackSelection =
+    isVisualArtsDigitalMediaDepartment && (selectedSemesterNumber || 0) >= 5;
+
+  const effectiveSpecializationTrack =
+    selectedStudent?.specialization_track || specializationTrack || "";
+
+  const trackAwareCurriculum = useMemo<CurriculumItem[]>(() => {
+    if (!curriculum) return [];
+
+    if (!requiresTrackSelection) {
+      return curriculum;
+    }
+
+    if (!effectiveSpecializationTrack) {
+      return [];
+    }
+
+    const prefixes = [
+      ...(TRACK_PREFIXES[effectiveSpecializationTrack] || []),
+      ...SHARED_TRACK_PREFIXES,
+    ];
+
+    return curriculum.filter((item) =>
+      prefixes.some((prefix) => String(item.code || "").startsWith(prefix))
+    );
+  }, [
+    curriculum,
+    requiresTrackSelection,
+    effectiveSpecializationTrack,
+    TRACK_PREFIXES,
+    SHARED_TRACK_PREFIXES,
+  ]);
+
+  React.useEffect(() => {
+    if (!trackAwareCurriculum.length) {
+      setSelectedSubjects([]);
+      return;
+    }
+
+    const allowedSubjectIds = new Set(trackAwareCurriculum.map((item) => item.id));
+    setSelectedSubjects((previous) => previous.filter((subjectId) => allowedSubjectIds.has(subjectId)));
+  }, [trackAwareCurriculum]);
 
   const enrolledSubjects = useMemo(() => {
     if (!enrollments) return [];
@@ -153,30 +242,30 @@ export default function EnhancedStudentRegistration() {
   }, [enrollments]);
 
   const availableCost = useMemo(() => {
-    console.log('🔍 Curriculum data:', curriculum);
-    console.log('🔍 Curriculum length:', curriculum?.length);
-    if (!curriculum) return 0;
-    return curriculum
+    console.log('🔍 Curriculum data:', trackAwareCurriculum);
+    console.log('🔍 Curriculum length:', trackAwareCurriculum?.length);
+    if (!trackAwareCurriculum) return 0;
+    return trackAwareCurriculum
       .filter(item => !enrolledSubjects.includes(item.id))
       .reduce((sum, item) => sum + ((item.credits || 0) * (item.cost_per_credit || 0)), 0);
-  }, [curriculum, enrolledSubjects]);
+  }, [trackAwareCurriculum, enrolledSubjects]);
 
   const selectedCost = useMemo(() => {
-    if (!curriculum) return 0;
+    if (!trackAwareCurriculum) return 0;
     return selectedSubjects.reduce((sum, subjectId) => {
-      const item = curriculum.find(c => c.id === subjectId);
+      const item = trackAwareCurriculum.find(c => c.id === subjectId);
       return sum + ((item?.credits || 0) * (item?.cost_per_credit || 0));
     }, 0);
-  }, [selectedSubjects, curriculum]);
+  }, [selectedSubjects, trackAwareCurriculum]);
 
   // Calculate total credits for selected subjects
   const selectedCredits = useMemo(() => {
-    if (!curriculum) return 0;
+    if (!trackAwareCurriculum) return 0;
     return selectedSubjects.reduce((sum, subjectId) => {
-      const item = curriculum.find(c => c.id === subjectId);
+      const item = trackAwareCurriculum.find(c => c.id === subjectId);
       return sum + (item?.credits || 0);
     }, 0);
-  }, [selectedSubjects, curriculum]);
+  }, [selectedSubjects, trackAwareCurriculum]);
 
   // Calculate additional fees total
   const additionalFeesTotal = useMemo(() => {
@@ -197,6 +286,7 @@ export default function EnhancedStudentRegistration() {
     console.log('🔍 Student department_id:', student.department_id);
     setSelectedStudent(student);
     setSelectedDepartment(student.department_id);
+    setSpecializationTrack(student?.specialization_track || "");
     setSelectedSubjects([]); // Reset selected subjects when student changes
   };
 
@@ -214,8 +304,8 @@ export default function EnhancedStudentRegistration() {
   };
 
   const handleSelectAll = () => {
-    if (!curriculum) return;
-    const availableSubjects = curriculum.filter(item => !enrolledSubjects.includes(item.id));
+    if (!trackAwareCurriculum) return;
+    const availableSubjects = trackAwareCurriculum.filter(item => !enrolledSubjects.includes(item.id));
     if (selectedSubjects.length === availableSubjects.length) {
       setSelectedSubjects([]);
     } else {
@@ -224,8 +314,8 @@ export default function EnhancedStudentRegistration() {
   };
 
   const handleSelectRequired = () => {
-    if (!curriculum) return;
-    const requiredSubjects = curriculum
+    if (!trackAwareCurriculum) return;
+    const requiredSubjects = trackAwareCurriculum
       .filter(item => !enrolledSubjects.includes(item.id) && item.is_required)
       .map(item => item.id);
     setSelectedSubjects(requiredSubjects);
@@ -247,6 +337,11 @@ export default function EnhancedStudentRegistration() {
       return;
     }
 
+    if (requiresTrackSelection && !effectiveSpecializationTrack) {
+      alert("يرجى اختيار مسار التخصص أولاً قبل تسجيل مقررات الفصل الخامس فما فوق.");
+      return;
+    }
+
     try {
       const result = await enrollStudentInSubjects(
         selectedStudent.id,
@@ -255,8 +350,16 @@ export default function EnhancedStudentRegistration() {
         semesters?.find(s => s.id === studySemester)?.study_year_id || semesters?.find(s => s.id === studySemester)?.studyYear?.id || '', // study_year_id
         selectedDepartment,
         selectedSemesterNumber,
-        isPaying
+        isPaying,
+        effectiveSpecializationTrack || undefined
       );
+
+      if (requiresTrackSelection && effectiveSpecializationTrack && !selectedStudent?.specialization_track) {
+        setSelectedStudent((previous: any) => ({
+          ...previous,
+          specialization_track: effectiveSpecializationTrack,
+        }));
+      }
       
       queryClient.invalidateQueries({ queryKey: ["student-enrollments"] });
       queryClient.invalidateQueries({ queryKey: ["student-subject-enrollments"] });
@@ -267,9 +370,9 @@ export default function EnhancedStudentRegistration() {
       // Show detailed success message
       const paymentStatus = isPaying ? ' وتم تسجيل الدفع الكامل' : ' وتم إنشاء الفاتورة';
       if (result.skippedSubjects && result.skippedSubjects.length > 0) {
-        alert(`تم تسجيل الطالب في ${result.enrolledSubjects.length} مقرر جديد للفصل الدراسي ${selectedSemesterName} - ${academicYear}${paymentStatus}. تم تجاهل ${result.skippedSubjects.length} مقرر مسجل مسبقاً.`);
+        alert(`تم تسجيل الطالب في ${formatNumber(result.enrolledSubjects.length)} مقرر جديد للفصل الدراسي ${toLatinDigits(selectedSemesterName)} - ${toLatinDigits(academicYear)}${paymentStatus}. تم تجاهل ${formatNumber(result.skippedSubjects.length)} مقرر مسجل مسبقاً.`);
       } else {
-        alert(`تم تسجيل الطالب في جميع المقررات بنجاح للفصل الدراسي ${selectedSemesterName} - ${academicYear}${paymentStatus}`);
+        alert(`تم تسجيل الطالب في جميع المقررات بنجاح للفصل الدراسي ${toLatinDigits(selectedSemesterName)} - ${toLatinDigits(academicYear)}${paymentStatus}`);
       }
       
       setSelectedSubjects([]); // Clear selected subjects after registration
@@ -281,93 +384,142 @@ export default function EnhancedStudentRegistration() {
     }
   };
 
-  if (loadingStudents) {
-    return (
-      <div className="p-6">
-        <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mb-4"></div>
-          <p className="text-gray-600">جاري تحميل بيانات الطلاب...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-6">
+    <div className="min-h-screen bg-slate-50 p-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">تسجيل الطلاب في الفصل الدراسي</h1>
-        <p className="text-gray-600">تسجيل الطلاب في المقررات المطلوبة مع حساب التكاليف وإنشاء الفواتير</p>
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-semibold text-slate-900 mb-2">تسجيل الطلاب في الفصل الدراسي</h1>
+        <p className="text-sm text-slate-600">اختر الطالب أولاً ثم أكمل بيانات التسجيل والمقررات بطريقة منظمة وواضحة.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
         {/* Student Selection */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">اختيار الطالب</h3>
+        <div>
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 lg:sticky lg:top-24">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">اختيار الطالب</h3>
+                <p className="mt-1 text-sm text-slate-500">لن تظهر النتائج إلا بعد البحث باسم الطالب أو بريده أو رقم هويته.</p>
+              </div>
+              {selectedStudent && (
+                <button
+                  onClick={() => {
+                    setSelectedStudent(null);
+                    setSelectedSemesterNumber(null);
+                    setSelectedSubjects([]);
+                    setStudySemester("");
+                    setAcademicYear("");
+                    setIsPaying(false);
+                  }}
+                  className="rounded-lg border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50"
+                  title="إلغاء اختيار الطالب"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {selectedStudent && (
+              <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-sm font-semibold text-slate-700 shadow-sm">
+                    {(selectedStudent.name || "ط").trim().charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-900">{selectedStudent.name}</p>
+                    <p className="truncate text-xs text-slate-500">{selectedStudent.email || "لا يوجد بريد إلكتروني"}</p>
+                    <p className="mt-1 text-xs text-slate-400">{toLatinDigits(selectedStudent.national_id_passport || "")}</p>
+                  </div>
+                </div>
+              </div>
+            )}
             
             {/* Search */}
             <div className="relative mb-4">
-              <Search className="absolute right-3 top-3 h-4 w-4 text-gray-400" />
+              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="البحث عن الطالب..."
+                placeholder="ابحث عن الطالب..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pr-10 pl-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pr-10 pl-3 text-sm text-slate-900 outline-none transition focus:border-slate-400"
               />
             </div>
 
             {/* Students List */}
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {filteredStudents.map((student) => (
-                <div
-                  key={student.id}
-                  onClick={() => handleStudentSelect(student)}
-                  className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                    selectedStudent?.id === student.id
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="font-medium text-gray-900">{student.name}</div>
-                  <div className="text-sm text-gray-500">{student.email}</div>
-                  <div className="text-sm text-gray-500">{student.national_id_passport}</div>
+            <div className="space-y-2 max-h-[28rem] overflow-y-auto">
+              {trimmedSearchTerm.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center">
+                  <Users className="mx-auto h-9 w-9 text-slate-300" />
+                  <h4 className="mt-3 text-sm font-medium text-slate-900">ابدأ بالبحث عن طالب</h4>
+                  <p className="mt-1 text-sm text-slate-500">اكتب الاسم أو البريد الإلكتروني أو رقم الهوية لإظهار النتائج.</p>
                 </div>
-              ))}
+              ) : trimmedSearchTerm.length < 2 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                  اكتب حرفين على الأقل لعرض نتائج البحث.
+                </div>
+              ) : searchingStudents ? (
+                <div className="rounded-xl border border-slate-200 px-4 py-8 text-center">
+                  <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-slate-700"></div>
+                  <p className="text-sm text-slate-500">جاري البحث عن الطلاب...</p>
+                </div>
+              ) : filteredStudents.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center">
+                  <AlertCircle className="mx-auto h-8 w-8 text-slate-300" />
+                  <h4 className="mt-3 text-sm font-medium text-slate-900">لا توجد نتائج</h4>
+                  <p className="mt-1 text-sm text-slate-500">لم يتم العثور على طلاب مطابقين لعبارة البحث الحالية.</p>
+                </div>
+              ) : (
+                filteredStudents.map((student) => (
+                  <button
+                    key={student.id}
+                    type="button"
+                    onClick={() => handleStudentSelect(student)}
+                    className={`w-full rounded-xl border p-3 text-right transition ${
+                      selectedStudent?.id === student.id
+                        ? 'border-slate-900 bg-slate-50'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="text-sm font-semibold text-slate-900">{student.name}</div>
+                    <div className="mt-1 text-xs text-slate-500">{student.email || 'لا يوجد بريد إلكتروني'}</div>
+                    <div className="mt-1 text-xs text-slate-400">{toLatinDigits(student.national_id_passport)}</div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         </div>
 
         {/* Registration Details */}
-        <div className="lg:col-span-2">
+        <div>
           {selectedStudent ? (
             <div className="space-y-6">
               {/* Student Info */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">معلومات الطالب</h3>
-                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                  <h3 className="text-lg font-medium text-slate-900">معلومات الطالب</h3>
+                  <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-xs rounded-full border border-slate-200">
                     {selectedStudent.status === 'active' ? 'نشط' : 'غير نشط'}
                   </span>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium text-gray-500">الاسم</label>
-                    <p className="text-gray-900">{selectedStudent.name}</p>
+                    <label className="text-sm font-medium text-slate-500">الاسم</label>
+                    <p className="text-slate-900">{selectedStudent.name}</p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-500">البريد الإلكتروني</label>
-                    <p className="text-gray-900">{selectedStudent.email}</p>
+                    <label className="text-sm font-medium text-slate-500">البريد الإلكتروني</label>
+                    <p className="text-slate-900">{selectedStudent.email}</p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-500">رقم الهوية</label>
-                    <p className="text-gray-900">{selectedStudent.national_id_passport}</p>
+                    <label className="text-sm font-medium text-slate-500">رقم الهوية</label>
+                    <p className="text-slate-900">{toLatinDigits(selectedStudent.national_id_passport)}</p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-500">القسم</label>
-                    <p className="text-gray-900">
+                    <label className="text-sm font-medium text-slate-500">القسم</label>
+                    <p className="text-slate-900">
                       {departments?.find(d => d.id === selectedStudent.department_id)?.name}
                     </p>
                   </div>
@@ -375,28 +527,28 @@ export default function EnhancedStudentRegistration() {
               </div>
 
               {/* Semester Selection */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">اختيار الفصل الدراسي</h3>
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <h3 className="text-lg font-medium text-slate-900 mb-4">اختيار الفصل الدراسي</h3>
                 <select
                   value={selectedSemesterNumber || ""}
                   onChange={(e) => setSelectedSemesterNumber(e.target.value ? parseInt(e.target.value) : null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 outline-none transition focus:border-slate-400"
                 >
                   <option value="">اختر الفصل الدراسي</option>
                   {Array.from({ length: 8 }, (_, i) => i + 1).map(semesterNumber => (
                     <option key={semesterNumber} value={semesterNumber}>
-                      الفصل الدراسي {semesterNumber}
+                      الفصل الدراسي {formatNumber(semesterNumber)}
                     </option>
                   ))}
                 </select>
               </div>
 
               {/* Study Semester and Academic Year */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">معلومات التسجيل</h3>
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <h3 className="text-lg font-medium text-slate-600 mb-4">معلومات التسجيل</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       الفصل الدراسي للتسجيل
                     </label>
                     <select
@@ -412,7 +564,7 @@ export default function EnhancedStudentRegistration() {
                           }
                         }
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400"
                     >
                       <option value="">اختر الفصل الدراسي</option>
                       {semesters?.map((semester) => {
@@ -426,13 +578,13 @@ export default function EnhancedStudentRegistration() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       السنة الأكاديمية
                     </label>
                     <select
                       value={academicYear}
                       onChange={(e) => setAcademicYear(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400"
                     >
                       <option value="">اختر السنة الأكاديمية</option>
                       {semesters && [...new Set(semesters.map(s => {
@@ -450,43 +602,74 @@ export default function EnhancedStudentRegistration() {
 
               {/* Curriculum and Registration */}
               {selectedSemesterNumber && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">مقررات الفصل الدراسي</h3>
+                    <h3 className="text-lg font-medium text-slate-900">مقررات الفصل الدراسي</h3>
                     <div className="flex items-center gap-4">
                       {selectedSubjects.length > 0 && (
                         <div className="flex items-center gap-2">
-                          <Calculator className="h-5 w-5 text-green-600" />
-                          <span className="text-lg font-bold text-green-600">
-                            {selectedCost.toLocaleString()} دينار
+                          <Calculator className="h-5 w-5 text-slate-700" />
+                          <span className="text-lg font-bold text-slate-900">
+                            {formatCurrency(selectedCost)}
                           </span>
-                          <span className="text-sm text-gray-500">
-                            ({selectedSubjects.length} مقرر)
+                          <span className="text-sm text-slate-500">
+                            ({formatNumber(selectedSubjects.length)} مقرر)
                           </span>
                         </div>
                       )}
                       <div className="flex items-center gap-2">
-                        <Calculator className="h-5 w-5 text-blue-600" />
-                        <span className="text-lg font-bold text-blue-600">
-                          {availableCost.toLocaleString()} دينار
+                        <Calculator className="h-5 w-5 text-slate-500" />
+                        <span className="text-lg font-bold text-slate-700">
+                          {formatCurrency(availableCost)}
                         </span>
-                        <span className="text-sm text-gray-500">(متاح)</span>
+                        <span className="text-sm text-slate-500">(متاح)</span>
                       </div>
                     </div>
                   </div>
 
+                  {requiresTrackSelection && (
+                    <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-semibold text-slate-900">مسار التخصص (إجباري من الفصل الخامس)</h4>
+                        {effectiveSpecializationTrack && (
+                          <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
+                            {TRACK_LABELS[effectiveSpecializationTrack] || effectiveSpecializationTrack}
+                          </span>
+                        )}
+                      </div>
+
+                      <select
+                        value={effectiveSpecializationTrack}
+                        onChange={(e) => setSpecializationTrack(e.target.value)}
+                        disabled={!!selectedStudent?.specialization_track}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100"
+                      >
+                        <option value="">اختر مسار التخصص</option>
+                        {Object.entries(TRACK_LABELS).map(([trackKey, trackLabel]) => (
+                          <option key={trackKey} value={trackKey}>
+                            {trackLabel}
+                          </option>
+                        ))}
+                      </select>
+
+                      {selectedStudent?.specialization_track && (
+                        <p className="mt-2 text-xs text-slate-500">المسار مثبت للطالب ولا يمكن تغييره من شاشة التسجيل.</p>
+                      )}
+                    </div>
+                  )}
+
                   {/* Registration Info */}
                   {(studySemester || academicYear) && (
-                    <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-700">معلومات التسجيل:</span>
+                        <span className="text-sm font-medium text-slate-700">معلومات التسجيل:</span>
                         {studySemester && (
-                          <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                          <span className="px-2.5 py-1 bg-white text-slate-700 text-xs rounded-full border border-slate-200">
                             {semesters?.find(s => s.id === studySemester)?.name || studySemester}
                           </span>
                         )}
                         {academicYear && (
-                          <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                          <span className="px-2.5 py-1 bg-white text-slate-700 text-xs rounded-full border border-slate-200">
                             {academicYear}
                           </span>
                         )}
@@ -495,58 +678,58 @@ export default function EnhancedStudentRegistration() {
                   )}
 
                   {/* Enrollment Summary */}
-                  {curriculum && curriculum.length > 0 && (
-                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="flex items-center justify-between text-sm">
+                  {trackAwareCurriculum && trackAwareCurriculum.length > 0 && (
+                    <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="flex items-center justify-between text-sm text-slate-600">
                         <div className="flex items-center gap-4">
                           <div className="flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                            <span className="text-green-700 font-medium">
-                              مسجل مسبقاً: {loadingEnrollments ? 'جاري التحميل...' : curriculum.filter(item => enrolledSubjects.includes(item.id)).length + ' مقرر'}
+                            <CheckCircle className="h-4 w-4 text-slate-500" />
+                            <span className="font-medium text-slate-700">
+                              مسجل مسبقاً: {loadingEnrollments ? 'جاري التحميل...' : `${formatNumber(trackAwareCurriculum.filter((item) => enrolledSubjects.includes(item.id)).length)} مقرر`}
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <BookOpen className="h-4 w-4 text-blue-600" />
-                            <span className="text-blue-700 font-medium">
-                              متاح للتسجيل: {loadingEnrollments ? 'جاري التحميل...' : curriculum.filter(item => !enrolledSubjects.includes(item.id)).length + ' مقرر'}
+                            <BookOpen className="h-4 w-4 text-slate-500" />
+                            <span className="font-medium text-slate-700">
+                              متاح للتسجيل: {loadingEnrollments ? 'جاري التحميل...' : `${formatNumber(trackAwareCurriculum.filter((item) => !enrolledSubjects.includes(item.id)).length)} مقرر`}
                             </span>
                           </div>
                         </div>
-                        <div className="text-gray-600">
-                          إجمالي المقررات: {curriculum.length}
+                        <div>
+                          إجمالي المقررات: {formatNumber(trackAwareCurriculum.length)}
                         </div>
                       </div>
                     </div>
                   )}
 
                   {/* Selection Buttons */}
-                  {curriculum && curriculum.length > 0 && (
+                  {trackAwareCurriculum && trackAwareCurriculum.length > 0 && (
                     <div className="flex gap-2 mb-4">
                       <button
                         onClick={handleSelectAll}
-                        className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-                        disabled={curriculum.filter(item => !enrolledSubjects.includes(item.id)).length === 0}
+                        className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
+                        disabled={trackAwareCurriculum.filter((item) => !enrolledSubjects.includes(item.id)).length === 0}
                       >
-                        {selectedSubjects.length === curriculum.filter(item => !enrolledSubjects.includes(item.id)).length ? 'إلغاء الكل' : `اختيار الكل المتاح (${curriculum.filter(item => !enrolledSubjects.includes(item.id)).length})`}
+                        {selectedSubjects.length === trackAwareCurriculum.filter((item) => !enrolledSubjects.includes(item.id)).length ? 'إلغاء الكل' : `اختيار الكل المتاح (${formatNumber(trackAwareCurriculum.filter((item) => !enrolledSubjects.includes(item.id)).length)})`}
                       </button>
                       <button
                         onClick={handleSelectRequired}
-                        className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
-                        disabled={curriculum.filter(item => !enrolledSubjects.includes(item.id) && item.is_required).length === 0}
+                        className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
+                        disabled={trackAwareCurriculum.filter((item) => !enrolledSubjects.includes(item.id) && item.is_required).length === 0}
                       >
-                        اختيار المطلوبة المتاحة فقط ({curriculum.filter(item => !enrolledSubjects.includes(item.id) && item.is_required).length})
+                        اختيار المطلوبة المتاحة فقط ({formatNumber(trackAwareCurriculum.filter((item) => !enrolledSubjects.includes(item.id) && item.is_required).length)})
                       </button>
                     </div>
                   )}
 
                   {loadingCurriculum ? (
                     <div className="text-center py-8">
-                      <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-green-500 mb-2"></div>
-                      <p className="text-gray-600">جاري تحميل المقررات...</p>
+                      <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-slate-200 border-t-slate-700 mb-2"></div>
+                      <p className="text-slate-600">جاري تحميل المقررات...</p>
                     </div>
-                  ) : curriculum && curriculum.length > 0 ? (
+                  ) : trackAwareCurriculum && trackAwareCurriculum.length > 0 ? (
                     <div className="space-y-3">
-                      {curriculum.map((item) => {
+                      {trackAwareCurriculum.map((item) => {
                         const isEnrolled = enrolledSubjects.includes(item.id);
                         const isSelected = selectedSubjects.includes(item.id);
                         const isAvailable = !isEnrolled;
@@ -564,12 +747,12 @@ export default function EnhancedStudentRegistration() {
                         return (
                           <div
                             key={item.id}
-                            className={`p-4 rounded-lg border transition-colors ${
+                            className={`p-4 rounded-xl border transition-colors ${
                               isEnrolled
-                                ? 'border-green-300 bg-green-100 opacity-60 cursor-not-allowed'
+                                ? 'border-slate-200 bg-slate-50 opacity-70 cursor-not-allowed'
                                 : isSelected
-                                ? 'border-green-500 bg-green-50'
-                                : 'border-gray-200 hover:border-gray-300'
+                                ? 'border-slate-900 bg-slate-50'
+                                : 'border-slate-200 hover:border-slate-300'
                             }`}
                           >
                             <div className="flex items-center justify-between">
@@ -579,21 +762,21 @@ export default function EnhancedStudentRegistration() {
                                     type="checkbox"
                                     checked={isSelected}
                                     onChange={() => handleSubjectToggle(item.id)}
-                                    className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
                                   />
                                 ) : (
                                   <div className="h-4 w-4 flex items-center justify-center">
-                                    <CheckCircle className="h-4 w-4 text-green-600" />
+                                    <CheckCircle className="h-4 w-4 text-emerald-600" />
                                   </div>
                                 )}
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2">
-                                    <BookOpen className={`h-4 w-4 ${isEnrolled ? 'text-green-600' : 'text-blue-600'}`} />
-                                    <span className={`font-medium ${isEnrolled ? 'text-green-800 line-through' : 'text-gray-900'}`}>
+                                    <BookOpen className={`h-4 w-4 ${isEnrolled ? 'text-slate-400' : 'text-slate-500'}`} />
+                                    <span className={`font-medium ${isEnrolled ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
                                       {item.code} - {item.name}
                                     </span>
                                     {item.is_required && (
-                                      <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">
+                                      <span className="px-2.5 py-1 bg-slate-900 text-white text-xs rounded-full">
                                         مطلوب
                                       </span>
                                     )}
@@ -611,30 +794,30 @@ export default function EnhancedStudentRegistration() {
                                       
                                       return (
                                         <>
-                                          <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center gap-1">
+                                          <span className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
                                             <CheckCircle className="h-3 w-3" />
                                             مسجل مسبقاً
                                           </span>
                                           {paymentStatus === 'paid' && (
-                                            <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center gap-1">
+                                            <span className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
                                               <CheckCircle className="h-3 w-3" />
                                               مدفوع
                                             </span>
                                           )}
                                           {paymentStatus === 'partial' && (
-                                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full flex items-center gap-1">
+                                            <span className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
                                               <AlertCircle className="h-3 w-3" />
                                               مدفوع جزئياً
                                             </span>
                                           )}
                                           {paymentStatus === 'unpaid' && (
-                                            <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full flex items-center gap-1">
+                                            <span className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
                                               <AlertCircle className="h-3 w-3" />
                                               غير مدفوع
                                             </span>
                                           )}
                                           {!attendanceAllowed && (
-                                            <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full flex items-center gap-1">
+                                            <span className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
                                               <X className="h-3 w-3" />
                                               غير مسموح بالحضور
                                             </span>
@@ -643,28 +826,28 @@ export default function EnhancedStudentRegistration() {
                                       );
                                     })()}
                                     {isAvailable && !isSelected && (
-                                      <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                                      <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-xs rounded-full border border-slate-200">
                                         متاح للتسجيل
                                       </span>
                                     )}
                                     {isSelected && (
-                                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                                      <span className="px-2.5 py-1 bg-slate-900 text-white text-xs rounded-full">
                                         مختار
                                       </span>
                                     )}
                                   </div>
-                                  <div className={`text-sm mt-1 ${isEnrolled ? 'text-green-600' : 'text-gray-500'}`}>
-                                    {item.credits} ساعة معتمدة
+                                  <div className={`text-sm mt-1 ${isEnrolled ? 'text-slate-400' : 'text-slate-500'}`}>
+                                    {formatNumber(item.credits || 0)} ساعة معتمدة
                                     {isEnrolled && ' - مسجل مسبقاً'}
                                   </div>
                                 </div>
                               </div>
                               <div className="text-right">
-                                <div className={`font-medium ${isEnrolled ? 'text-green-700' : 'text-gray-900'}`}>
-                                  {((item.credits || 0) * (item.cost_per_credit || 0)).toLocaleString()} دينار
+                                <div className={`font-medium ${isEnrolled ? 'text-slate-500' : 'text-slate-900'}`}>
+                                  {formatCurrency((item.credits || 0) * (item.cost_per_credit || 0))}
                                 </div>
-                                <div className={`text-sm ${isEnrolled ? 'text-green-600' : 'text-gray-500'}`}>
-                                  {item.cost_per_credit || 0} دينار/ساعة
+                                <div className={`text-sm ${isEnrolled ? 'text-slate-400' : 'text-slate-500'}`}>
+                                  {formatNumber(item.cost_per_credit || 0)} دينار/ساعة
                                 </div>
                               </div>
                             </div>
@@ -675,10 +858,21 @@ export default function EnhancedStudentRegistration() {
                   ) : (
                     <div className="text-center py-8">
                       <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
-                      <h3 className="mt-2 text-sm font-medium text-gray-900">لا توجد مقررات</h3>
-                      <p className="mt-1 text-sm text-gray-500">
-                        لم يتم تحديد مقررات لهذا القسم والفصل الدراسي
-                      </p>
+                      {requiresTrackSelection && !effectiveSpecializationTrack ? (
+                        <>
+                          <h3 className="mt-2 text-sm font-medium text-gray-900">اختر مسار التخصص أولاً</h3>
+                          <p className="mt-1 text-sm text-gray-500">
+                            لعرض مقررات الفصل الحالي، يجب تحديد مسار الطالب في قسم الفنون البصرية والإعلام الرقمي.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <h3 className="mt-2 text-sm font-medium text-gray-900">لا توجد مقررات</h3>
+                          <p className="mt-1 text-sm text-gray-500">
+                            لم يتم تحديد مقررات لهذا القسم والفصل الدراسي
+                          </p>
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -686,22 +880,22 @@ export default function EnhancedStudentRegistration() {
                   {selectedSubjects.length > 0 && (
                     <div className="mt-6 space-y-4">
                       {/* Fee Breakdown */}
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                          <Calculator className="h-4 w-4 text-blue-600" />
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                        <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                          <Calculator className="h-4 w-4 text-slate-600" />
                           ملخص التكاليف
                         </h4>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
-                            <span className="text-gray-600">رسوم المقررات ({selectedSubjects.length} مقرر - {selectedCredits} ساعة)</span>
-                            <span className="font-semibold text-gray-900">{selectedCost.toLocaleString()} دينار</span>
+                            <span className="text-slate-600">رسوم المقررات ({formatNumber(selectedSubjects.length)} مقرر - {formatNumber(selectedCredits)} ساعة)</span>
+                            <span className="font-semibold text-slate-900">{formatCurrency(selectedCost)}</span>
                           </div>
 
                           {/* Additional Fees from Fee Rules */}
                           {applicableFees && Array.isArray(applicableFees) && applicableFees.length > 0 && (
                             <>
-                              <div className="border-t border-gray-200 pt-2 mt-2">
-                                <div className="flex items-center gap-1 text-gray-500 mb-1">
+                              <div className="border-t border-slate-200 pt-2 mt-2">
+                                <div className="flex items-center gap-1 text-slate-500 mb-1">
                                   <Layers className="h-3.5 w-3.5" />
                                   <span className="text-xs font-medium">رسوم إضافية (حسب هيكل الرسوم)</span>
                                 </div>
@@ -711,26 +905,26 @@ export default function EnhancedStudentRegistration() {
                                 const isPerCredit = fee.frequency === 'per_credit';
                                 if (isPerCredit) feeAmount = feeAmount * selectedCredits;
                                 return (
-                                  <div key={idx} className="flex justify-between text-emerald-700">
+                                  <div key={idx} className="flex justify-between text-slate-700">
                                     <span className="flex items-center gap-1">
                                       {fee.name_ar || fee.name}
-                                      {isPerCredit && <span className="text-xs text-gray-400">({selectedCredits} ساعة × {Number(fee.amount).toLocaleString()})</span>}
+                                      {isPerCredit && <span className="text-xs text-slate-400">({formatNumber(selectedCredits)} ساعة × {formatNumber(Number(fee.amount))})</span>}
                                     </span>
-                                    <span className="font-medium">{feeAmount.toLocaleString()} دينار</span>
+                                    <span className="font-medium">{formatCurrency(feeAmount)}</span>
                                   </div>
                                 );
                               })}
                             </>
                           )}
 
-                          <div className="flex justify-between font-bold text-base border-t border-gray-300 pt-2 mt-2">
-                            <span className="text-gray-900">الإجمالي المتوقع</span>
-                            <span className="text-gray-900">{grandTotal.toLocaleString()} دينار</span>
+                          <div className="flex justify-between font-bold text-base border-t border-slate-300 pt-2 mt-2">
+                            <span className="text-slate-900">الإجمالي المتوقع</span>
+                            <span className="text-slate-900">{formatCurrency(grandTotal)}</span>
                           </div>
                         </div>
 
                         {applicableFees && Array.isArray(applicableFees) && applicableFees.length > 0 && (
-                          <div className="mt-3 flex items-start gap-2 p-2 bg-blue-50 rounded text-xs text-blue-700">
+                          <div className="mt-3 flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-600">
                             <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
                             <span>الرسوم الإضافية تُطبق تلقائياً حسب هيكل الرسوم المعتمد. الرسوم التي سبق تحصيلها لن تُضاف مجدداً.</span>
                           </div>
@@ -738,19 +932,19 @@ export default function EnhancedStudentRegistration() {
                       </div>
 
                       {/* Payment Checkbox */}
-                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="p-4 bg-white border border-slate-200 rounded-xl">
                         <label className="flex items-center gap-3 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={isPaying}
                             onChange={(e) => setIsPaying(e.target.checked)}
-                            className="h-5 w-5 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                            className="h-5 w-5 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
                           />
                           <div className="flex-1">
-                            <div className="font-medium text-gray-900">الدفع عند التسجيل</div>
-                            <div className="text-sm text-gray-600">
+                            <div className="font-medium text-slate-900">الدفع عند التسجيل</div>
+                            <div className="text-sm text-slate-600">
                               {isPaying ? (
-                                <span className="text-green-700">سيتم تسجيل الدفع الكامل ({grandTotal.toLocaleString()} دينار)</span>
+                                <span className="text-slate-700">سيتم تسجيل الدفع الكامل ({formatCurrency(grandTotal)})</span>
                               ) : (
                                 <span>سيتم إنشاء فاتورة بحالة "غير مدفوع"</span>
                               )}
@@ -758,8 +952,8 @@ export default function EnhancedStudentRegistration() {
                           </div>
                           {isPaying && (
                             <div className="text-right">
-                              <div className="text-2xl font-bold text-green-600">{grandTotal.toLocaleString()}</div>
-                              <div className="text-xs text-green-700">دينار</div>
+                              <div className="text-2xl font-bold text-slate-900">{formatNumber(grandTotal)}</div>
+                              <div className="text-xs text-slate-500">دينار</div>
                             </div>
                           )}
                         </label>
@@ -772,15 +966,15 @@ export default function EnhancedStudentRegistration() {
                     <button
                       onClick={handleRegisterStudent}
                       disabled={selectedSubjects.length === 0 || !studySemester || !academicYear}
-                      className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       <Plus className="h-4 w-4" />
-                      {isPaying ? 'تسجيل ودفع' : 'تسجيل المقررات المختارة'} ({selectedSubjects.length})
+                      {isPaying ? 'تسجيل ودفع' : 'تسجيل المقررات المختارة'} ({formatNumber(selectedSubjects.length)})
                     </button>
                     <button
                       onClick={() => setShowInvoiceModal(true)}
                       disabled={!invoices || invoices.length === 0}
-                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                       <FileText className="h-4 w-4" />
                       عرض الفواتير
@@ -791,24 +985,22 @@ export default function EnhancedStudentRegistration() {
 
               {/* Current Enrollments */}
               {enrollments && enrollments.length > 0 && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">المقررات المسجلة حالياً</h3>
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                  <h3 className="text-lg font-medium text-slate-900 mb-4">المقررات المسجلة حالياً</h3>
                   <div className="space-y-2">
                     {enrollments.map((enrollment) => (
-                      <div key={enrollment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div key={enrollment.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3">
                         <div>
                           <span className="font-medium">{enrollment.subjects?.code} - {enrollment.subjects?.name}</span>
-                          <span className={`ml-2 px-2 py-1 text-xs rounded-full ${
-                            enrollment.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
-                            enrollment.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
+                          <span className={`ml-2 rounded-full border px-2 py-1 text-xs ${
+                            'border-slate-200 bg-white text-slate-700'
                           }`}>
                             {enrollment.payment_status === 'paid' ? 'مدفوع' :
                              enrollment.payment_status === 'partial' ? 'مدفوع جزئياً' : 'غير مدفوع'}
                           </span>
                         </div>
                         <div className="text-right">
-                          <div className="font-medium">{enrollment.subject_cost?.toLocaleString()} دينار</div>
+                          <div className="font-medium">{formatCurrency(Number(enrollment.subject_cost) || 0)}</div>
                         </div>
                       </div>
                     ))}
@@ -817,11 +1009,11 @@ export default function EnhancedStudentRegistration() {
               )}
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-              <Users className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">اختر طالباً للبدء</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                اختر طالباً من القائمة لبدء عملية التسجيل في الفصل الدراسي
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center">
+              <Users className="mx-auto h-12 w-12 text-slate-300" />
+              <h3 className="mt-3 text-base font-semibold text-slate-900">اختر طالباً للبدء</h3>
+              <p className="mt-2 text-sm text-slate-500">
+                ابحث عن الطالب من اللوحة الجانبية ثم تابع خطوات التسجيل والمقررات من هنا.
               </p>
             </div>
           )}
@@ -857,17 +1049,15 @@ function InvoiceModal({ invoices, onClose }: { invoices: any[]; onClose: () => v
                 <div key={invoice.id} className="border border-gray-200 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <h4 className="font-medium text-gray-900">فاتورة #{invoice.invoice_number}</h4>
+                      <h4 className="font-medium text-gray-900">فاتورة #{toLatinDigits(invoice.invoice_number)}</h4>
                       <p className="text-sm text-gray-500">{invoice.semesters?.name}</p>
                     </div>
                     <div className="text-right">
                       <div className="font-medium text-gray-900">
-                        {invoice.total_amount?.toLocaleString()} دينار
+                        {formatCurrency(Number(invoice.total_amount) || 0)}
                       </div>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
-                        invoice.status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
+                      <span className={`rounded-full border px-2 py-1 text-xs ${
+                        'border-slate-200 bg-white text-slate-700'
                       }`}>
                         {invoice.status === 'paid' ? 'مدفوع' :
                          invoice.status === 'partial' ? 'مدفوع جزئياً' : 'غير مدفوع'}
@@ -879,7 +1069,7 @@ function InvoiceModal({ invoices, onClose }: { invoices: any[]; onClose: () => v
                     {invoice.invoice_items?.map((item: any) => (
                       <div key={item.id} className="flex justify-between text-sm">
                         <span>{item.description}</span>
-                        <span>{item.total_price?.toLocaleString()} دينار</span>
+                        <span>{formatCurrency(Number(item.total_price) || 0)}</span>
                       </div>
                     ))}
                   </div>

@@ -5,6 +5,7 @@ import { fetchStudyYears, createStudyYear, updateStudyYear, deleteStudyYear, set
 import { usePermissions } from "../hooks/usePermissions";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import ErrorMessage from "../components/ui/ErrorMessage";
+import { formatDate, formatNumber } from "../lib/utils";
 
 export default function StudyYears() {
   const navigate = useNavigate();
@@ -219,10 +220,10 @@ export default function StudyYears() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {new Date(year.start_date).toLocaleDateString('ar-SA')} - {new Date(year.end_date).toLocaleDateString('ar-SA')}
+                        {formatDate(year.start_date)} - {formatDate(year.end_date)}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {Math.ceil((new Date(year.end_date).getTime() - new Date(year.start_date).getTime()) / (1000 * 60 * 60 * 24 * 30))} شهر
+                        {formatNumber(Math.ceil((new Date(year.end_date).getTime() - new Date(year.start_date).getTime()) / (1000 * 60 * 60 * 24 * 30)))} شهر
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSemesters, fetchDepartments, fetchStudentGroups, fetchStudents } from "@/lib/api";
 import { Calendar, Users, Check, X, Clock, UserCheck } from "lucide-react";
+import { formatDate } from "@/lib/utils";
 
 export default function Attendance() {
   const [selectedSemester, setSelectedSemester] = useState("");
@@ -42,49 +43,6 @@ export default function Attendance() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">الحضور والغياب</h1>
         <p className="text-gray-600">تسجيل ومتابعة حضور الطلاب</p>
-      </div>
-
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <UserCheck className="h-8 w-8 text-green-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">85%</div>
-              <div className="text-sm text-gray-600">معدل الحضور</div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <Check className="h-8 w-8 text-blue-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">240</div>
-              <div className="text-sm text-gray-600">الحضور اليوم</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <X className="h-8 w-8 text-red-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">45</div>
-              <div className="text-sm text-gray-600">الغياب اليوم</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <Clock className="h-8 w-8 text-yellow-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">12</div>
-              <div className="text-sm text-gray-600">التأخير اليوم</div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Filters */}
@@ -149,7 +107,7 @@ export default function Attendance() {
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium text-gray-900">
-              سجل الحضور - {new Date(selectedDate).toLocaleDateString('ar-SA')}
+              سجل الحضور - {formatDate(selectedDate)}
             </h3>
             <div className="flex gap-2">
               <button className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200">

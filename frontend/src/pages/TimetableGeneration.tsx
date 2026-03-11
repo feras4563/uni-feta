@@ -8,13 +8,29 @@ import {
 import { apiRequest } from "@/lib/jwt-auth";
 import { Calendar, Zap, List, AlertCircle, CheckCircle, Loader } from "lucide-react";
 
+type TimetableGroupResponse = {
+  group: {
+    id: string;
+    group_name: string;
+    department?: { name?: string | null } | null;
+    semester?: { name?: string | null } | null;
+  };
+  entries: any[];
+};
+
+type TimetableGenerationResult = {
+  message: string;
+  generated: number;
+  errors?: string[];
+};
+
 export default function TimetableGeneration() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [selectedSemester, setSelectedSemester] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [generating, setGenerating] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<TimetableGenerationResult | null>(null);
 
   const { data: semesters } = useQuery({
     queryKey: ["semesters"],
@@ -28,7 +44,7 @@ export default function TimetableGeneration() {
 
   const { data: timetables, isLoading: loadingTimetables } = useQuery({
     queryKey: ["timetables-by-semester", selectedSemester],
-    queryFn: () => apiRequest(`/timetable/semester/${selectedSemester}`),
+    queryFn: () => apiRequest<TimetableGroupResponse[]>(`/timetable/semester/${selectedSemester}`),
     enabled: !!selectedSemester,
   });
 
@@ -42,7 +58,7 @@ export default function TimetableGeneration() {
     setResult(null);
 
     try {
-      const response = await apiRequest('/timetable/auto-generate', {
+      const response = await apiRequest<TimetableGenerationResult>('/timetable/auto-generate', {
         method: 'POST',
         body: JSON.stringify({
           semester_id: selectedSemester,

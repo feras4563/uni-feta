@@ -23,11 +23,11 @@ import {
   fetchBasicInvoices,
   testSupabaseConnection,
   testBasicInvoiceQuery,
-  getInvoiceStatistics, 
   updateInvoiceStatus,
   fetchDepartments,
   fetchSemesters
 } from '@/lib/api';
+import { formatCurrency, formatDate, formatNumber, toLatinDigits } from '@/lib/utils';
 
 export default function InvoicesPage() {
   const queryClient = useQueryClient();
@@ -92,11 +92,6 @@ export default function InvoicesPage() {
     }
   });
 
-  const { data: statistics } = useQuery({
-    queryKey: ['invoice-statistics'],
-    queryFn: getInvoiceStatistics
-  });
-
   const { data: departments = [] } = useQuery({
     queryKey: ['departments'],
     queryFn: fetchDepartments
@@ -138,19 +133,10 @@ export default function InvoicesPage() {
     );
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ar-LY').format(amount) + ' دينار';
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('ar-LY');
-  };
-
   const handlePaymentUpdate = async (invoiceId: string, paymentData: any) => {
     try {
       await updateInvoiceStatus(invoiceId, 'paid', paymentData);
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['invoice-statistics'] });
       setShowPaymentModal(false);
     } catch (error) {
       console.error('Error updating payment:', error);
@@ -208,75 +194,6 @@ export default function InvoicesPage() {
       </div>
 
       <div className="px-4 sm:px-6 lg:px-8 py-8">
-        {/* Statistics Cards */}
-        {statistics && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <FileText className="h-6 w-6 text-gray-400" />
-                  </div>
-                  <div className="mr-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">إجمالي الفواتير</dt>
-                      <dd className="text-lg font-medium text-gray-900">{statistics.total}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <DollarSign className="h-6 w-6 text-green-400" />
-                  </div>
-                  <div className="mr-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">إجمالي المبلغ</dt>
-                      <dd className="text-lg font-medium text-gray-900">{formatCurrency(statistics.totalAmount)}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <CheckCircle className="h-6 w-6 text-green-400" />
-                  </div>
-                  <div className="mr-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">المدفوع</dt>
-                      <dd className="text-lg font-medium text-gray-900">{formatCurrency(statistics.paidAmount)}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <AlertCircle className="h-6 w-6 text-red-400" />
-                  </div>
-                  <div className="mr-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">المتبقي</dt>
-                      <dd className="text-lg font-medium text-gray-900">{formatCurrency(statistics.outstandingAmount)}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Filters */}
         <div className="bg-white shadow rounded-lg mb-6">
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
@@ -285,7 +202,6 @@ export default function InvoicesPage() {
               <button
                 onClick={() => {
                   queryClient.invalidateQueries({ queryKey: ['invoices'] });
-                  queryClient.invalidateQueries({ queryKey: ['invoice-statistics'] });
                 }}
                 className="text-sm text-green-600 hover:text-green-800 font-medium"
               >
@@ -338,7 +254,7 @@ ${basicInvoices.map(inv =>
                     alert(message);
                   } catch (error) {
                     console.error('🔍 Debug: Test error:', error);
-                    alert('خطأ في الاختبار: ' + error.message);
+                    alert('خطأ في الاختبار: ' + (error instanceof Error ? error.message : 'خطأ غير معروف'));
                   }
                 }}
                 className="text-sm text-purple-600 hover:text-purple-800 font-medium"
@@ -429,7 +345,7 @@ ${basicInvoices.map(inv =>
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-medium text-gray-900">
-              الفواتير ({filteredInvoices.length})
+              الفواتير ({formatNumber(filteredInvoices.length)})
             </h3>
           </div>
           
@@ -491,30 +407,30 @@ ${basicInvoices.map(inv =>
                   {filteredInvoices.map((invoice: any) => (
                     <tr key={invoice.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {invoice.invoice_number}
+                        {toLatinDigits(invoice.invoice_number)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         <div>
                           <div className="font-medium">
-                            {showBasicMode ? invoice.student_id : (invoice.students?.name || invoice.student_id)}
+                            {showBasicMode ? toLatinDigits(invoice.student_id) : (invoice.students?.name || toLatinDigits(invoice.student_id))}
                           </div>
                           <div className="text-gray-500">
-                            {showBasicMode ? 'معرف الطالب' : (invoice.students?.national_id_passport || 'غير متوفر')}
+                            {showBasicMode ? 'معرف الطالب' : (invoice.students?.national_id_passport ? toLatinDigits(invoice.students.national_id_passport) : 'غير متوفر')}
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {showBasicMode ? invoice.department_id : (invoice.departments?.name || invoice.department_id)}
+                        {showBasicMode ? toLatinDigits(invoice.department_id) : (invoice.departments?.name || toLatinDigits(invoice.department_id))}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {showBasicMode ? invoice.semester_id : (invoice.semesters?.name || invoice.semester_id)}
+                        {showBasicMode ? toLatinDigits(invoice.semester_id) : (invoice.semesters?.name || toLatinDigits(invoice.semester_id))}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         <div className="text-right">
-                          <div className="font-medium">{formatCurrency(invoice.total_amount)}</div>
+                          <div className="font-medium">{formatCurrency(invoice.total_amount, 'دينار')}</div>
                           {invoice.paid_amount > 0 && (
                             <div className="text-green-600 text-xs">
-                              مدفوع: {formatCurrency(invoice.paid_amount)}
+                              مدفوع: {formatCurrency(invoice.paid_amount, 'دينار')}
                             </div>
                           )}
                         </div>
@@ -600,10 +516,6 @@ function PaymentModal({ invoice, onClose, onPayment }: {
     onPayment(invoice.id, paymentData);
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ar-LY').format(amount) + ' دينار';
-  };
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
@@ -629,7 +541,7 @@ function PaymentModal({ invoice, onClose, onPayment }: {
             </label>
             <input
               type="text"
-              value={invoice.invoice_number}
+              value={toLatinDigits(invoice.invoice_number)}
               disabled
               className="block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
             />
@@ -641,7 +553,7 @@ function PaymentModal({ invoice, onClose, onPayment }: {
             </label>
             <input
               type="text"
-              value={formatCurrency(invoice.total_amount - invoice.paid_amount)}
+              value={formatCurrency(invoice.total_amount - invoice.paid_amount, 'دينار')}
               disabled
               className="block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
             />

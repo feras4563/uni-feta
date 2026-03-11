@@ -132,7 +132,7 @@ export default function StudentSchedule() {
                                 <span><i className="fas fa-door-open ml-1"></i>{entry.room.name || entry.room.code}{entry.room.building ? ` - ${entry.room.building}` : ''}</span>
                               )}
                               {entry.student_group && (
-                                <span><i className="fas fa-users ml-1"></i>{entry.student_group.name}</span>
+                                <span><i className="fas fa-users ml-1"></i>{entry.student_group.name || entry.student_group.group_name}</span>
                               )}
                             </div>
                           </div>

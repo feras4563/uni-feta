@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useCallback } from "react";
 import { api } from "@/lib/api-client";
+import { formatCurrency, formatDateTime, formatNumber, toLatinDigits } from "@/lib/utils";
 import {
   Search, Clock, Filter, Activity, Download, ChevronLeft, ChevronRight,
-  X, Eye, Shield, TrendingUp, Users, BarChart3, Monitor,
+  X, Eye, Shield, TrendingUp, Users,
 } from "lucide-react";
 
 /* ─── Types ─── */
@@ -94,18 +95,13 @@ const getResourceConfig = (resource: string) =>
 const getRoleConfig = (role: string) =>
   ROLE_CONFIG[role] || { label: role, cls: "bg-gray-50 text-gray-600 border-gray-200" };
 
-const formatDate = (d: string) => {
-  try {
-    return new Date(d).toLocaleDateString("ar-LY", {
-      year: "numeric", month: "short", day: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
-  } catch { return d; }
-};
-
 const formatShortDate = (d: string) => {
   try {
-    return new Date(d).toLocaleDateString("ar-LY", { month: "short", day: "numeric" });
+    return toLatinDigits(new Intl.DateTimeFormat("ar", {
+      month: "short",
+      day: "numeric",
+      numberingSystem: "latn",
+    }).format(new Date(d)));
   } catch { return d; }
 };
 
@@ -120,7 +116,7 @@ const getRelativeTime = (d: string) => {
   if (diffHours < 24) return `منذ ${diffHours} ساعة`;
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 7) return `منذ ${diffDays} يوم`;
-  return formatDate(d);
+  return formatDateTime(d);
 };
 
 /* ─── Detail descriptions ─── */
@@ -135,9 +131,9 @@ const buildDescription = (log: ActionLog): string => {
   if (d.department_name) parts.push(`القسم: ${d.department_name}`);
   if (d.subject_name) parts.push(`المقرر: ${d.subject_name}`);
   if (d.user_name_target) parts.push(`المستخدم: ${d.user_name_target}`);
-  if (d.subject_count) parts.push(`${d.subject_count} مقرر`);
-  if (d.amount) parts.push(`المبلغ: ${d.amount}`);
-  if (d.invoice_number) parts.push(`فاتورة: ${d.invoice_number}`);
+  if (d.subject_count) parts.push(`${formatNumber(Number(d.subject_count) || 0)} مقرر`);
+  if (d.amount) parts.push(`المبلغ: ${formatCurrency(Number(d.amount) || 0)}`);
+  if (d.invoice_number) parts.push(`فاتورة: ${toLatinDigits(d.invoice_number)}`);
   if (d.action_type === "toggle_status") parts.push(`الحالة: ${d.new_status === "active" ? "تفعيل" : "تعطيل"}`);
   if (d.action_type === "reset_password") parts.push("إعادة تعيين كلمة المرور");
   if (d.action_type === "toggle_attendance") parts.push(d.allow_attendance ? "السماح بالحضور" : "منع الحضور");
@@ -276,7 +272,11 @@ function DetailModal({ log, onClose }: { log: ActionLog; onClose: () => void }) 
                   <div key={key} className="flex items-center justify-between px-4 py-2.5">
                     <span className="text-xs text-gray-500">{detailLabels[key] || key}</span>
                     <span className="text-xs font-medium text-gray-800 text-left max-w-[60%] truncate" dir="ltr">
-                      {Array.isArray(value) ? value.join(", ") : typeof value === "boolean" ? (value ? "نعم" : "لا") : String(value)}
+                      {Array.isArray(value)
+                        ? value.map((item) => toLatinDigits(String(item))).join(", ")
+                        : typeof value === "boolean"
+                        ? (value ? "نعم" : "لا")
+                        : toLatinDigits(String(value))}
                     </span>
                   </div>
                 ))}
@@ -419,54 +419,6 @@ export default function ActionLogs() {
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-50 rounded-xl">
-              <BarChart3 className="h-5 w-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 font-medium">إجمالي العمليات</p>
-              <p className="text-2xl font-bold text-gray-900">{stats?.total?.toLocaleString() || 0}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-50 rounded-xl">
-              <Clock className="h-5 w-5 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 font-medium">عمليات اليوم</p>
-              <p className="text-2xl font-bold text-gray-900">{stats?.today?.toLocaleString() || 0}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-purple-50 rounded-xl">
-              <TrendingUp className="h-5 w-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 font-medium">هذا الأسبوع</p>
-              <p className="text-2xl font-bold text-gray-900">{stats?.this_week?.toLocaleString() || 0}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-orange-50 rounded-xl">
-              <Monitor className="h-5 w-5 text-orange-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 font-medium">النتائج الحالية</p>
-              <p className="text-2xl font-bold text-gray-900">{total.toLocaleString()}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Activity Chart + Top Users */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Daily Activity Chart */}
@@ -501,7 +453,7 @@ export default function ActionLogs() {
                     i === 2 ? "bg-gradient-to-br from-orange-400 to-orange-500" :
                     "bg-gradient-to-br from-blue-400 to-blue-500"
                   }`}>
-                    {i + 1}
+                    {formatNumber(i + 1)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium text-gray-800 truncate">{u.user_name}</div>
@@ -509,7 +461,7 @@ export default function ActionLogs() {
                       {roleCfg.label}
                     </span>
                   </div>
-                  <span className="text-xs font-bold text-gray-500">{u.count}</span>
+                  <span className="text-xs font-bold text-gray-500">{formatNumber(u.count)}</span>
                 </div>
               );
             })}
@@ -538,7 +490,7 @@ export default function ActionLogs() {
                     >
                       <i className={`${cfg.icon} text-[10px]`}></i>
                       {cfg.label}
-                      <span className="bg-white/60 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{count}</span>
+                      <span className="bg-white/60 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{formatNumber(count)}</span>
                     </button>
                   );
                 })}
@@ -725,7 +677,7 @@ export default function ActionLogs() {
                     <tr key={log.id} className="hover:bg-blue-50/30 transition-colors group cursor-pointer" onClick={() => setSelectedLog(log)}>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="text-xs text-gray-500">{getRelativeTime(log.created_at)}</div>
-                        <div className="text-[10px] text-gray-400 mt-0.5">{formatDate(log.created_at)}</div>
+                        <div className="text-[10px] text-gray-400 mt-0.5">{formatDateTime(log.created_at)}</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
@@ -780,7 +732,7 @@ export default function ActionLogs() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3">
           <span className="text-xs text-gray-500">
-            عرض {((page - 1) * 25) + 1} - {Math.min(page * 25, total)} من {total.toLocaleString()} عملية
+            عرض {formatNumber(((page - 1) * 25) + 1)} - {formatNumber(Math.min(page * 25, total))} من {formatNumber(total)} عملية
           </span>
           <div className="flex items-center gap-1">
             <button
@@ -803,7 +755,7 @@ export default function ActionLogs() {
                       : "text-gray-600 hover:bg-gray-100"
                   }`}
                 >
-                  {p}
+                  {formatNumber(p as number)}
                 </button>
               )
             )}

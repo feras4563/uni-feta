@@ -1,6 +1,12 @@
 import { useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
+
+type SystemSettingsData = {
+  app_logo_url?: string | null;
+  app_logo_name?: string | null;
+};
+
 export default function SystemSettings() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -11,9 +17,9 @@ export default function SystemSettings() {
   // Fetch current system settings
   const { data: settings, isLoading } = useQuery({
     queryKey: ["system-settings"],
-    queryFn: async () => {
+    queryFn: async (): Promise<SystemSettingsData> => {
       try {
-        const data = await api.get('/system-settings');
+        const data = await api.get<SystemSettingsData>('/system-settings');
         return data || {};
       } catch (error) {
         console.error('Error fetching settings:', error);

@@ -60,51 +60,6 @@ export default function TeacherSubjectGroups() {
         <p className="text-gray-600">إدارة مجموعات الطلاب لمقرراتك</p>
       </div>
 
-      {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <BookOpen className="h-8 w-8 text-blue-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">{subjectGroups?.length || 0}</div>
-              <div className="text-sm text-gray-600">إجمالي المجموعات</div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <Users className="h-8 w-8 text-green-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">
-                {subjectGroups?.reduce((sum, group) => sum + group.current_students, 0) || 0}
-              </div>
-              <div className="text-sm text-gray-600">إجمالي الطلاب</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <Calendar className="h-8 w-8 text-purple-600" />
-            <div className="mr-4">
-              <div className="text-lg font-bold text-gray-900">2024-2025</div>
-              <div className="text-sm text-gray-600">العام الأكاديمي</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <UserCheck className="h-8 w-8 text-orange-600" />
-            <div className="mr-4">
-              <div className="text-lg font-bold text-gray-900">نشط</div>
-              <div className="text-sm text-gray-600">حالة المجموعات</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Subject Groups Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">

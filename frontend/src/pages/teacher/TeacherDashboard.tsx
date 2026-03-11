@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/JWTAuthContext';
 import { fetchTeacherPortalDashboard } from '../../lib/jwt-api';
+import { formatLongDate, formatNumber, toLatinDigits } from '../../lib/utils';
 
 const DAY_NAMES: Record<number, string> = {
   0: 'الأحد',
@@ -57,7 +58,7 @@ export default function TeacherDashboard() {
       setRecentActivity((data.recent_grades || []).map((g: any) => ({
         type: 'grade_added',
         title: `تم إضافة درجة ${g.grade_name} - ${g.subject?.name || ''}`,
-        description: `${g.student?.name || ''} (${g.student?.campus_id || ''}) - ${g.grade_value}/${g.max_grade}`,
+        description: `${g.student?.name || ''} (${toLatinDigits(g.student?.campus_id || '')}) - ${formatNumber(g.grade_value || 0)}/${formatNumber(g.max_grade || 0)}`,
         icon: 'fa-graduation-cap',
         time: g.created_at
       })));
@@ -100,7 +101,7 @@ export default function TeacherDashboard() {
                 {(teacherInfo?.campus_id || user?.teacherCampusId) && (
                   <div className="mt-1 text-sm text-gray-500">
                     <i className="fas fa-id-badge ml-1"></i>
-                    الرقم الوظيفي: {teacherInfo?.campus_id || user?.teacherCampusId}
+                    الرقم الوظيفي: {toLatinDigits(teacherInfo?.campus_id || user?.teacherCampusId)}
                   </div>
                 )}
               </div>
@@ -109,12 +110,7 @@ export default function TeacherDashboard() {
               <div className="text-left ml-6">
                 <div className="text-sm text-gray-500">اليوم</div>
                 <div className="text-lg font-semibold text-gray-900">
-                  {new Date().toLocaleDateString('ar-SA', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}
+                  {formatLongDate(new Date())}
                 </div>
               </div>
               <button
@@ -169,65 +165,6 @@ export default function TeacherDashboard() {
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <i className="fas fa-book text-blue-600 text-xl"></i>
-            </div>
-            <div className="mr-4">
-              <h3 className="text-sm font-medium text-gray-500">المواد المدرسة</h3>
-              <p className="text-2xl font-bold text-gray-900">
-                {loading ? '...' : stats.totalSubjects}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <i className="fas fa-user-graduate text-green-600 text-xl"></i>
-            </div>
-            <div className="mr-4">
-              <h3 className="text-sm font-medium text-gray-500">إجمالي الطلاب</h3>
-              <p className="text-2xl font-bold text-gray-900">
-                {loading ? '...' : stats.totalStudents}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <i className="fas fa-calendar-check text-purple-600 text-xl"></i>
-            </div>
-            <div className="mr-4">
-              <h3 className="text-sm font-medium text-gray-500">محاضرات اليوم</h3>
-              <p className="text-2xl font-bold text-gray-900">
-                {loading ? '...' : stats.todaySessions}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-orange-100 rounded-lg">
-              <i className="fas fa-graduation-cap text-orange-600 text-xl"></i>
-            </div>
-            <div className="mr-4">
-              <h3 className="text-sm font-medium text-gray-500">الدرجات المسجلة</h3>
-              <p className="text-2xl font-bold text-gray-900">
-                {loading ? '...' : stats.totalGrades}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Today's Schedule + Upcoming */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         {/* Today's Timetable */}
@@ -271,7 +208,7 @@ export default function TeacherDashboard() {
                           <span><i className="fas fa-door-open ml-1"></i>{entry.room.name || entry.room.code}</span>
                         )}
                         {entry.student_group && (
-                          <span><i className="fas fa-users ml-1"></i>{entry.student_group.name}</span>
+                          <span><i className="fas fa-users ml-1"></i>{entry.student_group.name || entry.student_group.group_name}</span>
                         )}
                       </div>
                     </div>
@@ -331,7 +268,7 @@ export default function TeacherDashboard() {
                       <div className="flex items-center space-x-3 space-x-reverse text-xs text-gray-500 mt-1">
                         <span className="text-green-700 font-medium">
                           <i className="fas fa-calendar ml-1"></i>
-                          {entry.upcoming_day_name} - {entry.upcoming_date}
+                          {entry.upcoming_day_name} - {toLatinDigits(entry.upcoming_date)}
                         </span>
                         {entry.room && (
                           <span><i className="fas fa-door-open ml-1"></i>{entry.room.name || entry.room.code}</span>

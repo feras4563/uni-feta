@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, FileText, User, Calendar, DollarSign, CheckCircle, Clock, XCircle, Printer } from 'lucide-react';
 import { fetchAllInvoices } from '@/lib/api';
+import { formatCurrency, formatDate } from '@/lib/utils';
 
 export default function InvoiceDetailPage() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
@@ -14,14 +15,6 @@ export default function InvoiceDetailPage() {
   });
 
   const invoice = invoices?.find(inv => inv.id === invoiceId);
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ar-LY').format(amount) + ' دينار';
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('ar-LY');
-  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {

@@ -6,8 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\Student;
 use App\Models\Subject;
+use App\Models\SubjectDepartment;
+use App\Models\Teacher;
 use App\Traits\LogsUserActions;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class DepartmentController extends Controller
@@ -48,6 +51,8 @@ class DepartmentController extends Controller
             'name' => 'required|string|max:255',
             'name_en' => 'nullable|string|max:255',
             'description' => 'nullable|string',
+            'location' => 'nullable|string|max:255',
+            'structure' => 'nullable|string|max:255',
             'head' => 'nullable|string|max:255',
             'head_teacher_id' => 'nullable|exists:teachers,id',
             'semester_count' => 'nullable|integer|min:1|max:10',
@@ -98,11 +103,28 @@ class DepartmentController extends Controller
         $department = Department::with('headTeacher:id,name,name_en')->findOrFail($id);
 
         // Get all subjects for this department with prerequisites
-        $allSubjects = Subject::where('department_id', $id)
+        $allSubjects = Subject::where(function ($query) use ($id) {
+                $query->where('department_id', $id)
+                    ->orWhereHas('subjectDepartments', function ($subjectDepartmentsQuery) use ($id) {
+                        $subjectDepartmentsQuery->where('department_id', $id)
+                            ->where('is_active', true);
+                    });
+            })
             ->with('prerequisiteSubjects:id,name,name_en,code')
+            ->distinct()
             ->select('id', 'name', 'name_en', 'code', 'credits', 'semester_number', 'is_required',
                      'subject_type', 'theoretical_hours', 'practical_hours', 'min_units_required')
             ->orderBy('semester_number')
+            ->orderBy('name')
+            ->get();
+
+        $students = Student::where('department_id', $id)
+            ->select('id', 'name', 'name_en', 'department_id', 'status', 'year', 'email', 'created_at')
+            ->orderBy('name')
+            ->get();
+
+        $teachers = Teacher::where('department_id', $id)
+            ->select('id', 'name', 'name_en', 'department_id', 'specialization', 'email', 'is_active', 'created_at')
             ->orderBy('name')
             ->get();
 
@@ -144,12 +166,20 @@ class DepartmentController extends Controller
         }
 
         // Get student counts
-        $totalStudents = Student::where('department_id', $id)->count();
-        $activeStudents = Student::where('department_id', $id)->where('status', 'active')->count();
+        $totalStudents = $students->count();
+        $activeStudents = $students->where('status', 'active')->count();
 
         return response()->json([
             'department' => $department,
             'semesters' => $semesters,
+            'students' => [
+                'total' => $students->count(),
+                'data' => $students->values(),
+            ],
+            'teachers' => [
+                'total' => $teachers->count(),
+                'data' => $teachers->values(),
+            ],
             'subjects' => $subjectsData,
             'totalSubjects' => $allSubjects->count(),
             'totalUnits' => $totalUnits,
@@ -170,6 +200,8 @@ class DepartmentController extends Controller
             'name' => 'sometimes|required|string|max:255',
             'name_en' => 'nullable|string|max:255',
             'description' => 'nullable|string',
+            'location' => 'nullable|string|max:255',
+            'structure' => 'nullable|string|max:255',
             'head' => 'nullable|string|max:255',
             'head_teacher_id' => 'nullable|exists:teachers,id',
             'semester_count' => 'nullable|integer|min:1|max:10',
@@ -198,21 +230,101 @@ class DepartmentController extends Controller
     public function destroy($id)
     {
         $department = Department::findOrFail($id);
-        
-        // Check if department has students
-        if ($department->students()->count() > 0) {
-            return response()->json([
-                'message' => 'Cannot delete department with enrolled students'
-            ], 422);
-        }
+
+        $deletedCounts = [
+            'students' => 0,
+            'teachers' => 0,
+            'subjects_deleted' => 0,
+            'subjects_detached' => 0,
+        ];
+
+        DB::transaction(function () use ($department, &$deletedCounts) {
+            $departmentId = $department->id;
+
+            $studentIds = Student::where('department_id', $departmentId)->pluck('id');
+            $teacherIds = Teacher::where('department_id', $departmentId)->pluck('id');
+
+            $mappedSubjectIds = SubjectDepartment::where('department_id', $departmentId)
+                ->pluck('subject_id');
+            $primarySubjectIds = Subject::where('department_id', $departmentId)
+                ->pluck('id');
+
+            $departmentSubjectIds = $mappedSubjectIds
+                ->merge($primarySubjectIds)
+                ->unique()
+                ->values();
+
+            $subjectIdsWithOtherDepartments = SubjectDepartment::whereIn('subject_id', $departmentSubjectIds)
+                ->where('department_id', '!=', $departmentId)
+                ->pluck('subject_id')
+                ->unique();
+
+            $sharedSubjectIds = $departmentSubjectIds
+                ->intersect($subjectIdsWithOtherDepartments)
+                ->values();
+            $exclusiveSubjectIds = $departmentSubjectIds
+                ->diff($subjectIdsWithOtherDepartments)
+                ->values();
+
+            if ($teacherIds->isNotEmpty()) {
+                Subject::whereIn('teacher_id', $teacherIds)
+                    ->whereNotIn('id', $exclusiveSubjectIds)
+                    ->update(['teacher_id' => null]);
+            }
+
+            if ($sharedSubjectIds->isNotEmpty()) {
+                $sharedSubjects = Subject::whereIn('id', $sharedSubjectIds)->get(['id', 'department_id']);
+
+                foreach ($sharedSubjects as $sharedSubject) {
+                    if ($sharedSubject->department_id !== $departmentId) {
+                        continue;
+                    }
+
+                    $replacementDepartmentId = SubjectDepartment::where('subject_id', $sharedSubject->id)
+                        ->where('department_id', '!=', $departmentId)
+                        ->orderByDesc('is_primary_department')
+                        ->value('department_id');
+
+                    $sharedSubject->update([
+                        'department_id' => $replacementDepartmentId,
+                    ]);
+                }
+
+                SubjectDepartment::where('department_id', $departmentId)
+                    ->whereIn('subject_id', $sharedSubjectIds)
+                    ->delete();
+
+                $deletedCounts['subjects_detached'] = $sharedSubjectIds->count();
+            }
+
+            if ($exclusiveSubjectIds->isNotEmpty()) {
+                SubjectDepartment::where('department_id', $departmentId)
+                    ->whereIn('subject_id', $exclusiveSubjectIds)
+                    ->delete();
+
+                $deletedCounts['subjects_deleted'] = Subject::whereIn('id', $exclusiveSubjectIds)->delete();
+            }
+
+            if ($studentIds->isNotEmpty()) {
+                $deletedCounts['students'] = Student::whereIn('id', $studentIds)->delete();
+            }
+
+            if ($teacherIds->isNotEmpty()) {
+                $deletedCounts['teachers'] = Teacher::whereIn('id', $teacherIds)->delete();
+            }
+
+            $department->delete();
+        });
 
         $this->logAction('delete', 'departments', $department->id, [
             'department_name' => $department->name,
+            'deleted_counts' => $deletedCounts,
         ]);
 
-        $department->delete();
-
-        return response()->json(['message' => 'Department deleted successfully'], 200);
+        return response()->json([
+            'message' => 'Department deleted successfully',
+            'deleted_counts' => $deletedCounts,
+        ], 200);
     }
 
     /**

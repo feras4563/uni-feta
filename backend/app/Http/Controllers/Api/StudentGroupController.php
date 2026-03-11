@@ -122,31 +122,49 @@ class StudentGroupController extends Controller
             'semester_id' => 'required|string|exists:semesters,id',
             'max_students_per_group' => 'required|integer|min:5|max:100',
         ]);
-        
-        // Get all registered students in this department/semester without a group
-        $registrations = \App\Models\StudentSemesterRegistration::where([
+
+        $this->clearOrphanedGroupAssignments($validated['department_id'], $validated['semester_id']);
+
+        $registrations = \App\Models\StudentSemesterRegistration::with('group:id,department_id,semester_id')->where([
             'department_id' => $validated['department_id'],
             'semester_id' => $validated['semester_id'],
-        ])->whereNull('group_id')->get();
-        
+        ])->where(function ($query) {
+            $query->whereNull('group_id')
+                ->orWhereDoesntHave('group');
+        })->get()->filter(function ($registration) {
+            $group = new \App\Models\StudentGroup([
+                'department_id' => $registration->department_id,
+                'semester_id' => $registration->semester_id,
+            ]);
+
+            $eligibility = $this->resolveGroupEligibility($group, $registration->student_id, $registration);
+
+            if ($eligibility['fee_status'] === 'paid' && !$registration->tuition_paid) {
+                $registration->tuition_paid = true;
+                $registration->save();
+            }
+
+            return $eligibility['can_join_group'];
+        })->values();
+
         if ($registrations->isEmpty()) {
             return response()->json([
-                'message' => 'No unassigned students found for this department and semester',
+                'message' => 'No eligible unassigned students found for this department and semester',
                 'summary' => ['totalGroups' => 0, 'totalStudents' => 0]
             ]);
         }
-        
+
         $maxPerGroup = $validated['max_students_per_group'];
         $totalStudents = $registrations->count();
         $numGroups = (int) ceil($totalStudents / $maxPerGroup);
-        
+
         // Get department name for group naming
         $department = \App\Models\Department::find($validated['department_id']);
         $deptName = $department ? $department->name : 'مجموعة';
-        
+
         $createdGroups = [];
         $chunks = $registrations->chunk($maxPerGroup);
-        
+
         foreach ($chunks as $index => $chunk) {
             $group = \App\Models\StudentGroup::create([
                 'group_name' => $deptName . ' - مجموعة ' . ($index + 1),
@@ -157,16 +175,16 @@ class StudentGroupController extends Controller
                 'current_students' => $chunk->count(),
                 'is_active' => true,
             ]);
-            
+
             // Assign students to this group
             foreach ($chunk as $registration) {
                 $registration->group_id = $group->id;
                 $registration->save();
             }
-            
+
             $createdGroups[] = $group;
         }
-        
+
         return response()->json([
             'message' => 'Groups created successfully',
             'groups' => $createdGroups,
@@ -218,27 +236,45 @@ class StudentGroupController extends Controller
             'department_id' => 'required|string|exists:departments,id',
             'semester_id' => 'required|string|exists:semesters,id',
         ]);
-        
+
+        $this->clearOrphanedGroupAssignments($validated['department_id'], $validated['semester_id']);
+
         // Get available groups with capacity
         $groups = \App\Models\StudentGroup::where([
             'department_id' => $validated['department_id'],
             'semester_id' => $validated['semester_id'],
             'is_active' => true,
         ])->whereRaw('current_students < max_students')->get();
-        
+
         if ($groups->isEmpty()) {
             return response()->json(['message' => 'No available groups with capacity'], 400);
         }
-        
-        // Get unassigned students
-        $registrations = \App\Models\StudentSemesterRegistration::where([
+
+        $registrations = \App\Models\StudentSemesterRegistration::with('group:id,department_id,semester_id')->where([
             'department_id' => $validated['department_id'],
             'semester_id' => $validated['semester_id'],
-        ])->whereNull('group_id')->get();
-        
+        ])->where(function ($query) {
+            $query->whereNull('group_id')
+                ->orWhereDoesntHave('group');
+        })->get()->filter(function ($registration) {
+            $group = new \App\Models\StudentGroup([
+                'department_id' => $registration->department_id,
+                'semester_id' => $registration->semester_id,
+            ]);
+
+            $eligibility = $this->resolveGroupEligibility($group, $registration->student_id, $registration);
+
+            if ($eligibility['fee_status'] === 'paid' && !$registration->tuition_paid) {
+                $registration->tuition_paid = true;
+                $registration->save();
+            }
+
+            return $eligibility['can_join_group'];
+        })->values();
+
         $assigned = 0;
         $groupIndex = 0;
-        
+
         foreach ($registrations as $registration) {
             // Find next group with capacity
             $attempts = 0;
@@ -274,6 +310,14 @@ class StudentGroupController extends Controller
         if (!$group) {
             return response()->json(['message' => 'Student group not found'], 404);
         }
+
+        // Ensure registrations are detached even if FK constraints are missing/disabled.
+        DB::table('student_semester_registrations')
+            ->where('group_id', $id)
+            ->update([
+                'group_id' => null,
+                'updated_at' => now(),
+            ]);
         
         DB::table('student_groups')->where('id', $id)->delete();
         
@@ -292,10 +336,9 @@ class StudentGroupController extends Controller
         ])
         ->where('group_id', $id)
         ->get();
-        
         return response()->json($students);
     }
-    
+
     /**
      * Get available students for a group (students in same department/semester without a group)
      * Includes fee payment status for each student
@@ -303,56 +346,41 @@ class StudentGroupController extends Controller
     public function getAvailableStudents($groupId)
     {
         $group = \App\Models\StudentGroup::findOrFail($groupId);
-        
-        // Get students who are registered in the same department and semester but don't have a group
-        $availableStudents = \App\Models\Student::whereHas('semesterRegistrations', function($query) use ($group) {
-            $query->where('department_id', $group->department_id)
-                  ->where('semester_id', $group->semester_id)
-                  ->whereNull('group_id');
-        })->get();
-        
-        // Enrich with fee status
-        $enriched = $availableStudents->map(function($student) use ($group) {
+
+        $this->clearOrphanedGroupAssignments($group->department_id, $group->semester_id);
+
+        $candidateStudentIds = $this->getCandidateStudentIdsForGroup($group);
+
+        if (empty($candidateStudentIds)) {
+            return response()->json([]);
+        }
+
+        $registrations = \App\Models\StudentSemesterRegistration::with('group:id,department_id,semester_id')
+            ->where('department_id', $group->department_id)
+            ->where('semester_id', $group->semester_id)
+            ->whereIn('student_id', $candidateStudentIds)
+            ->get()
+            ->keyBy('student_id');
+
+        $availableStudents = \App\Models\Student::whereIn('id', $candidateStudentIds)
+            ->orderBy('name')
+            ->get();
+
+        $enriched = $availableStudents->map(function ($student) use ($group, $registrations) {
             $studentData = $student->toArray();
-            
-            // Check invoice status
-            $invoice = \App\Models\StudentInvoice::where('student_id', $student->id)
-                ->where('semester_id', $group->semester_id)
-                ->first();
-            
-            $feeStatus = 'unpaid';
-            if ($invoice) {
-                $feeStatus = $invoice->status; // paid, partial, pending
-            }
-            
-            // Check tuition_paid on registration
-            $reg = \App\Models\StudentSemesterRegistration::where([
-                'student_id' => $student->id,
-                'department_id' => $group->department_id,
-                'semester_id' => $group->semester_id,
-            ])->first();
-            
-            if ($reg && $reg->tuition_paid) {
-                $feeStatus = 'paid';
-            }
-            
-            // Check admin override
-            $hasAdminOverride = \App\Models\StudentSubjectEnrollment::where('student_id', $student->id)
-                ->where('semester_id', $group->semester_id)
-                ->where('admin_override', true)
-                ->where('attendance_allowed', true)
-                ->exists();
-            
-            $studentData['fee_status'] = $feeStatus;
-            $studentData['has_admin_override'] = $hasAdminOverride;
-            $studentData['can_join_group'] = ($feeStatus === 'paid' || $hasAdminOverride);
-            
+            $eligibility = $this->resolveGroupEligibility($group, $student->id, $registrations->get($student->id));
+
+            $studentData['fee_status'] = $eligibility['fee_status'];
+            $studentData['has_admin_override'] = $eligibility['has_admin_override'];
+            $studentData['can_join_group'] = $eligibility['can_join_group'];
+            $studentData['registration_id'] = $registrations->get($student->id)?->id;
+
             return $studentData;
-        });
-        
+        })->values();
+
         return response()->json($enriched);
     }
-    
+
     /**
      * Add a student to a group
      */
@@ -364,73 +392,43 @@ class StudentGroupController extends Controller
             'department_id' => 'nullable|string',
             'semester_number' => 'nullable|integer',
         ]);
-        
+
         $group = \App\Models\StudentGroup::findOrFail($groupId);
-        
-        // Check if group is full
+
+        $this->clearOrphanedGroupAssignments($group->department_id, $group->semester_id);
+
         if ($group->current_students >= $group->max_students) {
             return response()->json(['message' => 'المجموعة ممتلئة'], 400);
         }
-        
-        // Check if student is already in another group for this semester/department
-        $existingInGroup = \App\Models\StudentSemesterRegistration::where([
-            'student_id' => $validated['student_id'],
-            'department_id' => $group->department_id,
-            'semester_id' => $group->semester_id,
-        ])->whereNotNull('group_id')->first();
-        
-        if ($existingInGroup) {
+
+        $existingReg = \App\Models\StudentSemesterRegistration::with('group:id')
+            ->where([
+                'student_id' => $validated['student_id'],
+                'department_id' => $group->department_id,
+                'semester_id' => $group->semester_id,
+            ])->first();
+
+        if ($existingReg && $existingReg->group_id && !$existingReg->group) {
+            $existingReg->group_id = null;
+            $existingReg->save();
+            $existingReg->unsetRelation('group');
+        }
+
+        if ($existingReg && $existingReg->group_id) {
             return response()->json(['message' => 'الطالب مسجل بالفعل في مجموعة أخرى في هذا الفصل الدراسي'], 409);
         }
-        
-        // --- Fee Payment Check ---
-        // Check if student has paid fees or has admin override
-        $hasPaidFees = false;
-        $hasAdminOverride = false;
-        
-        // 1. Check student invoice for this semester
-        $invoice = \App\Models\StudentInvoice::where('student_id', $validated['student_id'])
-            ->where('semester_id', $group->semester_id)
-            ->first();
-        
-        if ($invoice && $invoice->status === 'paid') {
-            $hasPaidFees = true;
-        }
-        
-        // 2. Check tuition_paid on existing registration
-        $existingReg = \App\Models\StudentSemesterRegistration::where([
-            'student_id' => $validated['student_id'],
-            'department_id' => $group->department_id,
-            'semester_id' => $group->semester_id,
-        ])->first();
-        
-        if ($existingReg && $existingReg->tuition_paid) {
-            $hasPaidFees = true;
-        }
-        
-        // 3. Check admin_override on subject enrollments
-        $adminOverrideExists = \App\Models\StudentSubjectEnrollment::where('student_id', $validated['student_id'])
-            ->where('semester_id', $group->semester_id)
-            ->where('admin_override', true)
-            ->where('attendance_allowed', true)
-            ->exists();
-        
-        if ($adminOverrideExists) {
-            $hasAdminOverride = true;
-        }
-        
-        if (!$hasPaidFees && !$hasAdminOverride) {
+
+        $eligibility = $this->resolveGroupEligibility($group, $validated['student_id'], $existingReg);
+
+        if (!$eligibility['can_join_group']) {
             return response()->json([
                 'message' => 'لا يمكن إضافة الطالب إلى المجموعة: الرسوم غير مدفوعة ولا يوجد تجاوز إداري. يرجى دفع الرسوم أولاً أو تفعيل التجاوز الإداري من صفحة الرسوم.',
                 'error_code' => 'FEES_NOT_PAID'
             ], 422);
         }
-        // --- End Fee Payment Check ---
-        
-        // Find the student's semester registration
+
         $registration = $existingReg;
-        
-        // If no registration exists, create one
+
         if (!$registration) {
             $semester = \App\Models\Semester::find($group->semester_id);
             $registration = \App\Models\StudentSemesterRegistration::create([
@@ -441,51 +439,182 @@ class StudentGroupController extends Controller
                 'semester_number' => $group->semester_number ?? 1,
                 'registration_date' => now(),
                 'status' => 'active',
+                'tuition_paid' => $eligibility['fee_status'] === 'paid',
             ]);
+        } elseif ($eligibility['fee_status'] === 'paid' && !$registration->tuition_paid) {
+            $registration->tuition_paid = true;
+            $registration->save();
         }
-        
-        // Assign to group
+
         $registration->group_id = $groupId;
         $registration->save();
-        
-        // Update group count
+
         $group->current_students = \App\Models\StudentSemesterRegistration::where('group_id', $groupId)->count();
         $group->save();
-        
+
         return response()->json(['message' => 'تم إضافة الطالب إلى المجموعة بنجاح', 'registration' => $registration]);
     }
-    
+
     /**
      * Remove a student from a group
      */
     public function removeStudent($groupId, $studentId)
     {
         $group = \App\Models\StudentGroup::findOrFail($groupId);
-        
-        // Try finding by registration ID first, then by student_id
+
         $registration = \App\Models\StudentSemesterRegistration::where('id', $studentId)
             ->where('group_id', $groupId)
             ->first();
-        
+
         if (!$registration) {
             $registration = \App\Models\StudentSemesterRegistration::where([
                 'student_id' => $studentId,
                 'group_id' => $groupId
             ])->first();
         }
-        
+
         if (!$registration) {
             return response()->json(['message' => 'Student not found in this group'], 404);
         }
-        
-        // Remove from group
+
         $registration->group_id = null;
         $registration->save();
-        
-        // Update group count
+
         $group->current_students = \App\Models\StudentSemesterRegistration::where('group_id', $groupId)->count();
         $group->save();
-        
+
         return response()->json(['message' => 'Student removed from group successfully']);
+    }
+
+    /**
+     * Clear stale registrations that point to deleted groups.
+     */
+    private function clearOrphanedGroupAssignments(string $departmentId, string $semesterId): void
+    {
+        \App\Models\StudentSemesterRegistration::where('department_id', $departmentId)
+            ->where('semester_id', $semesterId)
+            ->whereNotNull('group_id')
+            ->whereDoesntHave('group')
+            ->update([
+                'group_id' => null,
+                'updated_at' => now(),
+            ]);
+    }
+
+    private function getCandidateStudentIdsForGroup(\App\Models\StudentGroup $group): array
+    {
+        $registrationStudentIds = \App\Models\StudentSemesterRegistration::where('department_id', $group->department_id)
+            ->where('semester_id', $group->semester_id)
+            ->where(function ($query) {
+                $query->whereNull('group_id')
+                    ->orWhereDoesntHave('group');
+            })
+            ->pluck('student_id')
+            ->all();
+
+        $enrollmentStudentIds = \App\Models\StudentSubjectEnrollment::where('semester_id', $group->semester_id)
+            ->where('department_id', $group->department_id)
+            ->pluck('student_id')
+            ->all();
+
+        $invoiceStudentIds = \App\Models\StudentInvoice::where('semester_id', $group->semester_id)
+            ->where(function ($query) use ($group) {
+                $query->where('department_id', $group->department_id)
+                    ->orWhereNull('department_id');
+            })
+            ->where('status', '!=', 'cancelled')
+            ->pluck('student_id')
+            ->all();
+
+        $studentIds = array_values(array_unique(array_merge(
+            $registrationStudentIds,
+            $enrollmentStudentIds,
+            $invoiceStudentIds
+        )));
+
+        if (empty($studentIds)) {
+            return [];
+        }
+
+        $assignedStudentIds = \App\Models\StudentSemesterRegistration::where('department_id', $group->department_id)
+            ->where('semester_id', $group->semester_id)
+            ->whereNotNull('group_id')
+            ->whereHas('group', function ($query) use ($group) {
+                $query->where('department_id', $group->department_id)
+                    ->where('semester_id', $group->semester_id);
+            })
+            ->pluck('student_id')
+            ->all();
+
+        return array_values(array_diff($studentIds, $assignedStudentIds));
+    }
+
+    private function resolveGroupEligibility(
+        \App\Models\StudentGroup $group,
+        string $studentId,
+        ?\App\Models\StudentSemesterRegistration $registration = null
+    ): array {
+        $registration = $registration ?: \App\Models\StudentSemesterRegistration::with('group:id,department_id,semester_id')
+            ->where('student_id', $studentId)
+            ->where('department_id', $group->department_id)
+            ->where('semester_id', $group->semester_id)
+            ->first();
+
+        $invoice = \App\Models\StudentInvoice::where('student_id', $studentId)
+            ->where('semester_id', $group->semester_id)
+            ->where(function ($query) use ($group) {
+                $query->where('department_id', $group->department_id)
+                    ->orWhereNull('department_id');
+            })
+            ->where('status', '!=', 'cancelled')
+            ->orderByRaw("CASE WHEN status = 'paid' THEN 0 WHEN status = 'partial' THEN 1 ELSE 2 END")
+            ->orderByDesc('invoice_date')
+            ->orderByDesc('created_at')
+            ->first();
+
+        $feeStatus = 'unpaid';
+
+        if ($invoice) {
+            if ($invoice->status === 'paid' || (float) $invoice->balance <= 0) {
+                $feeStatus = 'paid';
+            } elseif ($invoice->status === 'partial' || (float) $invoice->paid_amount > 0) {
+                $feeStatus = 'partial';
+            } elseif (!empty($invoice->status)) {
+                $feeStatus = $invoice->status;
+            }
+        }
+
+        if ($registration && $registration->tuition_paid) {
+            $feeStatus = 'paid';
+        }
+
+        $paidEnrollmentExists = \App\Models\StudentSubjectEnrollment::where('student_id', $studentId)
+            ->where('semester_id', $group->semester_id)
+            ->where('department_id', $group->department_id)
+            ->where(function ($query) {
+                $query->where('payment_status', 'paid')
+                    ->orWhere(function ($subQuery) {
+                        $subQuery->where('attendance_allowed', true)
+                            ->where('admin_override', false);
+                    });
+            })
+            ->exists();
+
+        if ($paidEnrollmentExists) {
+            $feeStatus = 'paid';
+        }
+
+        $hasAdminOverride = \App\Models\StudentSubjectEnrollment::where('student_id', $studentId)
+            ->where('semester_id', $group->semester_id)
+            ->where('department_id', $group->department_id)
+            ->where('admin_override', true)
+            ->where('attendance_allowed', true)
+            ->exists();
+
+        return [
+            'fee_status' => $feeStatus,
+            'has_admin_override' => $hasAdminOverride,
+            'can_join_group' => $feeStatus === 'paid' || $hasAdminOverride,
+        ];
     }
 }

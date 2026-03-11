@@ -46,21 +46,22 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1a2332] via-[#243447] to-[#1a2332] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#1a2332] via-[#243447] to-[#1a2332] flex items-center justify-center px-4 py-8">
       <div className="max-w-md w-full">
-        {/* Logo and Title */}
-        <div className="text-center mb-8">
-          <div className="inline-block bg-white rounded-2xl px-6 py-3 shadow-lg">
-            <img src={logoWithName} alt="جامعة الخليل الأهلية" className="h-16 w-auto mx-auto" />
+        {/* Login Form Card with integrated logo */}
+        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+          {/* Logo Header - Clean and modern design */}
+          <div className="bg-gradient-to-br from-slate-50 via-white to-slate-50 pt-10 pb-6 px-8">
+            <div className="flex flex-col items-center space-y-4">
+              <img src={logoWithName} alt="جامعة الخليل الأهلية" className="h-40 w-auto drop-shadow-sm" />
+              <div className="text-center space-y-2 mt-2">
+                <h1 className="text-2xl font-bold text-gray-900">تسجيل الدخول</h1>
+                <p className="text-gray-500 text-sm">أدخل بياناتك للوصول إلى النظام</p>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Login Form */}
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">تسجيل الدخول</h2>
-            <p className="text-gray-600">أدخل بياناتك للوصول إلى النظام</p>
-          </div>
+          <div className="p-8 pt-6">
 
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -169,6 +170,7 @@ export default function LoginPage() {
                 إنشاء حساب جديد
               </Link>
             </p>
+          </div>
           </div>
         </div>
 

@@ -14,6 +14,7 @@ class StudentGrade extends Model
         'student_id',
         'subject_id',
         'teacher_id',
+        'semester_id',
         'grade_type',
         'grade_name',
         'grade_value',
@@ -59,5 +60,10 @@ class StudentGrade extends Model
     public function teacher()
     {
         return $this->belongsTo(Teacher::class);
+    }
+
+    public function semester()
+    {
+        return $this->belongsTo(Semester::class);
     }
 }

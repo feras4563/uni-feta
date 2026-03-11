@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { fetchTeachers, fetchDepartments } from "../lib/api";
+import { fetchTeachers, fetchDepartments, fetchSubjects } from "../lib/api";
 import { useState, useMemo } from "react";
 
 export default function TeachersPage() {
@@ -12,22 +12,123 @@ export default function TeachersPage() {
     queryKey: ["teachers"],
     queryFn: () => fetchTeachers()
   });
+
+  const { data: subjects = [] } = useQuery({
+    queryKey: ["subjects"],
+    queryFn: () => fetchSubjects()
+  });
   
   const { data: departments = [] } = useQuery({
     queryKey: ["departments"],
     queryFn: fetchDepartments
   });
 
+  const departmentNameById = useMemo(() => {
+    return new Map(departments.map((department: any) => [String(department.id), department.name]));
+  }, [departments]);
+
+  const specializationDepartmentByValue = useMemo(() => {
+    const mapping = new Map<string, string>();
+
+    subjects.forEach((subject: any) => {
+      const departmentId = String(subject.department_id || subject.department?.id || "");
+      if (!departmentId) {
+        return;
+      }
+
+      const values = [subject.name, subject.name_en, subject.code]
+        .filter(Boolean)
+        .map((value: string) => value.trim().toLowerCase());
+
+      values.forEach((value) => {
+        if (value) {
+          mapping.set(value, departmentId);
+        }
+      });
+    });
+
+    return mapping;
+  }, [subjects]);
+
+  const getTeacherSpecializations = (teacher: any) => {
+    const values = [
+      ...(Array.isArray(teacher.specializations) ? teacher.specializations : []),
+      ...(teacher.specialization ? [teacher.specialization] : []),
+    ]
+      .filter(Boolean)
+      .map((value: string) => value.trim())
+      .filter(Boolean);
+
+    return Array.from(new Set(values));
+  };
+
+  const getTeacherAssignments = (teacher: any) => {
+    return Array.isArray(teacher.teacherSubjects)
+      ? teacher.teacherSubjects.filter((assignment: any) => assignment?.is_active !== false)
+      : [];
+  };
+
+  const getTeacherDepartmentIds = (teacher: any) => {
+    const departmentIds = new Set<string>();
+
+    if (teacher.department_id) {
+      departmentIds.add(String(teacher.department_id));
+    }
+
+    if (teacher.department?.id) {
+      departmentIds.add(String(teacher.department.id));
+    }
+
+    getTeacherAssignments(teacher).forEach((assignment: any) => {
+      if (assignment.department_id) {
+        departmentIds.add(String(assignment.department_id));
+      }
+
+      if (assignment.department?.id) {
+        departmentIds.add(String(assignment.department.id));
+      }
+
+      if (assignment.subject?.department_id) {
+        departmentIds.add(String(assignment.subject.department_id));
+      }
+    });
+
+    getTeacherSpecializations(teacher).forEach((specialization) => {
+      const departmentId = specializationDepartmentByValue.get(specialization.trim().toLowerCase());
+      if (departmentId) {
+        departmentIds.add(String(departmentId));
+      }
+    });
+
+    return Array.from(departmentIds);
+  };
+
+  const getTeacherDepartmentNames = (teacher: any) => {
+    return getTeacherDepartmentIds(teacher)
+      .map((departmentId) => departmentNameById.get(departmentId))
+      .filter(Boolean) as string[];
+  };
+
   const filteredTeachers = useMemo(() => {
     return teachers.filter((t: any) => {
+      const specializationText = getTeacherSpecializations(t).join(" ").toLowerCase();
+      const assignmentText = getTeacherAssignments(t)
+        .flatMap((assignment: any) => [assignment.subject?.name, assignment.subject?.name_en, assignment.subject?.code, assignment.department?.name])
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const departmentsText = getTeacherDepartmentNames(t).join(" ").toLowerCase();
       const matchesSearch = !searchTerm || 
         t.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.name_en?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesDept = !departmentFilter || 
-        t.department_id === parseInt(departmentFilter);
+        t.name_en?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        specializationText.includes(searchTerm.toLowerCase()) ||
+        assignmentText.includes(searchTerm.toLowerCase()) ||
+        departmentsText.includes(searchTerm.toLowerCase());
+      const matchesDept = !departmentFilter || getTeacherDepartmentIds(t).includes(String(departmentFilter));
       return matchesSearch && matchesDept;
     });
-  }, [teachers, searchTerm, departmentFilter]);
+  }, [teachers, searchTerm, departmentFilter, subjects, departments]);
 
   if (isLoading) {
     return (
@@ -84,28 +185,66 @@ export default function TeachersPage() {
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">الاسم</th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">المؤهل</th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">القسم</th>
+                <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">التخصصات</th>
+                <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">الأقسام</th>
                 <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">البريد</th>
                 <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {filteredTeachers.map((teacher: any) => (
-                <tr key={teacher.id} className="hover:bg-gray-50">
+                <tr key={teacher.id} className="hover:bg-gray-50 align-top">
                   <td className="px-6 py-4">
                     <div className="font-semibold text-gray-900">{teacher.name}</div>
                     {teacher.name_en && <div className="text-sm text-gray-500">{teacher.name_en}</div>}
+                    <div className="text-xs text-gray-500 mt-2">
+                      {getTeacherAssignments(teacher).length > 0
+                        ? `${getTeacherAssignments(teacher).length} تكليف نشط`
+                        : 'لا توجد تكليفات نشطة'}
+                    </div>
                   </td>
-                  <td className="px-6 py-4 text-gray-700">{teacher.specialization || 'غير محدد'}</td>
                   <td className="px-6 py-4">
-                    {teacher.department && (
-                      <span className="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
-                        {teacher.department.name}
-                      </span>
+                    <div className="flex flex-wrap gap-2">
+                      {getTeacherSpecializations(teacher).length > 0 ? (
+                        getTeacherSpecializations(teacher).slice(0, 4).map((specialization) => (
+                          <span key={specialization} className="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
+                            {specialization}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-gray-500">غير محدد</span>
+                      )}
+                    </div>
+                    {getTeacherAssignments(teacher).length > 0 && (
+                      <div className="text-xs text-gray-500 mt-2 space-y-1">
+                        {getTeacherAssignments(teacher).slice(0, 2).map((assignment: any) => (
+                          <div key={assignment.id}>
+                            {assignment.subject?.name || 'مادة غير محددة'}
+                          </div>
+                        ))}
+                        {getTeacherAssignments(teacher).length > 2 && (
+                          <div>و {getTeacherAssignments(teacher).length - 2} مواد أخرى</div>
+                        )}
+                      </div>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-gray-700">{teacher.email || 'غير محدد'}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap gap-2">
+                      {getTeacherDepartmentNames(teacher).length > 0 ? (
+                        getTeacherDepartmentNames(teacher).map((departmentName) => (
+                          <span key={departmentName} className="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
+                            {departmentName}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-gray-500">غير محدد</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-gray-700">
+                    <div>{teacher.email || 'غير محدد'}</div>
+                    {teacher.phone && <div className="text-sm text-gray-500 mt-1">{teacher.phone}</div>}
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
                       <button

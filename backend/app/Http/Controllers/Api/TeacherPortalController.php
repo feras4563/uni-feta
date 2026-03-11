@@ -14,6 +14,7 @@ use App\Models\ClassSession;
 use App\Models\AttendanceRecord;
 use App\Models\TimetableEntry;
 use App\Models\AppUser;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -52,9 +53,8 @@ class TeacherPortalController extends Controller
             ->with('subject:id,name,name_en,code,credits', 'department:id,name,name_en', 'semester:id,name,name_en')
             ->get();
 
-        // Count unique students enrolled in teacher's subjects
-        $subjectIds = $activeSubjects->pluck('subject_id')->unique();
-        $totalStudents = StudentSubjectEnrollment::whereIn('subject_id', $subjectIds)
+        // Count unique students enrolled in teacher's actual classes
+        $totalStudents = $this->getScopedEnrollmentQuery($teacher)
             ->whereIn('status', ['enrolled', 'active'])
             ->distinct('student_id')
             ->count('student_id');
@@ -72,7 +72,7 @@ class TeacherPortalController extends Controller
             ->with([
                 'subject:id,name,name_en,code',
                 'room:id,name,code,building',
-                'studentGroup:id,name',
+                'studentGroup:id,group_name',
             ])
             ->orderBy('start_time')
             ->get();
@@ -95,7 +95,7 @@ class TeacherPortalController extends Controller
                 ->with([
                     'subject:id,name,name_en,code',
                     'room:id,name,code,building',
-                    'studentGroup:id,name',
+                    'studentGroup:id,group_name',
                 ])
                 ->orderBy('start_time')
                 ->get()
@@ -175,10 +175,11 @@ class TeacherPortalController extends Controller
             ->get();
 
         // Enrich with student count per subject
-        $subjects->each(function ($ts) {
-            $ts->student_count = StudentSubjectEnrollment::where('subject_id', $ts->subject_id)
+        $subjects->each(function ($ts) use ($teacher) {
+            $ts->student_count = $this->getScopedEnrollmentQuery($teacher, $ts->subject_id)
                 ->whereIn('status', ['enrolled', 'active'])
-                ->count();
+                ->distinct('student_id')
+                ->count('student_id');
         });
 
         return response()->json($subjects);
@@ -194,16 +195,7 @@ class TeacherPortalController extends Controller
             return response()->json(['error' => 'Teacher profile not found'], 404);
         }
 
-        // Get all subject IDs this teacher is assigned to
-        $teacherSubjectIds = TeacherSubject::where('teacher_id', $teacher->id)
-            ->where('is_active', true)
-            ->pluck('subject_id');
-
-        // Also include subjects directly assigned via subjects.teacher_id
-        $directSubjectIds = Subject::where('teacher_id', $teacher->id)->pluck('id');
-        $allSubjectIds = $teacherSubjectIds->merge($directSubjectIds)->unique();
-
-        $query = StudentSubjectEnrollment::whereIn('subject_id', $allSubjectIds)
+        $query = $this->getScopedEnrollmentQuery($teacher, $request->subject_id)
             ->whereIn('status', ['enrolled', 'active', 'completed'])
             ->with([
                 'student:id,name,name_en,email,phone,campus_id,photo_url,department_id,year',
@@ -259,11 +251,12 @@ class TeacherPortalController extends Controller
 
         // Get timetable entries
         $timetableEntries = TimetableEntry::where('teacher_id', $teacher->id)
+            ->where('is_active', true)
             ->with([
                 'subject:id,name,name_en,code',
                 'room:id,name,code,building',
                 'timeSlot:id,code,label,start_time,end_time',
-                'studentGroup:id,name',
+                'studentGroup:id,group_name',
             ])
             ->orderBy('day_of_week')
             ->get();
@@ -276,9 +269,33 @@ class TeacherPortalController extends Controller
             ->orderBy('start_time')
             ->get();
 
+        $displaySchedules = $classSchedules->filter(function ($schedule) use ($timetableEntries, $classSchedules) {
+            if ($schedule->subject_id) {
+                return true;
+            }
+
+            $overlapsTimetable = $timetableEntries->contains(function ($entry) use ($schedule) {
+                return (int) $entry->day_of_week === (int) $schedule->day_of_week
+                    && $this->timesOverlap($entry->start_time, $entry->end_time, $schedule->start_time, $schedule->end_time);
+            });
+
+            if ($overlapsTimetable) {
+                return false;
+            }
+
+            $overlapsAssignedSchedule = $classSchedules->contains(function ($other) use ($schedule) {
+                return $other->id !== $schedule->id
+                    && $other->subject_id
+                    && (int) $other->day_of_week === (int) $schedule->day_of_week
+                    && $this->timesOverlap($other->start_time, $other->end_time, $schedule->start_time, $schedule->end_time);
+            });
+
+            return !$overlapsAssignedSchedule;
+        })->values();
+
         return response()->json([
             'timetable' => $timetableEntries,
-            'schedules' => $classSchedules,
+            'schedules' => $displaySchedules,
         ]);
     }
 
@@ -299,13 +316,16 @@ class TeacherPortalController extends Controller
 
         $grades = StudentGrade::where('subject_id', $subjectId)
             ->where('teacher_id', $teacher->id)
+            ->whereIn('student_id', $this->getScopedEnrollmentQuery($teacher, $subjectId)
+                ->whereIn('status', ['enrolled', 'active'])
+                ->select('student_id'))
             ->with('student:id,name,name_en,campus_id,photo_url')
             ->orderBy('student_id')
             ->orderBy('grade_type')
             ->get();
 
         // Get all enrolled students for this subject
-        $enrolledStudents = StudentSubjectEnrollment::where('subject_id', $subjectId)
+        $enrolledStudents = $this->getScopedEnrollmentQuery($teacher, $subjectId)
             ->whereIn('status', ['enrolled', 'active'])
             ->with('student:id,name,name_en,campus_id,photo_url')
             ->get()
@@ -382,6 +402,21 @@ class TeacherPortalController extends Controller
 
         $created = [];
         $updated = [];
+
+        $allowedStudentIds = $this->getScopedEnrollmentQuery($teacher, $subjectId)
+            ->whereIn('status', ['enrolled', 'active'])
+            ->pluck('student_id')
+            ->unique();
+
+        $submittedStudentIds = collect($request->grades)
+            ->pluck('student_id')
+            ->unique();
+
+        if ($submittedStudentIds->diff($allowedStudentIds)->isNotEmpty()) {
+            return response()->json([
+                'error' => 'One or more selected students are not registered in your actual classes for this subject',
+            ], 403);
+        }
 
         foreach ($request->grades as $gradeData) {
             $lookupKey = $gradeData['student_id'] . '|' . $gradeData['grade_type'] . '|' . $gradeData['grade_name'];
@@ -578,20 +613,11 @@ class TeacherPortalController extends Controller
             ->orderBy('start_time')
             ->get();
 
-        // Attach enrolled student count per subject (batch)
-        $subjectIds = $sessions->pluck('subject_id')->unique()->values()->all();
-        $enrolledCounts = [];
-        if (!empty($subjectIds)) {
-            $enrolledCounts = StudentSubjectEnrollment::whereIn('subject_id', $subjectIds)
+        $sessions->each(function ($session) use ($teacher) {
+            $session->enrolled_count = $this->getScopedEnrollmentQueryForSession($teacher, $session)
                 ->whereIn('status', ['enrolled', 'active'])
-                ->selectRaw('subject_id, COUNT(DISTINCT student_id) as count')
-                ->groupBy('subject_id')
-                ->pluck('count', 'subject_id')
-                ->all();
-        }
-
-        $sessions->each(function ($session) use ($enrolledCounts) {
-            $session->enrolled_count = $enrolledCounts[$session->subject_id] ?? 0;
+                ->distinct('student_id')
+                ->count('student_id');
         });
 
         return response()->json($sessions);
@@ -675,8 +701,8 @@ class TeacherPortalController extends Controller
             return response()->json(['error' => 'Session not found or not yours'], 404);
         }
 
-        // Get enrolled students for this subject
-        $enrolledStudents = StudentSubjectEnrollment::where('subject_id', $session->subject_id)
+        // Get enrolled students for this session's actual class context
+        $enrolledStudents = $this->getScopedEnrollmentQueryForSession($teacher, $session)
             ->whereIn('status', ['enrolled', 'active'])
             ->with('student:id,name,name_en,campus_id,photo_url')
             ->get()
@@ -768,6 +794,17 @@ class TeacherPortalController extends Controller
 
         // Batch-load existing records for this session (1 query)
         $studentIds = collect($request->records)->pluck('student_id')->unique()->all();
+        $allowedStudentIds = $this->getScopedEnrollmentQueryForSession($teacher, $session)
+            ->whereIn('status', ['enrolled', 'active'])
+            ->pluck('student_id')
+            ->unique();
+
+        if (collect($studentIds)->diff($allowedStudentIds)->isNotEmpty()) {
+            return response()->json([
+                'error' => 'One or more selected students are not registered in this class',
+            ], 403);
+        }
+
         $existingRecords = AttendanceRecord::where('session_id', $sessionId)
             ->whereIn('student_id', $studentIds)
             ->get()
@@ -800,7 +837,7 @@ class TeacherPortalController extends Controller
         }
 
         // Auto-complete session if all enrolled students are marked
-        $enrolledCount = StudentSubjectEnrollment::where('subject_id', $session->subject_id)
+        $enrolledCount = $this->getScopedEnrollmentQueryForSession($teacher, $session)
             ->whereIn('status', ['enrolled', 'active'])
             ->distinct('student_id')
             ->count('student_id');
@@ -871,6 +908,108 @@ class TeacherPortalController extends Controller
     public function myAttendance(Request $request)
     {
         return $this->mySessions($request);
+    }
+
+    private function getTeacherTimetableEntries(Teacher $teacher, ?string $subjectId = null)
+    {
+        return TimetableEntry::where('teacher_id', $teacher->id)
+            ->where('is_active', true)
+            ->when($subjectId, function ($query) use ($subjectId) {
+                $query->where('subject_id', $subjectId);
+            })
+            ->get([
+                'id',
+                'subject_id',
+                'semester_id',
+                'department_id',
+                'group_id',
+                'day_of_week',
+                'start_time',
+                'end_time',
+            ]);
+    }
+
+    private function getScopedEnrollmentQuery(Teacher $teacher, ?string $subjectId = null, ?TimetableEntry $specificEntry = null): Builder
+    {
+        $contexts = $specificEntry
+            ? collect([$specificEntry])
+            : $this->getTeacherTimetableEntries($teacher, $subjectId);
+
+        $contexts = $contexts
+            ->filter(function ($entry) {
+                return !empty($entry->subject_id) && !empty($entry->semester_id) && !empty($entry->department_id);
+            })
+            ->unique(function ($entry) {
+                return implode('|', [
+                    $entry->subject_id,
+                    $entry->semester_id,
+                    $entry->department_id,
+                    $entry->group_id ?? '',
+                ]);
+            })
+            ->values();
+
+        $query = StudentSubjectEnrollment::query();
+
+        if ($contexts->isEmpty()) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where(function ($outer) use ($contexts) {
+            foreach ($contexts as $context) {
+                $outer->orWhere(function ($inner) use ($context) {
+                    $inner->where('subject_id', $context->subject_id)
+                        ->where('semester_id', $context->semester_id)
+                        ->where('department_id', $context->department_id)
+                        ->whereExists(function ($exists) use ($context) {
+                            $exists->selectRaw('1')
+                                ->from('student_semester_registrations as ssr')
+                                ->whereColumn('ssr.student_id', 'student_subject_enrollments.student_id')
+                                ->where('ssr.semester_id', $context->semester_id)
+                                ->where('ssr.department_id', $context->department_id)
+                                ->whereIn('ssr.status', ['active', 'completed']);
+
+                            if (!empty($context->group_id)) {
+                                $exists->where('ssr.group_id', $context->group_id);
+                            }
+                        });
+                });
+            }
+        });
+    }
+
+    private function getScopedEnrollmentQueryForSession(Teacher $teacher, ClassSession $session): Builder
+    {
+        if ($session->timetable_id) {
+            $timetableEntry = TimetableEntry::where('id', $session->timetable_id)
+                ->where('teacher_id', $teacher->id)
+                ->where('is_active', true)
+                ->first([
+                    'id',
+                    'subject_id',
+                    'semester_id',
+                    'department_id',
+                    'group_id',
+                    'day_of_week',
+                    'start_time',
+                    'end_time',
+                ]);
+
+            if ($timetableEntry) {
+                return $this->getScopedEnrollmentQuery($teacher, $session->subject_id, $timetableEntry);
+            }
+        }
+
+        return $this->getScopedEnrollmentQuery($teacher, $session->subject_id);
+    }
+
+    private function timesOverlap(?string $startA, ?string $endA, ?string $startB, ?string $endB): bool
+    {
+        if (!$startA || !$endA || !$startB || !$endB) {
+            return false;
+        }
+
+        return $startA < $endB && $startB < $endA;
     }
 
     /**

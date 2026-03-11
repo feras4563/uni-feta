@@ -30,6 +30,9 @@ class Subject extends Model
         'min_units_required',
         'teacher_id',
         'max_students',
+        'pdf_file_url',
+        'pdf_file_name',
+        'pdf_file_size',
         'is_active',
     ];
 
@@ -44,6 +47,7 @@ class Subject extends Model
         'prerequisites' => 'array',
         'min_units_required' => 'integer',
         'max_students' => 'integer',
+        'pdf_file_size' => 'integer',
         'is_active' => 'boolean',
     ];
 

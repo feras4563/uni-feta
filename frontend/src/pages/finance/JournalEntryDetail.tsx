@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Edit, CheckCircle, XCircle, Trash2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { apiRequest } from '@/lib/jwt-auth';
+import { formatDate, formatDateTime, formatDecimal, formatNumber, toLatinDigits } from '@/lib/utils';
 
 interface JournalEntryLine {
   id: number;
@@ -226,7 +227,7 @@ export default function JournalEntryDetail() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">رقم القيد</label>
-                <p className="text-gray-900">{entry.entry_number}</p>
+                <p className="text-gray-900">{toLatinDigits(entry.entry_number)}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">نوع القيد</label>
@@ -234,19 +235,19 @@ export default function JournalEntryDetail() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">رقم المرجع</label>
-                <p className="text-gray-900">{entry.reference_number || '-'}</p>
+                <p className="text-gray-900">{entry.reference_number ? toLatinDigits(entry.reference_number) : '-'}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">التاريخ</label>
-                <p className="text-gray-900">{new Date(entry.entry_date).toLocaleDateString('ar-SA')}</p>
+                <p className="text-gray-900">{formatDate(entry.entry_date)}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">تاريخ الترحيل</label>
-                <p className="text-gray-900">{new Date(entry.posting_date).toLocaleDateString('ar-SA')}</p>
+                <p className="text-gray-900">{formatDate(entry.posting_date)}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">السلسلة</label>
-                <p className="text-gray-900">{entry.series}</p>
+                <p className="text-gray-900">{toLatinDigits(entry.series)}</p>
               </div>
             </div>
             {entry.notes && (
@@ -276,20 +277,20 @@ export default function JournalEntryDetail() {
                 <tbody className="divide-y divide-gray-200">
                   {entry.lines.map((line, index) => (
                     <tr key={line.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm text-gray-700">{index + 1}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700">{formatNumber(index + 1)}</td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">
                           {line.account.account_name}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {line.account.account_number}
+                          {toLatinDigits(line.account.account_number)}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900">
-                        {parseFloat(line.debit) > 0 ? parseFloat(line.debit).toFixed(3) : '-'}
+                        {parseFloat(line.debit) > 0 ? formatDecimal(parseFloat(line.debit)) : '-'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900">
-                        {parseFloat(line.credit) > 0 ? parseFloat(line.credit).toFixed(3) : '-'}
+                        {parseFloat(line.credit) > 0 ? formatDecimal(parseFloat(line.credit)) : '-'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {line.description || '-'}
@@ -303,10 +304,10 @@ export default function JournalEntryDetail() {
                       الإجمالي
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                      {parseFloat(entry.total_debit).toFixed(3)}
+                      {formatDecimal(parseFloat(entry.total_debit))}
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                      {parseFloat(entry.total_credit).toFixed(3)}
+                      {formatDecimal(parseFloat(entry.total_credit))}
                     </td>
                     <td className="px-6 py-4">
                       {Math.abs(parseFloat(entry.total_debit) - parseFloat(entry.total_credit)) < 0.001 && (
@@ -326,20 +327,20 @@ export default function JournalEntryDetail() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">تاريخ الإنشاء</label>
                 <p className="text-gray-900">
-                  {new Date(entry.created_at).toLocaleString('ar-SA')}
+                  {formatDateTime(entry.created_at)}
                 </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">آخر تحديث</label>
                 <p className="text-gray-900">
-                  {new Date(entry.updated_at).toLocaleString('ar-SA')}
+                  {formatDateTime(entry.updated_at)}
                 </p>
               </div>
               {entry.posted_at && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">تاريخ الترحيل</label>
                   <p className="text-gray-900">
-                    {new Date(entry.posted_at).toLocaleString('ar-SA')}
+                    {formatDateTime(entry.posted_at)}
                   </p>
                 </div>
               )}

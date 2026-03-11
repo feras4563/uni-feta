@@ -73,49 +73,6 @@ export default function Grades() {
         <p className="text-gray-600">إدارة درجات الطلاب والتقييمات</p>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <GraduationCap className="h-8 w-8 text-blue-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">3.45</div>
-              <div className="text-sm text-gray-600">متوسط المعدل العام</div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <Award className="h-8 w-8 text-green-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">156</div>
-              <div className="text-sm text-gray-600">الطلاب الناجحون</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <TrendingUp className="h-8 w-8 text-purple-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">24</div>
-              <div className="text-sm text-gray-600">الطلاب المتفوقون</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <BarChart3 className="h-8 w-8 text-orange-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">89%</div>
-              <div className="text-sm text-gray-600">معدل النجاح</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">

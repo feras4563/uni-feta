@@ -209,7 +209,7 @@ export default function QRDisplay({
           <div>
             <span className="text-gray-500">تاريخ الانتهاء:</span>
             <p className="text-gray-700">
-              {new Date(expiresAt).toLocaleTimeString('ar-LY', {
+              {new Date(expiresAt).toLocaleTimeString('ar-LY-u-nu-latn', {
                 hour: '2-digit',
                 minute: '2-digit'
               })}

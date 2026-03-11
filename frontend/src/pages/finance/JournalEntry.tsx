@@ -4,6 +4,7 @@ import { apiRequest } from '@/lib/jwt-auth';
 import Modal from '../../components/ui/Modal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import ErrorMessage from '../../components/ui/ErrorMessage';
+import { formatCurrency, formatDate } from '@/lib/utils';
 
 interface JournalEntryLine {
   accountId: string;
@@ -141,20 +142,6 @@ export default function JournalEntry() {
   const totalPages = useMemo(() =>
     Math.ceil(filteredEntries.length / itemsPerPage)
   , [filteredEntries.length, itemsPerPage]);
-
-  const totalEntries = useMemo(() => entries.length, [entries]);
-  const postedEntries = useMemo(() =>
-    entries.filter(entry => entry.status === 'posted').length
-  , [entries]);
-  const draftEntries = useMemo(() =>
-    entries.filter(entry => entry.status === 'draft').length
-  , [entries]);
-  const totalDebit = useMemo(() =>
-    entries.reduce((sum, entry) => sum + (entry.debit || 0), 0)
-  , [entries]);
-  const totalCredit = useMemo(() =>
-    entries.reduce((sum, entry) => sum + (entry.credit || 0), 0)
-  , [entries]);
 
   // Load initial data
   useEffect(() => {
@@ -296,20 +283,8 @@ export default function JournalEntry() {
     alert('سيتم تصدير اليومية...');
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('ar-SA', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
   const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('ar-LY', {
-      style: 'currency',
-      currency: 'LYD',
-      minimumFractionDigits: 2
-    }).format(amount);
+    return formatCurrency(amount, 'د.ل');
   };
 
   const getTypeClass = (type: string) => {
@@ -416,69 +391,6 @@ export default function JournalEntry() {
             onChange={(e) => { setSelectedDate(e.target.value); handleFilterChange(); }}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow-sm p-6 border-r-4 border-green-500">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-green-100 text-green-600">
-              <i className="fas fa-book text-xl"></i>
-            </div>
-            <div className="mr-4">
-              <p className="text-2xl font-bold text-gray-900">{totalEntries}</p>
-              <p className="text-gray-600">إجمالي القيود</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6 border-r-4 border-blue-500">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-blue-100 text-blue-600">
-              <i className="fas fa-check-circle text-xl"></i>
-            </div>
-            <div className="mr-4">
-              <p className="text-2xl font-bold text-gray-900">{postedEntries}</p>
-              <p className="text-gray-600">القيود المرحلة</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6 border-r-4 border-yellow-500">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-yellow-100 text-yellow-600">
-              <i className="fas fa-edit text-xl"></i>
-            </div>
-            <div className="mr-4">
-              <p className="text-2xl font-bold text-gray-900">{draftEntries}</p>
-              <p className="text-gray-600">المسودات</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6 border-r-4 border-purple-500">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-purple-100 text-purple-600">
-              <i className="fas fa-balance-scale text-xl"></i>
-            </div>
-            <div className="mr-4">
-              <p className="text-2xl font-bold text-gray-900">{formatAmount(totalDebit)}</p>
-              <p className="text-gray-600">إجمالي المدين</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6 border-r-4 border-indigo-500">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-indigo-100 text-indigo-600">
-              <i className="fas fa-balance-scale text-xl"></i>
-            </div>
-            <div className="mr-4">
-              <p className="text-2xl font-bold text-gray-900">{formatAmount(totalCredit)}</p>
-              <p className="text-gray-600">إجمالي الدائن</p>
-            </div>
-          </div>
         </div>
       </div>
 

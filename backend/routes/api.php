@@ -123,6 +123,8 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/semester/{semesterNumber}', [SubjectController::class, 'bySemester']);
         Route::get('/{id}', [SubjectController::class, 'show']);
         Route::post('/{id}/check-prerequisites', [SubjectController::class, 'checkPrerequisites']);
+        Route::post('/{id}/pdf', [SubjectController::class, 'uploadPdf'])->middleware('permission:subjects,edit');
+        Route::delete('/{id}/pdf', [SubjectController::class, 'deletePdf'])->middleware('permission:subjects,edit');
         Route::post('/', [SubjectController::class, 'store'])->middleware('permission:subjects,create');
         Route::put('/{id}', [SubjectController::class, 'update'])->middleware('permission:subjects,edit');
         Route::patch('/{id}', [SubjectController::class, 'update'])->middleware('permission:subjects,edit');
@@ -283,16 +285,16 @@ Route::middleware('auth:api')->group(function () {
 
     // Timetable Routes
     Route::prefix('timetable')->group(function () {
-        Route::get('/entries', [TimetableController::class, 'entries']);
-        Route::post('/entries', [TimetableController::class, 'store']);
-        Route::get('/entries/{id}', [TimetableController::class, 'show']);
-        Route::put('/entries/{id}', [TimetableController::class, 'update']);
-        Route::patch('/entries/{id}', [TimetableController::class, 'update']);
-        Route::delete('/entries/{id}', [TimetableController::class, 'destroy']);
-        Route::get('/group/{groupId}', [TimetableController::class, 'byGroup']);
-        Route::get('/teacher/{teacherId}', [TimetableController::class, 'byTeacher']);
-        Route::post('/auto-generate', [TimetableController::class, 'autoGenerate']);
-        Route::get('/semester/{semesterId}', [TimetableController::class, 'listBySemester']);
+        Route::get('/entries', [TimetableController::class, 'entries'])->middleware('permission:timetable,view');
+        Route::post('/entries', [TimetableController::class, 'store'])->middleware('permission:timetable,create');
+        Route::get('/entries/{id}', [TimetableController::class, 'show'])->middleware('permission:timetable,view');
+        Route::put('/entries/{id}', [TimetableController::class, 'update'])->middleware('permission:timetable,edit');
+        Route::patch('/entries/{id}', [TimetableController::class, 'update'])->middleware('permission:timetable,edit');
+        Route::delete('/entries/{id}', [TimetableController::class, 'destroy'])->middleware('permission:timetable,delete');
+        Route::get('/group/{groupId}', [TimetableController::class, 'byGroup'])->middleware('permission:timetable,view');
+        Route::get('/teacher/{teacherId}', [TimetableController::class, 'byTeacher'])->middleware('permission:timetable,view');
+        Route::post('/auto-generate', [TimetableController::class, 'autoGenerate'])->middleware('permission:timetable,create');
+        Route::get('/semester/{semesterId}', [TimetableController::class, 'listBySemester'])->middleware('permission:timetable,view');
     });
 
     // Time Slots Routes (write operations only - read operations are public)
@@ -486,6 +488,7 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('student-portal')->middleware('role:student')->group(function () {
         Route::get('/dashboard', [StudentPortalController::class, 'dashboard']);
         Route::get('/my-subjects', [StudentPortalController::class, 'mySubjects']);
+        Route::get('/my-subjects/{subjectId}', [StudentPortalController::class, 'mySubjectDetail']);
         Route::get('/my-teachers', [StudentPortalController::class, 'myTeachers']);
         Route::get('/my-fees', [StudentPortalController::class, 'myFees']);
         Route::get('/my-schedule', [StudentPortalController::class, 'mySchedule']);

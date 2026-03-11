@@ -89,11 +89,12 @@ class StudentController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'name_en' => 'nullable|string|max:255',
-            'email' => 'required|email|unique:students,email',
+            'email' => 'required|email|unique:students,email|unique:users,email',
             'national_id_passport' => 'required|string|unique:students,national_id_passport',
             'phone' => 'nullable|string|max:20',
             'address' => 'nullable|string',
             'department_id' => 'nullable|exists:departments,id',
+            'specialization_track' => 'nullable|in:fine_arts_media,advertising_design,photography_cinema,multimedia_media',
             'year' => 'nullable|integer|min:1|max:10',
             'status' => 'nullable|in:active,inactive,graduated,suspended',
             'gender' => 'nullable|in:male,female',
@@ -146,7 +147,8 @@ class StudentController extends Controller
         // Auto-create login account if student has email
         $generatedPassword = null;
         if ($student->email) {
-            $generatedPassword = $request->input('password', $student->campus_id ?? 'student123');
+            // Keep student onboarding predictable unless an explicit password is provided.
+            $generatedPassword = $request->input('password', 'student123');
             $this->createStudentLoginAccount($student, $generatedPassword);
         }
 
@@ -194,11 +196,12 @@ class StudentController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'sometimes|required|string|max:255',
             'name_en' => 'nullable|string|max:255',
-            'email' => 'sometimes|required|email|unique:students,email,' . $id,
+            'email' => 'sometimes|required|email|unique:students,email,' . $id . '|unique:users,email,' . ($student->auth_user_id ?? 'NULL'),
             'national_id_passport' => 'sometimes|required|string|unique:students,national_id_passport,' . $id,
             'phone' => 'nullable|string|max:20',
             'address' => 'nullable|string',
             'department_id' => 'nullable|exists:departments,id',
+            'specialization_track' => 'nullable|in:fine_arts_media,advertising_design,photography_cinema,multimedia_media',
             'year' => 'nullable|integer|min:1|max:10',
             'status' => 'nullable|in:active,inactive,graduated,suspended',
             'gender' => 'nullable|in:male,female',
@@ -355,6 +358,7 @@ class StudentController extends Controller
             'study_year_id' => 'required|exists:study_years,id',
             'department_id' => 'required|exists:departments,id',
             'semester_number' => 'required|integer|min:1',
+            'specialization_track' => 'nullable|in:fine_arts_media,advertising_design,photography_cinema,multimedia_media',
             'is_paying' => 'nullable|boolean',
         ]);
 
@@ -366,6 +370,115 @@ class StudentController extends Controller
         }
 
         $student = Student::findOrFail($id);
+
+        $requestedSubjects = \App\Models\Subject::select('id', 'name', 'code', 'semester_number', 'department_id')
+            ->whereIn('id', $request->subject_ids)
+            ->get();
+
+        if ($requestedSubjects->count() !== collect($request->subject_ids)->unique()->count()) {
+            return response()->json([
+                'message' => 'تعذر العثور على بعض المقررات المطلوبة للتسجيل',
+            ], 422);
+        }
+
+        $invalidDepartmentSubjects = $requestedSubjects->filter(function ($subject) use ($request) {
+            return (string) $subject->department_id !== (string) $request->department_id;
+        });
+
+        if ($invalidDepartmentSubjects->isNotEmpty()) {
+            return response()->json([
+                'message' => 'بعض المقررات لا تتبع القسم المحدد للتسجيل',
+                'invalid_subjects' => $invalidDepartmentSubjects->map(function ($subject) {
+                    return [
+                        'id' => $subject->id,
+                        'code' => $subject->code,
+                        'name' => $subject->name,
+                    ];
+                })->values(),
+            ], 422);
+        }
+
+        $invalidSemesterSubjects = $requestedSubjects->filter(function ($subject) use ($request) {
+            return (int) $subject->semester_number !== (int) $request->semester_number;
+        });
+
+        if ($invalidSemesterSubjects->isNotEmpty()) {
+            return response()->json([
+                'message' => 'بعض المقررات لا تتبع الفصل الدراسي المحدد',
+                'invalid_subjects' => $invalidSemesterSubjects->map(function ($subject) {
+                    return [
+                        'id' => $subject->id,
+                        'code' => $subject->code,
+                        'name' => $subject->name,
+                        'semester_number' => $subject->semester_number,
+                    ];
+                })->values(),
+            ], 422);
+        }
+
+        $isVisualArtsDigitalMedia = \App\Models\Department::where('id', $request->department_id)
+            ->where(function ($query) {
+                $query->where('name', 'قسم الفنون البصرية والإعلام الرقمي')
+                    ->orWhere('name_en', 'Department of Visual Arts and Digital Media');
+            })
+            ->exists();
+
+        if ($isVisualArtsDigitalMedia && (int) $request->semester_number >= 5) {
+            $trackPrefixes = [
+                'fine_arts_media' => ['FA '],
+                'advertising_design' => ['AD '],
+                'photography_cinema' => ['PH '],
+                'multimedia_media' => ['MM '],
+            ];
+            $sharedPrefixes = ['EL ', 'SUP DE '];
+
+            $requestedTrack = $request->input('specialization_track');
+
+            if (empty($student->specialization_track)) {
+                if (!$requestedTrack || !array_key_exists($requestedTrack, $trackPrefixes)) {
+                    return response()->json([
+                        'message' => 'يجب اختيار مسار تخصص لطلبة قسم الفنون البصرية والإعلام الرقمي ابتداءً من الفصل الخامس',
+                        'allowed_tracks' => array_keys($trackPrefixes),
+                    ], 422);
+                }
+
+                $student->update([
+                    'specialization_track' => $requestedTrack,
+                ]);
+            } elseif (!empty($requestedTrack) && $requestedTrack !== $student->specialization_track) {
+                return response()->json([
+                    'message' => 'لا يمكن تغيير مسار التخصص بعد اعتماده للطالب',
+                    'current_track' => $student->specialization_track,
+                ], 422);
+            }
+
+            $effectiveTrack = $student->specialization_track;
+            $allowedPrefixes = array_merge($trackPrefixes[$effectiveTrack] ?? [], $sharedPrefixes);
+
+            $trackInvalidSubjects = $requestedSubjects->filter(function ($subject) use ($allowedPrefixes) {
+                $code = (string) $subject->code;
+                foreach ($allowedPrefixes as $prefix) {
+                    if (str_starts_with($code, $prefix)) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+
+            if ($trackInvalidSubjects->isNotEmpty()) {
+                return response()->json([
+                    'message' => 'المقررات المختارة لا تتوافق مع مسار التخصص المعتمد للطالب',
+                    'student_track' => $effectiveTrack,
+                    'invalid_subjects' => $trackInvalidSubjects->map(function ($subject) {
+                        return [
+                            'id' => $subject->id,
+                            'code' => $subject->code,
+                            'name' => $subject->name,
+                        ];
+                    })->values(),
+                ], 422);
+            }
+        }
         
         // Check if default accounts are configured before proceeding
         $studentReceivableAccount = \App\Models\AccountDefault::where('category', 'accounts_receivable')->first();
@@ -378,24 +491,25 @@ class StudentController extends Controller
             ], 400);
         }
         
-        // Find or create student group for this department and semester
-        $groupName = 'المجموعة ' . $request->semester_number;
-        $studentGroup = \App\Models\StudentGroup::firstOrCreate(
-            [
-                'department_id' => $request->department_id,
-                'semester_id' => $request->semester_id,
-                'semester_number' => $request->semester_number,
-            ],
-            [
-                'group_name' => $groupName,
-                'max_students' => 30,
-                'current_students' => 0,
-                'is_active' => true,
-                'description' => 'مجموعة تم إنشاؤها تلقائياً للفصل الدراسي ' . $request->semester_number,
-            ]
-        );
-        
-        // Create or update semester registration with group assignment
+        // Create or update semester registration without auto-creating/auto-assigning groups.
+        // Group membership is handled manually from Student Groups screens.
+        $existingSemesterRegistration = \App\Models\StudentSemesterRegistration::with('group:id,department_id,semester_id')
+            ->where('student_id', $id)
+            ->where('semester_id', $request->semester_id)
+            ->first();
+
+        $preservedGroupId = $existingSemesterRegistration?->group_id;
+        if ($existingSemesterRegistration && $existingSemesterRegistration->group_id) {
+            $existingGroup = $existingSemesterRegistration->group;
+            $groupIsInvalid = !$existingGroup
+                || (string) $existingGroup->department_id !== (string) $request->department_id
+                || (string) $existingGroup->semester_id !== (string) $request->semester_id;
+
+            if ($groupIsInvalid) {
+                $preservedGroupId = null;
+            }
+        }
+
         $semesterRegistration = \App\Models\StudentSemesterRegistration::updateOrCreate(
             [
                 'student_id' => $id,
@@ -404,16 +518,12 @@ class StudentController extends Controller
             [
                 'study_year_id' => $request->study_year_id,
                 'department_id' => $request->department_id,
-                'group_id' => $studentGroup->id,
+                'group_id' => $preservedGroupId,
                 'semester_number' => $request->semester_number,
                 'registration_date' => now(),
                 'status' => 'active',
             ]
         );
-        
-        // Update group student count
-        $studentGroup->current_students = \App\Models\StudentSemesterRegistration::where('group_id', $studentGroup->id)->count();
-        $studentGroup->save();
         
         // Check prerequisites for all requested subjects
         $completedSubjectIds = \App\Models\StudentSubjectEnrollment::where('student_id', $id)

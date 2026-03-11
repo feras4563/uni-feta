@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '@/lib/jwt-auth';
+import { formatDate } from '@/lib/utils';
 
 interface Account {
   id: number;
@@ -194,10 +195,10 @@ export default function GeneralLedger() {
   };
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('ar-LY', {
+    return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'short',
-      day: 'numeric'
+      month: '2-digit',
+      day: '2-digit'
     });
   };
 
@@ -401,102 +402,7 @@ export default function GeneralLedger() {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-8">
-          <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="h-8 w-8 bg-gray-100 rounded-md flex items-center justify-center">
-                    <i className="fas fa-sitemap text-gray-600"></i>
-                  </div>
-                </div>
-                <div className="mr-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">إجمالي الحسابات</dt>
-                    <dd className="text-lg font-semibold text-gray-900">{totalAccounts}</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="h-8 w-8 bg-gray-100 rounded-md flex items-center justify-center">
-                    <i className="fas fa-exchange-alt text-gray-600"></i>
-                  </div>
-                </div>
-                <div className="mr-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">إجمالي المعاملات</dt>
-                    <dd className="text-lg font-semibold text-gray-900">{totalTransactions}</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="h-8 w-8 bg-gray-100 rounded-md flex items-center justify-center">
-                    <i className="fas fa-arrow-up text-gray-600"></i>
-                  </div>
-                </div>
-                <div className="mr-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">إجمالي المدين</dt>
-                    <dd className="text-lg font-semibold text-gray-900">{formatAmount(totalDebit)}</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="h-8 w-8 bg-gray-100 rounded-md flex items-center justify-center">
-                    <i className="fas fa-arrow-down text-gray-600"></i>
-                  </div>
-                </div>
-                <div className="mr-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">إجمالي الدائن</dt>
-                    <dd className="text-lg font-semibold text-gray-900">{formatAmount(totalCredit)}</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="h-8 w-8 bg-gray-100 rounded-md flex items-center justify-center">
-                    <i className="fas fa-calculator text-gray-600"></i>
-                  </div>
-                </div>
-                <div className="mr-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">الرصيد الصافي</dt>
-                    <dd className="text-lg font-semibold text-gray-900">
-                      {formatAmount(netBalance)}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      </div>
 
         {/* Account Summary Table or Transactions Table */}
         <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">

@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchDepartmentWithStats, updateDepartment } from "../lib/jwt-api";
+import { fetchDepartmentWithStats, updateDepartment, deleteDepartment } from "../lib/jwt-api";
+import { usePermissions } from "../hooks/usePermissions";
 
 export default function DepartmentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { hasClientPermission } = usePermissions();
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -26,8 +28,6 @@ export default function DepartmentDetail() {
   const department = departmentData?.department;
   const students = departmentData?.students;
   const subjects = departmentData?.subjects;
-  const materials = departmentData?.materials;
-  const fees = departmentData?.fees;
 
   // Initialize form when department data loads
   useEffect(() => {
@@ -101,6 +101,26 @@ export default function DepartmentDetail() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!id) return;
+
+    if (!window.confirm("هل أنت متأكد من حذف هذا القسم نهائياً؟ سيتم حذف البيانات المرتبطة به.")) {
+      return;
+    }
+
+    try {
+      await deleteDepartment(id);
+      queryClient.invalidateQueries({ queryKey: ["departments"] });
+      queryClient.removeQueries({ queryKey: ["department", id] });
+      queryClient.removeQueries({ queryKey: ["department-details", id] });
+      alert("تم حذف القسم بنجاح!");
+      navigate("/departments");
+    } catch (error: any) {
+      console.error("Error deleting department:", error);
+      setErrors({ submit: error?.message || "خطأ في حذف القسم" });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -166,26 +186,42 @@ export default function DepartmentDetail() {
               </button>
               {!isEditing && (
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => navigate(`/departments/${id}/edit`)}
-                    className="inline-flex items-center px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors duration-200 shadow-sm"
-                    title="تعديل القسم والمواد"
-                  >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    تحرير شامل
-                  </button>
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="inline-flex items-center px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors duration-200 shadow-sm"
-                    title="تعديل بيانات القسم"
-                  >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    تعديل سريع
-                  </button>
+                  {hasClientPermission("departments", "edit") && (
+                    <>
+                      <button
+                        onClick={() => navigate(`/departments/${id}/edit`)}
+                        className="inline-flex items-center px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors duration-200 shadow-sm"
+                        title="تعديل القسم والمواد"
+                      >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        تحرير شامل
+                      </button>
+                      <button
+                        onClick={() => setIsEditing(true)}
+                        className="inline-flex items-center px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors duration-200 shadow-sm"
+                        title="تعديل بيانات القسم"
+                      >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        تعديل سريع
+                      </button>
+                    </>
+                  )}
+                  {hasClientPermission("departments", "delete") && (
+                    <button
+                      onClick={handleDelete}
+                      className="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors duration-200 shadow-sm"
+                      title="حذف القسم نهائياً"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      حذف نهائي
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -195,82 +231,6 @@ export default function DepartmentDetail() {
 
       <div className="p-8">
         <div className="max-w-6xl mx-auto">
-          {/* Statistics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-3xl font-bold text-gray-900">{students?.total || 0}</div>
-                  <div className="text-sm font-medium text-gray-600 mt-1">إجمالي الطلاب</div>
-                  <div className="text-xs text-gray-500 mt-1">{students?.active || 0} نشط</div>
-                </div>
-                <div className="p-3 bg-blue-100 rounded-lg">
-                  <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-3xl font-bold text-gray-900">{subjects?.total || 0}</div>
-                  <div className="text-sm font-medium text-gray-600 mt-1">المقررات الدراسية</div>
-                  {departmentData?.totalUnits && (
-                    <div className="text-xs text-gray-500 mt-1">{departmentData.totalUnits} وحدة دراسية</div>
-                  )}
-                </div>
-                <div className="p-3 bg-indigo-100 rounded-lg">
-                  <svg className="h-6 w-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-3xl font-bold text-gray-900">{fees?.totalAmount?.toLocaleString() || 0}</div>
-                  <div className="text-sm font-medium text-gray-600 mt-1">إجمالي الرسوم (دينار)</div>
-                  <div className="text-xs text-gray-500 mt-1">{fees?.paid || 0} مدفوع / {fees?.unpaid || 0} غير مدفوع</div>
-                </div>
-                <div className="p-3 bg-green-100 rounded-lg">
-                  <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-3xl font-bold text-gray-900">
-                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
-                      department.is_locked 
-                        ? 'bg-red-50 text-red-700 ring-red-600/20' 
-                        : 'bg-green-50 text-green-700 ring-green-600/20'
-                    }`}>
-                      {department.is_locked ? 'مغلق' : 'نشط'}
-                    </span>
-                  </div>
-                  <div className="text-sm font-medium text-gray-600 mt-1">حالة القسم</div>
-                </div>
-                <div className={`p-3 rounded-lg ${department.is_locked ? 'bg-red-100' : 'bg-green-100'}`}>
-                  <svg className={`h-6 w-6 ${department.is_locked ? 'text-red-600' : 'text-green-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    {department.is_locked ? (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                    ) : (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    )}
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Department Information - Main Section */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
             <div className="px-6 py-4 border-b border-gray-200">

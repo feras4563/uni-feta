@@ -303,60 +303,6 @@ export default function UsersManagement() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="px-6 pb-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500">إجمالي المستخدمين</p>
-                <p className="text-2xl font-bold text-gray-900">{users.length}</p>
-              </div>
-              <div className="p-2 bg-indigo-50 rounded-lg">
-                <i className="fas fa-users text-indigo-500"></i>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500">نشط</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {users.filter((u) => u.status === "active").length}
-                </p>
-              </div>
-              <div className="p-2 bg-green-50 rounded-lg">
-                <i className="fas fa-check-circle text-green-500"></i>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500">معطل</p>
-                <p className="text-2xl font-bold text-gray-600">
-                  {users.filter((u) => u.status === "inactive").length}
-                </p>
-              </div>
-              <div className="p-2 bg-gray-50 rounded-lg">
-                <i className="fas fa-ban text-gray-400"></i>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500">الأدوار</p>
-                <p className="text-2xl font-bold text-purple-600">{roles.length}</p>
-              </div>
-              <div className="p-2 bg-purple-50 rounded-lg">
-                <i className="fas fa-shield-alt text-purple-500"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Users Table */}
       <div className="px-6 pb-6">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

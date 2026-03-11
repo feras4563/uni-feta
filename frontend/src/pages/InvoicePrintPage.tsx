@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/api-client';
 import logoWithName from '../assets/Logo_with_name.png';
+import { formatCurrency, formatDate } from '../lib/utils';
 
 export default function InvoicePrintPage() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
@@ -49,14 +50,6 @@ export default function InvoicePrintPage() {
       }, 500);
     }
   }, [invoice]);
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ar-LY').format(amount) + ' دينار';
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('ar-LY');
-  };
 
   const getStatusText = (status: string) => {
     switch (status) {
@@ -466,7 +459,7 @@ export default function InvoicePrintPage() {
 
           {/* Footer */}
           <div className="print-footer">
-            <div>تم طباعة هذه الفاتورة في: {new Date().toLocaleDateString('ar-LY')}</div>
+            <div>تم طباعة هذه الفاتورة في: {formatDate(new Date().toISOString())}</div>
             <div>جامعة الخليل الأهلية - University of Alkhalil</div>
             <div>هاتف: +964-XXX-XXX-XXXX | البريد الإلكتروني: info@university.edu</div>
           </div>

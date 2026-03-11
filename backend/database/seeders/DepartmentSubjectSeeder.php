@@ -69,9 +69,11 @@ class DepartmentSubjectSeeder extends Seeder
                 'semester_count' => 8,
             ],
             [
-                'name' => 'الفنون البصرية و الوسائط المتعددة',
-                'name_en' => 'Visual Arts & Multimedia',
-                'description' => 'قسم الفنون البصرية والوسائط المتعددة',
+                'name' => 'قسم الفنون البصرية والإعلام الرقمي',
+                'name_en' => 'Department of Visual Arts and Digital Media',
+                'description' => 'قسم الفنون البصرية والإعلام الرقمي',
+                'location' => 'Janzur Campus',
+                'structure' => '1+1+2 (Foundation + Core + Specialization)',
                 'semester_count' => 8,
             ],
             [
@@ -96,14 +98,15 @@ class DepartmentSubjectSeeder extends Seeder
 
         $departments = [];
         foreach ($departmentsData as $deptData) {
-            $departments[] = Department::firstOrCreate(
+            $departments[] = Department::updateOrCreate(
                 ['name' => $deptData['name']],
                 $deptData
             );
         }
 
         // ─── Subjects per Department ───────────────────────────────────
-        // Each department gets 10 subjects: 5 for semester 1, 5 for semester 2
+        // Baseline subjects for departments that still use this compact seeder.
+        // Visual Arts & Digital Media has its own dedicated 8-semester seeder.
         $subjectsByDepartment = [
             // هندسة العمارة
             'هندسة العمارة' => [
@@ -135,22 +138,6 @@ class DepartmentSubjectSeeder extends Seeder
                 ['name' => 'التصميم بالحاسوب (AutoCAD)', 'name_en' => 'Computer-Aided Design (AutoCAD)', 'code' => 'INTD203', 'credits' => 3, 'cost_per_credit' => 210.00, 'is_required' => true, 'semester_number' => 2],
                 ['name' => 'تصميم الأثاث', 'name_en' => 'Furniture Design', 'code' => 'INTD204', 'credits' => 3, 'cost_per_credit' => 200.00, 'is_required' => false, 'semester_number' => 2],
                 ['name' => 'بيئة العمل والتصميم', 'name_en' => 'Ergonomics & Design', 'code' => 'INTD205', 'credits' => 2, 'cost_per_credit' => 180.00, 'is_required' => true, 'semester_number' => 2],
-            ],
-
-            // الفنون البصرية و الوسائط المتعددة
-            'الفنون البصرية و الوسائط المتعددة' => [
-                // Semester 1
-                ['name' => 'مدخل إلى الفنون البصرية', 'name_en' => 'Introduction to Visual Arts', 'code' => 'VAMM101', 'credits' => 3, 'cost_per_credit' => 190.00, 'is_required' => true, 'semester_number' => 1],
-                ['name' => 'أساسيات التصوير الفوتوغرافي', 'name_en' => 'Fundamentals of Photography', 'code' => 'VAMM102', 'credits' => 3, 'cost_per_credit' => 200.00, 'is_required' => true, 'semester_number' => 1],
-                ['name' => 'التصميم الجرافيكي 1', 'name_en' => 'Graphic Design 1', 'code' => 'VAMM103', 'credits' => 3, 'cost_per_credit' => 200.00, 'is_required' => true, 'semester_number' => 1],
-                ['name' => 'مبادئ الرسوم المتحركة', 'name_en' => 'Principles of Animation', 'code' => 'VAMM104', 'credits' => 3, 'cost_per_credit' => 210.00, 'is_required' => false, 'semester_number' => 1],
-                ['name' => 'تاريخ الفنون المعاصرة', 'name_en' => 'History of Contemporary Arts', 'code' => 'VAMM105', 'credits' => 2, 'cost_per_credit' => 170.00, 'is_required' => true, 'semester_number' => 1],
-                // Semester 2
-                ['name' => 'إنتاج الفيديو', 'name_en' => 'Video Production', 'code' => 'VAMM201', 'credits' => 3, 'cost_per_credit' => 220.00, 'is_required' => true, 'semester_number' => 2],
-                ['name' => 'التصميم الجرافيكي 2', 'name_en' => 'Graphic Design 2', 'code' => 'VAMM202', 'credits' => 3, 'cost_per_credit' => 200.00, 'is_required' => true, 'semester_number' => 2],
-                ['name' => 'الوسائط المتعددة التفاعلية', 'name_en' => 'Interactive Multimedia', 'code' => 'VAMM203', 'credits' => 3, 'cost_per_credit' => 210.00, 'is_required' => true, 'semester_number' => 2],
-                ['name' => 'تصميم المواقع الإلكترونية', 'name_en' => 'Web Design', 'code' => 'VAMM204', 'credits' => 3, 'cost_per_credit' => 200.00, 'is_required' => false, 'semester_number' => 2],
-                ['name' => 'المؤثرات البصرية', 'name_en' => 'Visual Effects', 'code' => 'VAMM205', 'credits' => 3, 'cost_per_credit' => 220.00, 'is_required' => false, 'semester_number' => 2],
             ],
 
             // تقنية المعلومات
@@ -202,6 +189,8 @@ class DepartmentSubjectSeeder extends Seeder
             ],
         ];
 
+        $subjectsSeeded = 0;
+
         foreach ($departments as $department) {
             $subjects = $subjectsByDepartment[$department->name] ?? [];
 
@@ -219,6 +208,7 @@ class DepartmentSubjectSeeder extends Seeder
                         'is_active' => true,
                     ])
                 );
+                $subjectsSeeded++;
 
                 // Create subject_departments pivot
                 SubjectDepartment::firstOrCreate(
@@ -247,7 +237,8 @@ class DepartmentSubjectSeeder extends Seeder
         }
 
         $this->command->info('✅ 6 Departments created successfully!');
-        $this->command->info('✅ 60 Subjects created (10 per department, 5 per semester)');
+        $this->command->info("✅ {$subjectsSeeded} baseline subjects seeded");
+        $this->command->info('ℹ️ Run VisualArtsDigitalMediaSeeder for full 8-semester branching curriculum');
         $this->command->info('✅ Subject-Department and Department-Semester-Subject relationships created');
     }
 }

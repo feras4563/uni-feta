@@ -5,6 +5,7 @@ import { fetchStudents, fetchDepartments, deleteStudent } from "../lib/jwt-api";
 import StudentQRModal from "../components/students/StudentQRModal";
 import { usePermissions } from "../hooks/usePermissions";
 import { useAuth } from "../contexts/JWTAuthContext";
+import { formatDate, formatNumber } from "../lib/utils";
 
 export default function StudentsPage() {
   const { canCreate, canEdit, canDelete } = usePermissions();
@@ -113,8 +114,6 @@ export default function StudentsPage() {
     return <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${c.cls}`}>{c.label}</span>;
   };
 
-  const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('ar-LY') : '-';
-
   const visiblePages = useMemo(() => {
     const pages: number[] = [];
     const start = Math.max(1, currentPage - 2);
@@ -146,7 +145,7 @@ export default function StudentsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">إدارة الطلاب</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {students.length} طالب مسجل
+            {formatNumber(students.length)} طالب مسجل
             {user?.role === 'teacher' && user?.departmentName && ` - قسم ${user.departmentName}`}
           </p>
         </div>

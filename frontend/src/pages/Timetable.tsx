@@ -13,20 +13,36 @@ import {
   fetchRooms,
   fetchTimeSlots
 } from "@/lib/api";
+import type { APIClientError } from "@/lib/api-client";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Plus, Search, Edit, Trash2, Calendar, Clock } from "lucide-react";
 
 const DAYS_OF_WEEK = [
-  { value: 1, label: "الأحد" },
-  { value: 2, label: "الاثنين" },
-  { value: 3, label: "الثلاثاء" },
-  { value: 4, label: "الأربعاء" },
-  { value: 5, label: "الخميس" },
-  { value: 6, label: "الجمعة" },
-  { value: 7, label: "السبت" }
+  { value: 0, label: "الأحد" },
+  { value: 1, label: "الاثنين" },
+  { value: 2, label: "الثلاثاء" },
+  { value: 3, label: "الأربعاء" },
+  { value: 4, label: "الخميس" },
+  { value: 5, label: "الجمعة" },
+  { value: 6, label: "السبت" }
 ];
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
+function getErrorDetails(error: unknown) {
+  const apiError = error as APIClientError | undefined;
+  return apiError?.details?.length ? apiError.details : [];
+}
 
 export default function Timetable() {
   const queryClient = useQueryClient();
+  const { canCreate, canEdit, canDelete } = usePermissions();
   const [searchTerm, setSearchTerm] = useState("");
   const [semesterFilter, setSemesterFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
@@ -34,6 +50,11 @@ export default function Timetable() {
   const [showModal, setShowModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+  const [deleteError, setDeleteError] = useState<{ message: string; details: string[] } | null>(null);
+  const canCreateTimetable = canCreate('timetable');
+  const canEditTimetable = canEdit('timetable');
+  const canDeleteTimetable = canDelete('timetable');
+  const canManageEntries = canEditTimetable || canDeleteTimetable;
 
   const { data: timetableEntries, isLoading } = useQuery({
     queryKey: ["timetable-entries", semesterFilter, departmentFilter, groupFilter],
@@ -87,23 +108,29 @@ export default function Timetable() {
   }, [timetableEntries, searchTerm]);
 
   const handleAdd = () => {
+    if (!canCreateTimetable) return;
     setEditingEntry(null);
     setShowModal(true);
   };
 
   const handleEdit = (entry: any) => {
+    if (!canEditTimetable) return;
     setEditingEntry(entry);
     setShowModal(true);
   };
 
   const handleDelete = async (id: string) => {
+    if (!canDeleteTimetable) return;
     if (confirm("هل أنت متأكد من حذف هذا الدرس؟")) {
+      setDeleteError(null);
       try {
         await deleteTimetableEntry(id);
         queryClient.invalidateQueries({ queryKey: ["timetable-entries"] });
-        alert("تم حذف الدرس بنجاح!");
-      } catch (error: any) {
-        alert("خطأ في حذف الدرس: " + error.message);
+      } catch (error) {
+        setDeleteError({
+          message: getErrorMessage(error, "تعذر حذف الدرس"),
+          details: getErrorDetails(error),
+        });
       }
     }
   };
@@ -124,55 +151,6 @@ export default function Timetable() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">الجدول الدراسي</h1>
         <p className="text-gray-600">إدارة الجدول الدراسي والحصص</p>
-      </div>
-
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <Calendar className="h-8 w-8 text-blue-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">{timetableEntries?.length || 0}</div>
-              <div className="text-sm text-gray-600">إجمالي الحصص</div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <Clock className="h-8 w-8 text-green-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">
-                {new Set(timetableEntries?.map(entry => entry.subjects?.id)).size || 0}
-              </div>
-              <div className="text-sm text-gray-600">المواد المجدولة</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <Calendar className="h-8 w-8 text-purple-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">
-                {new Set(timetableEntries?.map(entry => entry.teachers?.id)).size || 0}
-              </div>
-              <div className="text-sm text-gray-600">المدرسين المشاركين</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <Clock className="h-8 w-8 text-orange-600" />
-            <div className="mr-4">
-              <div className="text-2xl font-bold text-gray-900">
-                {new Set(timetableEntries?.map(entry => entry.rooms?.id)).size || 0}
-              </div>
-              <div className="text-sm text-gray-600">القاعات المستخدمة</div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Filters and Actions */}
@@ -239,14 +217,16 @@ export default function Timetable() {
                 شبكة
               </button>
             </div>
-            
-            <button
-              onClick={handleAdd}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              إضافة حصة
-            </button>
+
+            {canCreateTimetable && (
+              <button
+                onClick={handleAdd}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                إضافة حصة
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -257,6 +237,21 @@ export default function Timetable() {
           <div className="p-6 border-b border-gray-200">
             <h3 className="text-lg font-medium text-gray-900">قائمة الحصص</h3>
           </div>
+
+          {deleteError && (
+            <div className="px-6 pt-6">
+              <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                <div className="font-semibold mb-2">{deleteError.message}</div>
+                {deleteError.details.length > 0 && (
+                  <ul className="space-y-1 pr-4 list-disc">
+                    {deleteError.details.map((detail, index) => (
+                      <li key={`${detail}-${index}`}>{detail}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
           
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -268,7 +263,9 @@ export default function Timetable() {
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المدرس</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">القاعة</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المجموعة</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الإجراءات</th>
+                  {canManageEntries && (
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الإجراءات</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -292,24 +289,30 @@ export default function Timetable() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {entry.student_groups?.group_name}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEdit(entry)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="تعديل"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(entry.id)}
-                          className="text-red-600 hover:text-red-900"
-                          title="حذف"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
+                    {canManageEntries && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div className="flex gap-2">
+                          {canEditTimetable && (
+                            <button
+                              onClick={() => handleEdit(entry)}
+                              className="text-blue-600 hover:text-blue-900"
+                              title="تعديل"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                          )}
+                          {canDeleteTimetable && (
+                            <button
+                              onClick={() => handleDelete(entry.id)}
+                              className="text-red-600 hover:text-red-900"
+                              title="حذف"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -348,8 +351,8 @@ export default function Timetable() {
                       {dayEntries?.map(entry => (
                         <div 
                           key={entry.id}
-                          className="bg-blue-100 border border-blue-200 rounded p-2 mb-1 text-xs cursor-pointer hover:bg-blue-200"
-                          onClick={() => handleEdit(entry)}
+                          className={`bg-blue-100 border border-blue-200 rounded p-2 mb-1 text-xs ${canEditTimetable ? 'cursor-pointer hover:bg-blue-200' : ''}`}
+                          onClick={() => canEditTimetable && handleEdit(entry)}
                         >
                           <div className="font-medium">{entry.subjects?.name}</div>
                           <div className="text-gray-600">{entry.teachers?.name}</div>
@@ -366,7 +369,7 @@ export default function Timetable() {
       )}
 
       {/* Timetable Entry Modal */}
-      {showModal && (
+      {showModal && (canCreateTimetable || canEditTimetable) && (
         <TimetableEntryModal
           entry={editingEntry}
           semesters={semesters || []}
@@ -414,10 +417,12 @@ function TimetableEntryModal({
     notes: entry?.notes || ""
   });
   const [submitting, setSubmitting] = useState(false);
+  const [saveError, setSaveError] = useState<{ message: string; details: string[] } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setSaveError(null);
 
     try {
       if (entry) {
@@ -426,8 +431,11 @@ function TimetableEntryModal({
         await createTimetableEntry(form);
       }
       onSave();
-    } catch (error: any) {
-      alert("خطأ في حفظ البيانات: " + error.message);
+    } catch (error) {
+      setSaveError({
+        message: getErrorMessage(error, "تعذر حفظ بيانات الحصة"),
+        details: getErrorDetails(error),
+      });
     } finally {
       setSubmitting(false);
     }
@@ -439,6 +447,19 @@ function TimetableEntryModal({
         <h2 className="text-xl font-bold text-gray-900 mb-4">
           {entry ? "تعديل الحصة" : "إضافة حصة جديدة"}
         </h2>
+
+        {saveError && (
+          <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            <div className="font-semibold mb-2">{saveError.message}</div>
+            {saveError.details.length > 0 && (
+              <ul className="space-y-1 pr-4 list-disc">
+                {saveError.details.map((detail, index) => (
+                  <li key={`${detail}-${index}`}>{detail}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

@@ -65,9 +65,18 @@ export default function TeacherStudents() {
       )
     : allStudents;
 
-  // Get unique students count
-  const uniqueStudentIds = new Set(allStudents.map(s => s.student?.id));
-  const totalUniqueStudents = uniqueStudentIds.size;
+  const visibleStudentGroups = studentGroups
+    .map((group: any) => ({
+      ...group,
+      students: (group.students || []).filter((s: any) =>
+        !searchTerm ||
+        s.student?.name?.includes(searchTerm) ||
+        s.student?.name_en?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.student?.campus_id?.includes(searchTerm) ||
+        s.student?.email?.includes(searchTerm)
+      ),
+    }))
+    .filter((group: any) => (group.students || []).length > 0);
 
   if (loading) {
     return (
@@ -86,43 +95,6 @@ export default function TeacherStudents() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">طلابي</h1>
         <p className="text-gray-600 text-sm">عرض الطلاب المسجلين في موادك الدراسية</p>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <i className="fas fa-user-graduate text-blue-600 text-lg"></i>
-            </div>
-            <div className="mr-3">
-              <div className="text-sm text-gray-500">إجمالي الطلاب</div>
-              <div className="text-xl font-bold text-gray-900">{totalUniqueStudents}</div>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <i className="fas fa-book text-green-600 text-lg"></i>
-            </div>
-            <div className="mr-3">
-              <div className="text-sm text-gray-500">المواد الدراسية</div>
-              <div className="text-xl font-bold text-gray-900">{subjects.length}</div>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <i className="fas fa-clipboard-list text-purple-600 text-lg"></i>
-            </div>
-            <div className="mr-3">
-              <div className="text-sm text-gray-500">إجمالي التسجيلات</div>
-              <div className="text-xl font-bold text-gray-900">{allStudents.length}</div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Filters */}
@@ -176,7 +148,15 @@ export default function TeacherStudents() {
       ) : selectedSubject === 'all' ? (
         /* Grouped by Subject View */
         <div className="space-y-6">
-          {studentGroups.map((group: any, groupIdx: number) => (
+          {visibleStudentGroups.length === 0 ? (
+            <div className="bg-white rounded-lg shadow p-12 text-center">
+              <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gray-100 mb-4">
+                <i className="fas fa-search text-gray-400 text-2xl"></i>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">لا توجد نتائج مطابقة</h3>
+              <p className="text-gray-500">جرّب البحث باسم مختلف أو رقم جامعي آخر</p>
+            </div>
+          ) : visibleStudentGroups.map((group: any, groupIdx: number) => (
             <div key={groupIdx} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                 <div className="flex items-center">
@@ -191,7 +171,7 @@ export default function TeacherStudents() {
                   </div>
                 </div>
                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                  {group.student_count} طالب
+                  {(group.students || []).length} طالب
                 </span>
               </div>
               <div className="overflow-x-auto">
@@ -208,11 +188,6 @@ export default function TeacherStudents() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {(group.students || [])
-                      .filter((s: any) =>
-                        !searchTerm ||
-                        s.student?.name?.includes(searchTerm) ||
-                        s.student?.campus_id?.includes(searchTerm)
-                      )
                       .map((enrollment: any, idx: number) => (
                         <tr key={enrollment.enrollment_id || idx} className="hover:bg-gray-50">
                           <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>

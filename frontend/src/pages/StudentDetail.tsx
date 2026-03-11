@@ -5,6 +5,7 @@ import { fetchDepartments, getStudent, updateStudent, deleteStudent as deleteStu
 import { usePermissions } from "../hooks/usePermissions";
 import { useAuth } from "../contexts/JWTAuthContext";
 import { QRService } from "../lib/qr-service";
+import { formatDate, formatNumber, toLatinDigits } from "../lib/utils";
 import logo1 from "../assets/logo1.png";
 
 export default function StudentDetail() {
@@ -162,7 +163,6 @@ export default function StudentDetail() {
     if (!did) return 'غير محدد';
     return departments.find((d: any) => d.id === did)?.name || 'غير محدد';
   };
-  const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('ar-LY') : 'غير محدد';
   const getStatusBadge = (status: string) => {
     const m: Record<string, { l: string; c: string }> = {
       active: { l: 'نشط', c: 'bg-gray-100 text-gray-800' },
@@ -257,7 +257,9 @@ export default function StudentDetail() {
     if (!student || !qrDataURL) return;
     const w = window.open('', '_blank');
     if (!w) return;
-    const fmtDate = (ds: string) => { try { return new Date(ds).toLocaleDateString('en-GB'); } catch { return ds || '-'; } };
+    const fmtDate = (ds: string) => {
+      try { return formatDate(ds); } catch { return ds || '-'; }
+    };
     const photoURL = student.photo_url ? (student.photo_url.startsWith('http') ? student.photo_url : `${API_URL}${student.photo_url}`) : null;
     w.document.write(`<html><head><title>بطاقة الطالب - ${student.name}</title>
       <style>
@@ -303,9 +305,9 @@ export default function StudentDetail() {
           <div class="info-col">
             <div class="student-name">${student.name}</div>
             ${student.name_en ? `<div style="font-size:9px;color:#6b7280;margin-bottom:4px;font-family:Arial">${student.name_en}</div>` : ''}
-            <div class="info-row"><span class="info-label">رقم الطالب:</span><span class="info-value">${student.campus_id || student.id}</span></div>
+            <div class="info-row"><span class="info-label">رقم الطالب:</span><span class="info-value">${toLatinDigits(student.campus_id || student.id)}</span></div>
             <div class="info-row"><span class="info-label">التخصص:</span><span class="info-value">${getDepartmentName(student.department_id)}</span></div>
-            <div class="info-row"><span class="info-label">السنة:</span><span class="info-value">السنة ${student.year || 1}</span></div>
+            <div class="info-row"><span class="info-label">السنة:</span><span class="info-value">السنة ${formatNumber(student.year || 1)}</span></div>
             <div class="info-row"><span class="info-label">تاريخ الميلاد:</span><span class="info-value">${fmtDate(student.birth_date)}</span></div>
           </div>
           <div class="qr-col">
@@ -348,7 +350,7 @@ export default function StudentDetail() {
           </button>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{isEditing ? "تعديل بيانات الطالب" : student.name}</h1>
-            <p className="text-sm text-gray-500">{getDepartmentName(student.department_id)} - {student.campus_id || student.id}</p>
+            <p className="text-sm text-gray-500">{getDepartmentName(student.department_id)} - {toLatinDigits(student.campus_id || student.id)}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -487,7 +489,7 @@ export default function StudentDetail() {
                     <option value="">اختر</option>
                     {[1,2,3,4,5].map(y => <option key={y} value={y}>السنة {['الأولى','الثانية','الثالثة','الرابعة','الخامسة'][y-1]}</option>)}
                   </select>
-                ) : <p className="text-sm text-gray-900">السنة {student.year}</p>}
+                ) : <p className="text-sm text-gray-900">السنة {formatNumber(student.year || 0)}</p>}
                 {errors.year && <p className="text-xs text-red-500 mt-1">{errors.year}</p>}
               </div>
               <div>

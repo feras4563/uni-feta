@@ -12,7 +12,8 @@ import DepartmentsPage from "./pages/DepartmentsNew";
 import DepartmentCreate from "./pages/DepartmentCreate";
 import DepartmentEdit from "./pages/DepartmentEdit";
 import DepartmentDetail from "./pages/DepartmentDetail";
-import StudyMaterials from "./pages/StudyMaterials";
+import StudyMaterialsOverview from "./pages/StudyMaterialsOverview";
+import StudyMaterialsDepartment from "./pages/StudyMaterialsDepartment";
 import SubjectCreate from "./pages/SubjectCreate";
 import SubjectDetail from "./pages/SubjectDetail";
 import StudyYears from "./pages/StudyYears";
@@ -41,6 +42,7 @@ import TeacherSchedule from "./pages/teacher/TeacherSchedule";
 import TeacherStudents from "./pages/teacher/TeacherStudents";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import StudentSubjects from "./pages/student/StudentSubjects";
+import StudentSubjectDetail from "./pages/student/StudentSubjectDetail";
 import StudentFees from "./pages/student/StudentFees";
 import StudentSchedule from "./pages/student/StudentSchedule";
 import StudentGrades from "./pages/student/StudentGrades";
@@ -105,6 +107,8 @@ function AppContent() {
     return <LoginPage />;
   }
 
+  const currentUser = user!;
+
   const getNavLinkClass = (path: string) => {
     const isActive = location.pathname === path;
     return `text-white px-3 py-2 rounded text-sm font-medium transition-colors duration-200 flex items-center ${
@@ -144,7 +148,7 @@ function AppContent() {
                 </div>
               </Link>
               {/* Teacher-specific navigation - Show teacher dashboard first */}
-              {user.role === 'teacher' && (
+              {currentUser.role === 'teacher' && (
                 <Link
                   to="/"
                   className={getNavLinkClass("/")}
@@ -155,7 +159,7 @@ function AppContent() {
               )}
 
               {/* Student-specific navigation */}
-              {user.role === 'student' && (
+              {currentUser.role === 'student' && (
                 <Link
                   to="/"
                   className={getNavLinkClass("/")}
@@ -166,7 +170,7 @@ function AppContent() {
               )}
               
               {/* Show generic dashboard only for non-teacher/non-student users */}
-              {user.role !== 'teacher' && user.role !== 'student' && (
+              {currentUser.role !== 'teacher' && currentUser.role !== 'student' && (
                 <Link
                   to="/"
                   className={getNavLinkClass("/")}
@@ -177,7 +181,7 @@ function AppContent() {
               )}
               
               {/* Master Data Section - Permission-driven */}
-              {user.role !== 'teacher' && user.role !== 'student' && (
+              {currentUser.role !== 'teacher' && currentUser.role !== 'student' && (
                 <div className="relative group">
                   <div className="text-white px-3 py-2 rounded text-sm font-medium transition-colors duration-200 flex items-center cursor-pointer hover:bg-slate-600">
                     <i className="fas fa-database text-xs ml-2"></i>
@@ -269,7 +273,7 @@ function AppContent() {
                 </div>
               )}
 
-              {user.role !== 'student' && user.role !== 'teacher' && hasPermission('schedule', 'view') && (
+              {currentUser.role !== 'student' && currentUser.role !== 'teacher' && hasPermission('schedule', 'view') && (
                 <Link
                   to="/schedule"
                   className={getNavLinkClass("/schedule")}
@@ -279,7 +283,7 @@ function AppContent() {
                 </Link>
               )}
 
-              {user.role !== 'student' && user.role !== 'teacher' && hasPermission('fees', 'view') && (
+              {currentUser.role !== 'student' && currentUser.role !== 'teacher' && hasPermission('fees', 'view') && (
                 <Link
                   to="/fees"
                   className={getNavLinkClass("/fees")}
@@ -353,7 +357,7 @@ function AppContent() {
                           </Link>
                         </>
                       )}
-                      {user.role === 'manager' && (
+                      {currentUser.role === 'manager' && (
                         <Link to="/holidays" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
                           <i className="fas fa-calendar-check text-xs ml-2"></i>
                           إدارة العطل
@@ -365,7 +369,7 @@ function AppContent() {
               )}
               
               {/* Continue teacher-specific navigation */}
-              {user.role === 'teacher' && (
+              {currentUser.role === 'teacher' && (
                 <>
                   <Link
                     to="/teacher/students"
@@ -406,7 +410,7 @@ function AppContent() {
               )}
 
               {/* Student-specific navigation links */}
-              {user.role === 'student' && (
+              {currentUser.role === 'student' && (
                 <>
                   <Link
                     to="/student/subjects"
@@ -461,19 +465,19 @@ function AppContent() {
                   <i className="fas fa-user text-xs ml-2"></i>
                   <div className="text-xs">
                     <div>مرحباً</div>
-                    <div>{user.fullName}</div>
+                    <div>{currentUser.fullName}</div>
                   </div>
                   <div className="mr-2">
                     <span className={`px-2 py-1 text-xs rounded-full ${
-                      user.role === 'manager' 
+                      currentUser.role === 'manager' 
                         ? 'bg-green-100 text-green-800' 
-                        : user.role === 'teacher'
+                        : currentUser.role === 'teacher'
                         ? 'bg-purple-100 text-purple-800'
-                        : user.role === 'student'
+                        : currentUser.role === 'student'
                         ? 'bg-teal-100 text-teal-800'
                         : 'bg-blue-100 text-blue-800'
                     }`}>
-                      {user.role === 'manager' ? 'مدير' : user.role === 'teacher' ? 'مدرس' : user.role === 'student' ? 'طالب' : 'موظف'}
+                      {currentUser.role === 'manager' ? 'مدير' : currentUser.role === 'teacher' ? 'مدرس' : currentUser.role === 'student' ? 'طالب' : 'موظف'}
                     </span>
                   </div>
                 </div>
@@ -501,11 +505,11 @@ function AppContent() {
           <Route 
             path="/" 
             element={
-              user.role === 'teacher' ? (
+              currentUser.role === 'teacher' ? (
                 <ProtectedRoute requiredRole="teacher">
                   <TeacherDashboard />
                 </ProtectedRoute>
-              ) : user.role === 'student' ? (
+              ) : currentUser.role === 'student' ? (
                 <ProtectedRoute requiredRole="student">
                   <StudentDashboard />
                 </ProtectedRoute>
@@ -573,7 +577,7 @@ function AppContent() {
           <Route 
             path="/fees" 
             element={
-              user.role === 'student' ? (
+              currentUser.role === 'student' ? (
                 <Navigate to="/student/fees" replace />
               ) : (
                 <ProtectedRoute requiredResource="fees" requiredAction="view">
@@ -626,7 +630,15 @@ function AppContent() {
                   path="/study-materials"
                   element={
                     <ProtectedRoute requiredResource="subjects" requiredAction="view">
-                      <StudyMaterials />
+                      <StudyMaterialsOverview />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/study-materials/departments/:departmentId"
+                  element={
+                    <ProtectedRoute requiredResource="subjects" requiredAction="view">
+                      <StudyMaterialsDepartment />
                     </ProtectedRoute>
                   }
                 />
@@ -761,7 +773,7 @@ function AppContent() {
           <Route 
             path="/schedule" 
             element={
-              user.role === 'student' ? (
+              currentUser.role === 'student' ? (
                 <Navigate to="/student/schedule" replace />
               ) : (
                 <ProtectedRoute requiredResource="schedule" requiredAction="view">
@@ -955,6 +967,14 @@ function AppContent() {
             element={
               <ProtectedRoute requiredRole="student">
                 <StudentSubjects />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/student/subjects/:subjectId" 
+            element={
+              <ProtectedRoute requiredRole="student">
+                <StudentSubjectDetail />
               </ProtectedRoute>
             } 
           />

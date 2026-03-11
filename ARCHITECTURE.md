@@ -2,7 +2,7 @@
 
 ## Overview
 
-A full-stack university management system for **University of Alkhalil** (جامعة الخليل الأهلية). The application manages students, teachers, departments, subjects, timetables, fees, attendance, grades, and a full double-entry accounting system.
+A full-stack university management system for **University of Alkhalil** (جامعة الخليل الأهلية). The application manages students, teachers, departments, subjects, timetables, date-specific class sessions, holidays, attendance, grades, and a full double-entry accounting system.
 
 - **Frontend:** React 18 + TypeScript + Vite + Tailwind CSS
 - **Backend:** Laravel 12 (PHP 8.2+) REST API
@@ -92,21 +92,22 @@ uni-feta/
 
 ### User Roles & Permissions
 
-Three roles: **manager**, **staff**, **teacher**
+Four roles: **manager**, **staff**, **teacher**, **student**
 
-| Resource | Manager | Staff | Teacher |
-|----------|---------|-------|---------|
-| students | CRUD | view, create | view |
-| teachers | CRUD | view | — |
-| departments | CRUD | view | view |
-| subjects | CRUD | view, create | view |
-| fees | CRUD | view, create | — |
-| finance | CRUD | — | — |
-| attendance | CRUD | — | view, create, edit |
-| grades | CRUD | — | CRUD |
-| sessions | CRUD | — | CRUD |
-| schedule | CRUD | — | view, edit |
-| settings | CRUD | — | — |
+| Resource | Manager | Staff | Teacher | Student |
+|----------|---------|-------|---------|---------|
+| students | CRUD | view, create | view | — |
+| teachers | CRUD | view | — | — |
+| departments | CRUD | view | view | — |
+| subjects | CRUD | view, create | view | view (self portal) |
+| fees | CRUD | view, create | — | view (self portal) |
+| finance | CRUD | — | — | — |
+| attendance | CRUD | — | view, create, edit | view (self portal) |
+| grades | CRUD | — | CRUD | view (published, self portal) |
+| sessions | CRUD | — | CRUD | — |
+| holidays | view, create, delete, sync | — | — | — |
+| schedule | CRUD | — | view, edit | view (self portal) |
+| settings | CRUD | — | — | — |
 
 The `manager` role has full access to everything. Permission checks happen both client-side (via `hasClientPermission()`) and server-side (via middleware).
 
@@ -149,13 +150,14 @@ The `manager` role has full access to everything. Permission checks happen both 
 | `time_slots` | TimeSlot | Available time periods |
 | `timetable_entries` | TimetableEntry | Scheduled classes (group + subject + teacher + room + time) |
 | `class_schedules` | ClassSchedule | Teacher availability schedules |
-| `class_sessions` | ClassSession | Individual class session instances |
+| `class_sessions` | ClassSession | Individual class session instances (date-specific, linked to `timetable_id` when generated) |
+| `holidays` | Holiday | Holiday ranges used to block session generation |
 
 ### Attendance & Grades
 | Table | Model | Description |
 |-------|-------|-------------|
-| `attendance_records` | AttendanceRecord | Per-session attendance |
-| `student_grades` | StudentGrade | Student grades per subject |
+| `attendance_records` | AttendanceRecord | Per-session attendance (`marked_by_id`, `is_override` for manager override tracking) |
+| `student_grades` | StudentGrade | Student grades per subject (semester_id, is_published, composite indexes for portal queries) |
 
 ### Finance & Accounting
 | Table | Model | Description |
@@ -217,6 +219,8 @@ Each resource follows standard REST patterns: `GET /`, `POST /`, `GET /{id}`, `P
 | `/student-registrations` | StudentRegistrationController | `/register` |
 | `/teacher-subjects` | TeacherSubjectController | `/all` |
 | `/attendance` | AttendanceController | `/sessions`, `/session/{id}`, `/session/{id}/statistics`, `/student/{id}` |
+| `/class-sessions` | AttendanceController | `/{id}/generate-qr`, `/{id}/attendance` |
+| `/holidays` | HolidayController | `/sync-schedule` (manager-only) |
 | `/grades` | GradeController | `/student/{id}`, `/subject/{id}`, `/student/{sid}/subject/{subid}` |
 | `/timetable` | TimetableController | `/entries`, `/group/{id}`, `/teacher/{id}`, `/auto-generate`, `/semester/{id}` |
 | `/class-schedules` | ClassScheduleController | `/teacher/{id}` |
@@ -264,6 +268,7 @@ Each resource follows standard REST patterns: `GET /`, `POST /`, `GET /{id}`, `P
 | `/timetable-generation` | TimetableGeneration | Auto-generate timetables |
 | `/teacher-subject-assignment` | TeacherSubjectAssignment | Assign teachers to subjects |
 | `/schedule` | SchedulingPage | Scheduling overview (manager only) |
+| `/holidays` | HolidayManagement | Holiday calendar + schedule sync (manager only) |
 | `/attendance` | Attendance | Attendance management |
 | `/grades` | Grades | Grade management |
 | `/fees` | FeesPage | Fee/invoice management |
@@ -290,10 +295,20 @@ Each resource follows standard REST patterns: `GET /`, `POST /`, `GET /{id}`, `P
 | Route | Page Component | Description |
 |-------|---------------|-------------|
 | `/` (teacher role) | TeacherDashboard | Teacher's main dashboard |
-| `/teacher/sessions` | ClassSessions | Manage class sessions, QR attendance |
+| `/teacher/sessions` | ClassSessions | Today's unique sessions, QR attendance, manager override badges |
 | `/teacher/subject-groups` | TeacherSubjectGroups | View assigned subject groups |
-| `/teacher/grades` | *(placeholder)* | Grade management (coming soon) |
-| `/teacher/schedule` | *(placeholder)* | Schedule view (coming soon) |
+| `/teacher/grades` | TeacherGrades | Grade input, overview table, per-student publish/unpublish, bulk publish |
+| `/teacher/schedule` | TeacherSchedule | Teacher's weekly timetable + class schedules |
+
+### Student Portal
+| Route | Page Component | Description |
+|-------|---------------|-------------|
+| `/` (student role) | StudentDashboard | Student's main dashboard |
+| `/student/subjects` | StudentSubjects | Student enrolled subjects |
+| `/student/grades` | StudentGrades | Student grades (published) |
+| `/student/fees` | StudentFees | Student invoices and balances |
+| `/student/schedule` | StudentSchedule | Student timetable |
+| `/student/attendance` | StudentAttendance | Student attendance records |
 
 ### Settings Pages
 | Route | Page Component | Description |
@@ -351,12 +366,104 @@ Models use Eloquent relationships extensively:
 - **Department** → hasMany Subjects (via pivot), hasMany Students
 - **Student** → belongsTo Department, hasMany Enrollments, hasMany Invoices, hasMany Grades
 - **Teacher** → hasMany TeacherSubjects, hasMany ClassSessions
-- **Subject** → belongsToMany Departments, hasMany TeacherSubjects, hasMany Prerequisites
+- **Subject** → belongsToMany Departments, hasMany TeacherSubjects, belongsToMany prerequisite Subjects, belongsToMany dependent Subjects
 - **Account** → hierarchical (parent/children), hasMany JournalEntryLines
 
-### Middleware
-- `auth:api` — JWT authentication guard on all protected routes
-- CORS configured for frontend origin
+### Subject Authoring Flow
+- **Create subject (`/subjects/create`):** the frontend loads existing subjects and lets the user select prerequisite subjects before saving. The selector highlights likely prerequisite candidates using the new subject's code, Arabic/English name, semester number, and selected departments.
+- **Edit subject (`/subjects/:id`):** prerequisite links are editable from the subject detail page using the same selector and recommendation logic.
+- **API payloads:** `POST /api/subjects` and `PUT /api/subjects/{id}` accept `department_ids`, `primary_department_id`, and `prerequisite_ids` together with the core subject fields.
+- **Validation rules:** prerequisite subjects must already exist, duplicates are rejected, and a subject cannot reference itself as a prerequisite.
+- **Persistence:** the backend stores prerequisite links in `subject_prerequisites` and department ownership in `subject_departments` during the same create/update flow.
+
+### Attendance & Session Management
+1. Teacher opens "الحصص والحضور" page — calls `GET /api/teacher-portal/my-sessions?date=YYYY-MM-DD`
+2. Page shows today's sessions sorted by start_time, each with subject name, room, department, attendance counts (present/total)
+3. Teacher clicks a session row → expands inline attendance panel:
+   - Calls `GET /api/teacher-portal/sessions/{id}` → returns enrolled students (from `student_subject_enrollments`) merged with existing attendance records
+   - Shows stats bar: enrolled, present, late, absent, excused, unmarked
+   - Quick "mark all as" buttons + per-student status buttons (present/late/absent/excused) + notes field
+4. Teacher clicks "حفظ الحضور" → `POST /api/teacher-portal/sessions/{id}/attendance` with `{ records: [{ student_id, status, notes }] }`
+   - Batch-loads existing records (1 query), creates or updates each record
+   - Auto-completes session status to `completed` when all enrolled students are marked
+5. Teacher can generate QR code for student self-check-in via `POST /api/class-sessions/{id}/generate-qr`
+6. Date navigation: prev/next day buttons + date picker + "today" shortcut
+
+#### Teacher Portal Session Routes
+- `GET /api/teacher-portal/my-sessions` — teacher's sessions for a date (default: today). Params: `date`, `start_date`, `end_date`, `status`, `subject_id`. Returns sessions with `enrolled_count` and attendance breakdown counts.
+- `GET /api/teacher-portal/sessions/{id}` — full session detail with enrolled students and their attendance records (merged list)
+- `POST /api/teacher-portal/sessions/{id}/attendance` — batch mark attendance. Body: `{ records: [{ student_id, status, notes? }] }`
+
+#### Manager Override
+- **Policy:** `ClassSessionPolicy::markAttendance` — manager can mark/edit attendance for ANY session at any time (no ownership or status check). Teacher can only mark own sessions that are not `completed`.
+- **Admin attendance routes:** `POST /api/attendance` (single record), `PUT /api/attendance/{id}` — both check `ClassSessionPolicy::markAttendance`, detect manager role, set `is_override=true` on manager edits
+- **Audit fields:** every attendance record stores `marked_by_id` (auth user ID) and `is_override` (boolean). Frontend shows "override" badge on records modified by managers.
+- **Manager detection:** `AttendanceController::isManager()` resolves `AppUser.roleModel.name` or `AppUser.role` from JWT auth user
+
+#### Attendance Statuses
+- `present` — student attended on time
+- `late` — student arrived late
+- `absent` — student did not attend
+- `excused` — student absent with valid excuse
+
+#### Session Statuses
+- `scheduled` — upcoming or current session, attendance can be marked
+- `completed` — all students marked, session finalized (teacher cannot re-mark, manager can override)
+- `cancelled` — session cancelled (by schedule sync or manual action, no attendance marking allowed)
+
+#### Holidays API
+- Manager-only CRUD: `GET/POST/PUT/DELETE /api/holidays`
+- `POST /api/holidays/sync-schedule` — triggers `ClassSessionGenerationService::syncForSemester` for current semester
+- Supports `is_recurring` holidays (annual) with cross-year date range handling
+
+#### Key Models & Relationships
+- `ClassSession` → belongsTo Teacher, Subject, Department, TimetableEntry; hasMany AttendanceRecord
+- `AttendanceRecord` → belongsTo ClassSession (via `session()` and `classSession()` aliases), Student, User (markedBy)
+- `TimetableEntry` → belongsTo Semester, Department, Subject, Teacher, Room, TimeSlot, StudentGroup
+
+### Grade Management Flow
+- **Draft → Publish workflow:**
+  1. Teacher opens `/teacher/grades`, selects subject and grade type, enters grades
+  2. **"حفظ كمسودة" (Save as Draft):** saves with `is_published = false` — students cannot see
+  3. **"حفظ ونشر" (Save & Publish):** saves with `is_published = true` — immediately visible to students
+  4. In overview mode, teacher can toggle publish per-student or bulk via `POST /api/teacher-portal/grades/publish`
+  5. Status bar shows draft count, published count, and failure count (<50%)
+  6. Student portal (`GET /api/student-portal/my-grades`) only returns grades where `is_published = true`
+- **Grading scale (Arab university standard):**
+  | Letter | Label | Range | GPA |
+  |--------|-------|-------|-----|
+  | A | ممتاز (Excellent) | 90-100% | 4.0 |
+  | B | جيد جداً (Very Good) | 80-89% | 3.3 |
+  | C | جيد (Good) | 70-79% | 2.7 |
+  | D | مقبول (Acceptable) | 60-69% | 2.0 |
+  | D- | مقبول ضعيف (Weak Pass) | 50-59% | 1.0 |
+  | F | راسب (Fail) | <50% | 0.0 |
+- **Failure handling:**
+  - **Pass threshold:** 50% per subject (sum of grade_value / sum of max_grade)
+  - **Student portal:** single table with subjects as rows, grade-type columns auto-shown based on data. Failure = red text on the grade number/percentage/letter only (no red containers or banners). Status column shows "راسب — إعادة" in red text. Footer shows count of subjects needing retake.
+  - **Teacher overview:** failing students get red text on total/percentage + "راسب" badge next to name, letter grade column shows F in red
+  - Backend computes `status` (passed/failed), `needs_retake` flag, `letter_grade`, and `gpa` per subject
+  - Overall GPA computed across all subjects and returned in API response
+- **Student grades UI (`StudentGrades.tsx`):**
+  - Single summary table: subjects as rows, dynamic grade-type columns (classwork, homework, midterm, final, etc. — only columns with data shown)
+  - Click a subject row to expand detailed breakdown below the table (individual grades, teacher, date, feedback)
+  - Compact inline grade scale legend at bottom
+  - GPA shown in header subtitle, not as a card
+- **Grade types:** classwork, homework, assignment, quiz, midterm, final, project, participation (8 types matching DB enum)
+- **Validation:**
+  - `grade_value` must not exceed `max_grade` — enforced in `TeacherPortalController::storeGrades`, `GradeController::store`, and `GradeController::update`
+  - `GradeController::update` uses `$request->only()` to prevent mass-assignment of unintended fields
+- **Performance optimizations:**
+  - `storeGrades` batch-loads existing grades in 1 query (keyed by `student_id|grade_type|grade_name`) instead of N+1 per-grade lookups
+  - `student_grades` table indexes: `idx_student_published_date`, `idx_subject_teacher`, `idx_semester`, `idx_grade_upsert`
+  - `semester_id` FK for semester-scoped queries
+- **Teacher portal grade routes:**
+  - `GET /api/teacher-portal/subjects/{id}/grades` — fetch grades + enrolled students for a subject
+  - `POST /api/teacher-portal/grades` — batch create/update grades (default draft)
+  - `POST /api/teacher-portal/grades/publish` — bulk publish/unpublish by grade IDs
+  - `PUT /api/teacher-portal/grades/{id}` — update single grade
+  - `DELETE /api/teacher-portal/grades/{id}` — delete single grade
+- **Admin grade routes:** `/api/grades` CRUD with semester_id support, letter_grade/gpa in `studentSubjectGrades`, eager-loaded semester relation
 
 ---
 

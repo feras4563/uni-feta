@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createSubjectWithDepartments, fetchDepartments, uploadSubjectPDF } from "../lib/api";
+import { createSubjectWithDepartments, fetchDepartments, fetchSubjects, uploadSubjectPDF, updateSubject } from "../lib/api";
 import { usePermissions } from "../hooks/usePermissions";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import ErrorMessage from "../components/ui/ErrorMessage";
+import PrerequisiteSelector from "../components/subject/PrerequisiteSelector";
 
 export default function SubjectCreate() {
   const navigate = useNavigate();
@@ -17,6 +18,7 @@ export default function SubjectCreate() {
     name_en: "",
     department_ids: [] as string[],
     primary_department_id: "",
+    prerequisite_ids: [] as string[],
     credits: 0,
     teacher_id: "",
     semester: "",
@@ -35,6 +37,11 @@ export default function SubjectCreate() {
   const { data: departments, isLoading: departmentsLoading, error: departmentsError } = useQuery({
     queryKey: ["departments"],
     queryFn: fetchDepartments,
+  });
+
+  const { data: subjects = [], isLoading: subjectsLoading, error: subjectsError } = useQuery({
+    queryKey: ["subjects", "prerequisite-options"],
+    queryFn: () => fetchSubjects(),
   });
 
   const handleInputChange = (field: string, value: any) => {
@@ -83,6 +90,10 @@ export default function SubjectCreate() {
 
   const handlePrimaryDepartmentChange = (departmentId: string) => {
     setForm(prev => ({ ...prev, primary_department_id: departmentId }));
+  };
+
+  const handlePrerequisiteChange = (prerequisiteIds: string[]) => {
+    setForm(prev => ({ ...prev, prerequisite_ids: prerequisiteIds }));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,6 +152,7 @@ export default function SubjectCreate() {
         code: form.code.trim(),
         name: form.name.trim(),
         name_en: form.name_en.trim() || null,
+        prerequisite_ids: form.prerequisite_ids,
         credits: form.credits,
         teacher_id: form.teacher_id || null,
         semester: form.semester || null,
@@ -163,7 +175,7 @@ export default function SubjectCreate() {
       if (pdfFile) {
         setUploadingPdf(true);
         try {
-          const pdfData = await uploadSubjectPDF(pdfFile, newSubject.id);
+          const pdfData = await uploadSubjectPDF(newSubject.id, pdfFile);
           await updateSubject(newSubject.id, {
             pdf_file_url: pdfData.url,
             pdf_file_name: pdfData.fileName,
@@ -187,8 +199,9 @@ export default function SubjectCreate() {
     }
   };
 
-  if (departmentsLoading) return <LoadingSpinner />;
+  if (departmentsLoading || subjectsLoading) return <LoadingSpinner />;
   if (departmentsError) return <ErrorMessage message="خطأ في تحميل الأقسام" />;
+  if (subjectsError) return <ErrorMessage message="خطأ في تحميل المواد المطلوبة لاختيار المتطلبات السابقة" />;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -381,6 +394,7 @@ export default function SubjectCreate() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       عدد الساعات المعتمدة <span className="text-red-500">*</span>
+/* ... */
                     </label>
                     <input
                       type="number"
@@ -490,6 +504,31 @@ export default function SubjectCreate() {
                     </select>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <svg className="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  المتطلبات السابقة
+                </h3>
+              </div>
+              <div className="p-6">
+                <PrerequisiteSelector
+                  subjects={subjects}
+                  selectedIds={form.prerequisite_ids}
+                  onChange={handlePrerequisiteChange}
+                  draft={{
+                    code: form.code,
+                    name: form.name,
+                    name_en: form.name_en,
+                    semester_number: form.semester_number,
+                  }}
+                  selectedDepartmentIds={form.department_ids}
+                />
               </div>
             </div>
 

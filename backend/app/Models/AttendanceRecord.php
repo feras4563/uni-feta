@@ -13,6 +13,7 @@ class AttendanceRecord extends Model
     protected $fillable = [
         'session_id',
         'student_id',
+        'marked_by_id',
         'scan_time',
         'status',
         'student_qr_code',
@@ -21,6 +22,7 @@ class AttendanceRecord extends Model
         'user_agent',
         'location_data',
         'is_manual_entry',
+        'is_override',
         'notes',
     ];
 
@@ -28,6 +30,7 @@ class AttendanceRecord extends Model
         'scan_time' => 'datetime',
         'location_data' => 'array',
         'is_manual_entry' => 'boolean',
+        'is_override' => 'boolean',
     ];
 
     protected static function boot()
@@ -46,8 +49,18 @@ class AttendanceRecord extends Model
         return $this->belongsTo(ClassSession::class, 'session_id');
     }
 
+    public function classSession()
+    {
+        return $this->belongsTo(ClassSession::class, 'session_id');
+    }
+
     public function student()
     {
         return $this->belongsTo(Student::class);
+    }
+
+    public function markedBy()
+    {
+        return $this->belongsTo(User::class, 'marked_by_id');
     }
 }

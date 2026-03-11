@@ -32,6 +32,7 @@ interface ScheduleEntry {
   end_time?: string;
   subject_id?: string;
   class_type?: string;
+  isAvailability?: boolean;
 }
 
 const COLORS = [
@@ -72,6 +73,46 @@ export default function TeacherSchedule() {
       colorMap.set(subjectId, COLORS[colorMap.size % COLORS.length]);
     }
     return colorMap.get(subjectId)!;
+  };
+
+  const timesOverlap = (startA?: string, endA?: string, startB?: string, endB?: string) => {
+    if (!startA || !endA || !startB || !endB) return false;
+    return startA < endB && startB < endA;
+  };
+
+  const buildDayEntries = (dayTimetable: any[], daySchedules: any[]): ScheduleEntry[] => {
+    const timetableEntries: ScheduleEntry[] = dayTimetable.map((e: any) => ({
+      type: 'timetable',
+      subject: e.subject,
+      room: e.room,
+      time_slot: e.time_slot || e.timeSlot,
+      group: e.student_group || e.studentGroup || e.group,
+      start_time: e.start_time || e.time_slot?.start_time || e.timeSlot?.start_time,
+      end_time: e.end_time || e.time_slot?.end_time || e.timeSlot?.end_time,
+      subject_id: e.subject_id,
+      class_type: e.class_type,
+      isAvailability: false,
+    }));
+
+    const visibleSchedules = daySchedules.filter((schedule: any) => {
+      if (schedule.subject_id) return true;
+      return !timetableEntries.some((entry) =>
+        timesOverlap(entry.start_time, entry.end_time, schedule.start_time, schedule.end_time)
+      );
+    });
+
+    const scheduleEntries: ScheduleEntry[] = visibleSchedules.map((e: any) => ({
+      type: 'schedule',
+      subject: e.subject,
+      room: e.room ? { name: e.room } : null,
+      start_time: e.start_time,
+      end_time: e.end_time,
+      subject_id: e.subject_id,
+      class_type: e.class_type,
+      isAvailability: !e.subject_id,
+    }));
+
+    return [...timetableEntries, ...scheduleEntries].sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
   };
 
   if (loading) {
@@ -175,28 +216,8 @@ export default function TeacherSchedule() {
               <tbody>
                 {allDays.map(day => {
                   const dayTimetable = timetableByDay[day] || [];
-                  const daySchedules = (schedulesByDay[day] || []).filter((s: any) => s.subject_id);
-                  const allEntries: ScheduleEntry[] = [
-                    ...dayTimetable.map((e: any) => ({
-                      type: 'timetable',
-                      subject: e.subject,
-                      room: e.room,
-                      time_slot: e.time_slot || e.timeSlot,
-                      group: e.student_group || e.studentGroup || e.group,
-                      start_time: e.start_time || e.time_slot?.start_time || e.timeSlot?.start_time,
-                      end_time: e.end_time || e.time_slot?.end_time || e.timeSlot?.end_time,
-                      subject_id: e.subject_id,
-                    })),
-                    ...daySchedules.map((e: any) => ({
-                      type: 'schedule',
-                      subject: e.subject,
-                      room: e.room ? { name: e.room } : null,
-                      start_time: e.start_time,
-                      end_time: e.end_time,
-                      subject_id: e.subject_id,
-                      class_type: e.class_type,
-                    })),
-                  ].sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+                  const daySchedules = schedulesByDay[day] || [];
+                  const allEntries = buildDayEntries(dayTimetable, daySchedules);
 
                   return (
                     <tr key={day} className="border-b border-gray-200">
@@ -213,8 +234,13 @@ export default function TeacherSchedule() {
                               const color = entry.subject_id ? getSubjectColor(entry.subject_id, colorMap) : 'bg-gray-100 border-gray-300 text-gray-700';
                               return (
                                 <div key={idx} className={`px-3 py-2 rounded-lg border ${color} min-w-[180px]`}>
-                                  <div className="text-sm font-medium">
-                                    {entry.subject?.name || 'غير محدد'}
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="text-sm font-medium">
+                                      {entry.subject?.name || (entry.isAvailability ? 'وقت إتاحة' : 'غير محدد')}
+                                    </div>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${entry.isAvailability ? 'bg-white/70 text-gray-600' : 'bg-white/70 text-gray-700'}`}>
+                                      {entry.isAvailability ? 'إتاحة' : 'حصة'}
+                                    </span>
                                   </div>
                                   <div className="text-xs mt-1 opacity-75">
                                     {entry.start_time && entry.end_time ? (
@@ -238,7 +264,7 @@ export default function TeacherSchedule() {
                                   {entry.group && (
                                     <div className="text-xs mt-0.5 opacity-75">
                                       <i className="fas fa-users ml-1"></i>
-                                      {entry.group.name}
+                                      {entry.group.name || entry.group.group_name}
                                     </div>
                                   )}
                                   {entry.class_type && (
@@ -267,28 +293,8 @@ export default function TeacherSchedule() {
         <div className="space-y-4">
           {allDays.map(day => {
             const dayTimetable = timetableByDay[day] || [];
-            const daySchedules = (schedulesByDay[day] || []).filter((s: any) => s.subject_id);
-            const allEntries: ScheduleEntry[] = [
-              ...dayTimetable.map((e: any) => ({
-                type: 'timetable',
-                subject: e.subject,
-                room: e.room,
-                time_slot: e.time_slot || e.timeSlot,
-                group: e.student_group || e.studentGroup || e.group,
-                start_time: e.start_time || e.time_slot?.start_time || e.timeSlot?.start_time,
-                end_time: e.end_time || e.time_slot?.end_time || e.timeSlot?.end_time,
-                subject_id: e.subject_id,
-              })),
-              ...daySchedules.map((e: any) => ({
-                type: 'schedule',
-                subject: e.subject,
-                room: e.room ? { name: e.room } : null,
-                start_time: e.start_time,
-                end_time: e.end_time,
-                subject_id: e.subject_id,
-                class_type: e.class_type,
-              })),
-            ].sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+            const daySchedules = schedulesByDay[day] || [];
+            const allEntries = buildDayEntries(dayTimetable, daySchedules);
 
             if (allEntries.length === 0) return null;
 
@@ -303,12 +309,15 @@ export default function TeacherSchedule() {
                   {allEntries.map((entry, idx) => (
                     <div key={idx} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
                       <div className="flex items-center">
-                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center ml-3">
-                          <i className="fas fa-book text-blue-600"></i>
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ml-3 ${entry.isAvailability ? 'bg-gray-100' : 'bg-blue-100'}`}>
+                          <i className={`fas ${entry.isAvailability ? 'fa-clock' : 'fa-book'} ${entry.isAvailability ? 'text-gray-500' : 'text-blue-600'}`}></i>
                         </div>
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {entry.subject?.name || 'غير محدد'}
+                          <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                            <span>{entry.subject?.name || (entry.isAvailability ? 'وقت إتاحة' : 'غير محدد')}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${entry.isAvailability ? 'bg-gray-100 text-gray-600' : 'bg-blue-50 text-blue-700'}`}>
+                              {entry.isAvailability ? 'إتاحة' : 'حصة'}
+                            </span>
                             {entry.subject?.code && (
                               <span className="text-xs text-gray-500 mr-2">({entry.subject.code})</span>
                             )}
@@ -318,7 +327,7 @@ export default function TeacherSchedule() {
                               <span><i className="fas fa-door-open ml-1"></i>{entry.room.name || entry.room}</span>
                             )}
                             {entry.group && (
-                              <span><i className="fas fa-users ml-1"></i>{entry.group.name}</span>
+                              <span><i className="fas fa-users ml-1"></i>{entry.group.name || entry.group.group_name}</span>
                             )}
                           </div>
                         </div>

@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchSubjectWithStats, updateSubject, updateSubjectDepartments, getSubjectDepartments, fetchDepartments, fetchTeachers, createSubjectTitle, updateSubjectTitle, deleteSubjectTitle, uploadSubjectPDF, deleteSubjectPDF, fetchSubjectTeachers, createTeacherSubjectAssignment, updateTeacherSubjectAssignment, deleteTeacherSubjectAssignment } from "../lib/api";
+import { fetchSubjectWithStats, updateSubject, updateSubjectDepartments, getSubjectDepartments, fetchDepartments, fetchTeachers, fetchSubjects, createSubjectTitle, updateSubjectTitle, deleteSubjectTitle, uploadSubjectPDF, deleteSubjectPDF, fetchSubjectTeachers, createTeacherSubjectAssignment, updateTeacherSubjectAssignment, deleteTeacherSubjectAssignment } from "../lib/api";
 import { usePermissions } from "../hooks/usePermissions";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import ErrorMessage from "../components/ui/ErrorMessage";
 import TeacherSubjectModal from "../components/teacher/TeacherSubjectModal";
+import PrerequisiteSelector from "../components/subject/PrerequisiteSelector";
+import { formatCurrency } from "../lib/utils";
 
 export default function SubjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +26,7 @@ export default function SubjectDetail() {
     max_students: 0,
     department_ids: [] as string[],
     primary_department_id: "",
+    prerequisite_ids: [] as string[],
     cost_per_credit: 0,
     total_cost: 0,
     is_required: true,
@@ -63,12 +66,16 @@ export default function SubjectDetail() {
     queryFn: () => fetchTeachers(),
   });
 
+  const { data: subjects = [] } = useQuery({
+    queryKey: ["subjects", "prerequisite-options"],
+    queryFn: () => fetchSubjects(),
+  });
+
   const { data: subjectDepartments, error: departmentsError } = useQuery({
     queryKey: ["subject-departments", id],
     queryFn: () => getSubjectDepartments(id!),
     enabled: !!id,
   });
-
 
   const { data: subjectTeachers = [] } = useQuery({
     queryKey: ["subject-teachers", id],
@@ -91,6 +98,7 @@ export default function SubjectDetail() {
         max_students: subjectData.subject.max_students || 0,
         department_ids: subjectDepartments ? subjectDepartments.map((sd: any) => sd.department_id) : [],
         primary_department_id: subjectDepartments ? subjectDepartments.find((sd: any) => sd.is_primary_department)?.department_id || "" : "",
+        prerequisite_ids: (subjectData.subject.prerequisite_subjects || []).map((prereq: any) => prereq.id),
         cost_per_credit: subjectData.subject.cost_per_credit || 0,
         total_cost: subjectData.subject.total_cost || 0,
         is_required: subjectData.subject.is_required !== false,
@@ -147,6 +155,10 @@ export default function SubjectDetail() {
     setEditForm(prev => ({ ...prev, primary_department_id: departmentId }));
   };
 
+  const handlePrerequisiteChange = (prerequisiteIds: string[]) => {
+    setEditForm(prev => ({ ...prev, prerequisite_ids: prerequisiteIds }));
+  };
+
   const handleSave = async () => {
     try {
       // Validate form data
@@ -175,6 +187,7 @@ export default function SubjectDetail() {
         code: editForm.code.trim(),
         name: editForm.name.trim(),
         name_en: editForm.name_en.trim() || null,
+        prerequisite_ids: editForm.prerequisite_ids,
         credits: editForm.credits,
         teacher_id: editForm.teacher_id || null,
         semester: editForm.semester || null,
@@ -215,6 +228,7 @@ export default function SubjectDetail() {
         max_students: subjectData.subject.max_students || 0,
         department_ids: subjectDepartments ? subjectDepartments.map((sd: any) => sd.department_id) : [],
         primary_department_id: subjectDepartments ? subjectDepartments.find((sd: any) => sd.is_primary_department)?.department_id || "" : "",
+        prerequisite_ids: (subjectData.subject.prerequisite_subjects || []).map((prereq: any) => prereq.id),
         cost_per_credit: subjectData.subject.cost_per_credit || 0,
         total_cost: subjectData.subject.total_cost || 0,
         is_required: subjectData.subject.is_required !== false,
@@ -278,7 +292,7 @@ export default function SubjectDetail() {
         title: titleForm.title.trim(),
         title_en: titleForm.title_en.trim() || null,
         description: titleForm.description.trim() || null,
-        order_index: subjectData?.titles?.length || 0,
+        order_index: subjectData?.subject?.titles?.length || 0,
       };
 
       if (editingTitle) {
@@ -338,7 +352,7 @@ export default function SubjectDetail() {
 
     setUploadingPdf(true);
     try {
-      const pdfData = await uploadSubjectPDF(pdfFile, id);
+      const pdfData = await uploadSubjectPDF(id, pdfFile);
       await updateSubject(id, {
         pdf_file_url: pdfData.url,
         pdf_file_name: pdfData.fileName,
@@ -359,7 +373,7 @@ export default function SubjectDetail() {
 
     if (window.confirm("هل أنت متأكد من حذف ملف PDF؟")) {
       try {
-        await deleteSubjectPDF(subject.pdf_file_url);
+        await deleteSubjectPDF(id);
         await updateSubject(id, {
           pdf_file_url: null,
           pdf_file_name: null,
@@ -381,7 +395,8 @@ export default function SubjectDetail() {
   if (error) return <ErrorMessage message="خطأ في تحميل بيانات المقرر الدراسي" />;
   if (!subjectData?.subject) return <ErrorMessage message="المقرر الدراسي غير موجود" />;
 
-  const { subject, students, department, teacher } = subjectData;
+  const { subject } = subjectData;
+  const students = subject.students || [];
   const titles = subject.titles || [];
 
   return (
@@ -694,6 +709,22 @@ export default function SubjectDetail() {
                         )}
                       </div>
                     </div>
+                    
+                    <div className="md:col-span-2">
+                      <PrerequisiteSelector
+                        subjects={subjects}
+                        selectedIds={editForm.prerequisite_ids}
+                        onChange={handlePrerequisiteChange}
+                        draft={{
+                          code: editForm.code,
+                          name: editForm.name,
+                          name_en: editForm.name_en,
+                          semester_number: editForm.semester_number,
+                        }}
+                        selectedDepartmentIds={editForm.department_ids}
+                        currentSubjectId={id}
+                      />
+                    </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -721,13 +752,13 @@ export default function SubjectDetail() {
                       {subject.cost_per_credit && (
                         <div>
                           <label className="block text-sm font-medium text-gray-500 mb-1">تكلفة الساعة المعتمدة</label>
-                          <p className="text-lg font-semibold text-green-600">{subject.cost_per_credit.toLocaleString()} دينار</p>
+                          <p className="text-lg font-semibold text-green-600">{formatCurrency(subject.cost_per_credit, 'دينار')}</p>
                         </div>
                       )}
                       {subject.total_cost && (
                         <div>
                           <label className="block text-sm font-medium text-gray-500 mb-1">التكلفة الإجمالية</label>
-                          <p className="text-lg font-semibold text-green-600">{subject.total_cost.toLocaleString()} دينار</p>
+                          <p className="text-lg font-semibold text-green-600">{formatCurrency(subject.total_cost, 'دينار')}</p>
                         </div>
                       )}
                       {subject.semester_number && (
@@ -1378,42 +1409,6 @@ export default function SubjectDetail() {
                         <div className="text-xs text-gray-500">عملي</div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Statistics */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <svg className="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                  الإحصائيات
-                </h3>
-              </div>
-              <div className="p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">الطلاب المسجلين</span>
-                  <span className="text-lg font-semibold text-gray-900">{students?.length || 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">الساعات المعتمدة</span>
-                  <span className="text-lg font-semibold text-gray-900">{subject.credits}</span>
-                </div>
-                {subject.max_students && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">السعة القصوى</span>
-                    <span className="text-lg font-semibold text-gray-900">{subject.max_students}</span>
-                  </div>
-                )}
-                {subject.max_students && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">نسبة الامتلاء</span>
-                    <span className="text-lg font-semibold text-gray-900">
-                      {Math.round(((students?.length || 0) / subject.max_students) * 100)}%
-                    </span>
                   </div>
                 )}
               </div>

@@ -137,6 +137,15 @@ export default function StudentCreate() {
       const result = await createStudent(formData);
       setCreatedStudent(result);
 
+      if (result?.login_credentials?.email && result?.login_credentials?.password) {
+        window.alert(
+          `تم إنشاء الطالب وحساب الدخول بنجاح.\n\n` +
+          `البريد الإلكتروني: ${result.login_credentials.email}\n` +
+          `كلمة المرور: ${result.login_credentials.password}\n\n` +
+          `يرجى مطالبة الطالب بتغيير كلمة المرور بعد أول تسجيل دخول.`
+        );
+      }
+
       queryClient.invalidateQueries({ queryKey: ["students"] });
       navigate('/students');
     } catch (error: any) {

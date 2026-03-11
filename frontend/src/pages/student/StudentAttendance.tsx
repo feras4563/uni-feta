@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/JWTAuthContext';
 import { fetchStudentMyAttendance } from '../../lib/jwt-api';
+import { formatDate, formatPercent } from '../../lib/utils';
 
 export default function StudentAttendance() {
   const { user } = useAuth();
@@ -61,36 +62,6 @@ export default function StudentAttendance() {
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-        <div className="bg-white rounded-lg shadow p-4 border border-gray-200 text-center">
-          <p className="text-xs text-gray-500 mb-1">الإجمالي</p>
-          <p className="text-2xl font-bold text-gray-900">{loading ? '...' : stats.total}</p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4 border border-green-200 text-center">
-          <p className="text-xs text-green-600 mb-1">حاضر</p>
-          <p className="text-2xl font-bold text-green-600">{loading ? '...' : stats.present}</p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4 border border-red-200 text-center">
-          <p className="text-xs text-red-600 mb-1">غائب</p>
-          <p className="text-2xl font-bold text-red-600">{loading ? '...' : stats.absent}</p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4 border border-yellow-200 text-center">
-          <p className="text-xs text-yellow-600 mb-1">متأخر</p>
-          <p className="text-2xl font-bold text-yellow-600">{loading ? '...' : stats.late}</p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4 border border-blue-200 text-center">
-          <p className="text-xs text-blue-600 mb-1">معذور</p>
-          <p className="text-2xl font-bold text-blue-600">{loading ? '...' : stats.excused}</p>
-        </div>
-        <div className={`bg-white rounded-lg shadow p-4 border text-center ${stats.attendance_rate >= 75 ? 'border-green-200' : 'border-red-200'}`}>
-          <p className="text-xs text-gray-500 mb-1">نسبة الحضور</p>
-          <p className={`text-2xl font-bold ${stats.attendance_rate >= 75 ? 'text-green-600' : 'text-red-600'}`}>
-            {loading ? '...' : `${stats.attendance_rate}%`}
-          </p>
-        </div>
-      </div>
-
       {/* Attendance Rate Visual */}
       {!loading && stats.total > 0 && (
         <div className="bg-white rounded-lg shadow p-6 border border-gray-200 mb-8">
@@ -106,7 +77,7 @@ export default function StudentAttendance() {
           </div>
           <div className="flex justify-between text-xs text-gray-500 mt-2">
             <span>0%</span>
-            <span className="font-bold">{stats.attendance_rate}%</span>
+            <span className="font-bold">{formatPercent(stats.attendance_rate)}</span>
             <span>100%</span>
           </div>
         </div>
@@ -155,7 +126,7 @@ export default function StudentAttendance() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {record.class_session?.session_date
-                        ? new Date(record.class_session.session_date).toLocaleDateString('ar-SA')
+                        ? formatDate(record.class_session.session_date)
                         : '-'}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">

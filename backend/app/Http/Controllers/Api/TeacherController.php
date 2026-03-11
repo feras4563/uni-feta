@@ -19,7 +19,16 @@ class TeacherController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Teacher::with('department:id,name,name_en');
+        $query = Teacher::with([
+            'department:id,name,name_en',
+            'teacherSubjects' => function ($query) {
+                $query->where('is_active', true)
+                    ->with([
+                        'department:id,name,name_en',
+                        'subject:id,name,name_en,code,department_id',
+                    ]);
+            },
+        ]);
 
         // Filter by active status
         if ($request->has('is_active')) {
@@ -40,8 +49,16 @@ class TeacherController extends Controller
         }
 
         // Filter by department
-        if ($request->has('department_id')) {
-            $query->where('department_id', $request->department_id);
+        if ($request->filled('department_id')) {
+            $departmentId = (string) $request->department_id;
+
+            $query->where(function ($q) use ($departmentId) {
+                $q->where('department_id', $departmentId)
+                    ->orWhereHas('teacherSubjects', function ($teacherSubjectsQuery) use ($departmentId) {
+                        $teacherSubjectsQuery->where('is_active', true)
+                            ->where('department_id', $departmentId);
+                    });
+            });
         }
 
         $query->orderBy('name');

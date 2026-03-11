@@ -13,6 +13,7 @@ import {
   FolderTree
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { formatCurrency, formatDate, formatNumber } from '@/lib/utils';
 
 interface AccountData {
   id: string;
@@ -117,7 +118,7 @@ export default function AccountDetail() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500 mb-1">الرصيد الحالي</p>
-                <h2 className="text-3xl font-bold text-gray-900">{account.balance.toLocaleString()} دينار</h2>
+                <h2 className="text-3xl font-bold text-gray-900">{formatCurrency(account.balance, 'دينار')}</h2>
               </div>
               <div className="h-16 w-16 bg-gray-100 rounded-lg flex items-center justify-center">
                 <Building2 className="h-8 w-8 text-gray-600" />
@@ -126,11 +127,11 @@ export default function AccountDetail() {
             <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-6 text-sm text-gray-600">
               <span className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4" />
-                {account.transactionCount} عملية
+                {formatNumber(account.transactionCount)} عملية
               </span>
               <span className="flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
-                آخر تحديث: {new Date(account.updatedAt).toLocaleDateString('ar-EG')}
+                آخر تحديث: {formatDate(account.updatedAt)}
               </span>
             </div>
           </div>

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Eye, Trash2, Filter } from 'lucide-react';
+import { Plus, Eye, Trash2 } from 'lucide-react';
 import { api } from '../lib/api-client';
+import { formatCurrency, formatDate, formatNumber, toLatinDigits } from '../lib/utils';
 
 interface PaymentEntry {
   id: string;
@@ -56,14 +57,6 @@ export default function PaymentEntryList() {
     return matchesType && matchesSearch;
   });
 
-  const totalReceive = entries
-    .filter((e) => e.payment_type === 'receive')
-    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
-
-  const totalPay = entries
-    .filter((e) => e.payment_type === 'pay')
-    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
-
   return (
     <div className="p-6">
       {/* Header */}
@@ -79,51 +72,6 @@ export default function PaymentEntryList() {
           <Plus className="h-5 w-5" />
           إنشاء قيد جديد
         </button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow-sm p-6 border-r-4 border-green-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">إجمالي القبض</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {totalReceive.toLocaleString()} د.ل
-              </p>
-            </div>
-            <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
-              <i className="fas fa-arrow-down text-green-600 text-xl"></i>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6 border-r-4 border-red-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">إجمالي الصرف</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {totalPay.toLocaleString()} د.ل
-              </p>
-            </div>
-            <div className="h-12 w-12 bg-red-100 rounded-full flex items-center justify-center">
-              <i className="fas fa-arrow-up text-red-600 text-xl"></i>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6 border-r-4 border-blue-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">الصافي</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {(totalReceive - totalPay).toLocaleString()} د.ل
-              </p>
-            </div>
-            <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-              <i className="fas fa-balance-scale text-blue-600 text-xl"></i>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Filters */}
@@ -147,7 +95,7 @@ export default function PaymentEntryList() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              الكل ({entries.length})
+              الكل ({formatNumber(entries.length)})
             </button>
             <button
               onClick={() => setFilterType('receive')}
@@ -157,7 +105,7 @@ export default function PaymentEntryList() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              قبض ({entries.filter((e) => e.payment_type === 'receive').length})
+              قبض ({formatNumber(entries.filter((e) => e.payment_type === 'receive').length)})
             </button>
             <button
               onClick={() => setFilterType('pay')}
@@ -167,7 +115,7 @@ export default function PaymentEntryList() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              دفع ({entries.filter((e) => e.payment_type === 'pay').length})
+              دفع ({formatNumber(entries.filter((e) => e.payment_type === 'pay').length)})
             </button>
           </div>
         </div>
@@ -239,16 +187,16 @@ export default function PaymentEntryList() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {entry.party_id}
+                      {toLatinDigits(entry.party_id)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {entry.paymentMode?.name || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {entry.amount.toLocaleString()} د.ل
+                      {formatCurrency(entry.amount, 'د.ل')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(entry.payment_date).toLocaleDateString('ar-LY')}
+                      {formatDate(entry.payment_date)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <span

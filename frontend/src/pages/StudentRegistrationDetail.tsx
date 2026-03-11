@@ -17,6 +17,7 @@ import {
   Building,
   GraduationCap
 } from "lucide-react";
+import { formatCurrency, formatDate, formatNumber } from "@/lib/utils";
 
 export default function StudentRegistrationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -252,7 +253,7 @@ export default function StudentRegistrationDetail() {
                 <label className="text-sm font-medium text-gray-500">تاريخ التسجيل</label>
                 <p className="text-gray-900">
                   {enrollmentData.enrollment_date ? 
-                    new Date(enrollmentData.enrollment_date).toLocaleDateString('ar-SA') : 
+                    formatDate(enrollmentData.enrollment_date) : 
                     'غير محدد'
                   }
                 </p>
@@ -286,12 +287,12 @@ export default function StudentRegistrationDetail() {
                           </span>
                         </div>
                         <div className="text-sm text-gray-600">
-                          {subject.credits || 0} ساعة معتمدة
+                          {formatNumber(subject.credits || 0)} ساعة معتمدة
                         </div>
                       </div>
                       <div className="text-right">
                         <div className="text-lg font-bold text-green-600">
-                          {(subject.credits * subject.cost_per_credit) || 0} دينار
+                          {formatCurrency((subject.credits * subject.cost_per_credit) || 0, 'دينار')}
                         </div>
                         <div className="text-sm text-gray-500">
                           {getPaymentStatusBadge(enrollmentData.payment_status)}
@@ -322,12 +323,12 @@ export default function StudentRegistrationDetail() {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-600">عدد المقررات:</span>
-                <span className="font-medium">{enrollmentData.subjects?.length || 0}</span>
+                <span className="font-medium">{formatNumber(enrollmentData.subjects?.length || 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">إجمالي التكلفة:</span>
                 <span className="font-bold text-green-600">
-                  {enrollmentData.total_cost?.toLocaleString() || 0} دينار
+                  {formatCurrency(enrollmentData.total_cost || 0, 'دينار')}
                 </span>
               </div>
               <div className="flex justify-between">

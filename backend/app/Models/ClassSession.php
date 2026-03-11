@@ -11,6 +11,7 @@ class ClassSession extends Model
     public $incrementing = false;
 
     protected $fillable = [
+        'timetable_id',
         'teacher_id',
         'subject_id',
         'department_id',
@@ -49,6 +50,11 @@ class ClassSession extends Model
     public function teacher()
     {
         return $this->belongsTo(Teacher::class);
+    }
+
+    public function timetableEntry()
+    {
+        return $this->belongsTo(TimetableEntry::class, 'timetable_id');
     }
 
     public function subject()

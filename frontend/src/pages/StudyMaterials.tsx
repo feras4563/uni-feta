@@ -6,6 +6,7 @@ import { usePermissions } from "../hooks/usePermissions";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import ErrorMessage from "../components/ui/ErrorMessage";
 import SubjectTeachersModal from "../components/subject/SubjectTeachersModal";
+import { formatCurrency } from "../lib/utils";
 
 export default function StudyMaterials() {
   const navigate = useNavigate();
@@ -292,7 +293,7 @@ export default function StudyMaterials() {
                         {subject.cost_per_credit ? (
                           <div>
                <div className="font-medium text-green-600">
-                 {((subject.credits || 0) * parseFloat(subject.cost_per_credit)).toLocaleString()} دينار
+                 {formatCurrency((subject.credits || 0) * parseFloat(subject.cost_per_credit), 'دينار')}
                </div>
                <div className="text-xs text-gray-500">
                  {subject.cost_per_credit} دينار/ساعة

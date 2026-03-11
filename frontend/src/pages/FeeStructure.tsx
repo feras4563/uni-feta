@@ -296,6 +296,7 @@ function FeeDefinitionFormModal({
   queryClient: any;
 }) {
   const isEdit = !!fee;
+  type FeeFrequency = FeeDefinition['frequency'];
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
@@ -307,7 +308,7 @@ function FeeDefinitionFormModal({
     name_en: fee?.name_en || '',
     default_amount: fee?.default_amount?.toString() || '',
     is_refundable: fee?.is_refundable || false,
-    frequency: fee?.frequency || 'one_time',
+    frequency: (fee?.frequency || 'one_time') as FeeFrequency,
     is_active: fee?.is_active ?? true,
     description: fee?.description || '',
     gl_account_id: fee?.gl_account_id?.toString() || '',
@@ -402,7 +403,7 @@ function FeeDefinitionFormModal({
               <label className="block text-xs font-medium text-gray-600 mb-1">التكرار *</label>
               <select
                 value={formData.frequency}
-                onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, frequency: e.target.value as FeeFrequency })}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
               >
                 {Object.entries(FREQUENCY_LABELS).map(([key, label]) => (

@@ -21,6 +21,7 @@ class Student extends Model
         'phone',
         'address',
         'department_id',
+        'specialization_track',
         'year',
         'status',
         'gender',

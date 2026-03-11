@@ -108,30 +108,22 @@ class StudentRegistrationController extends Controller
 
         // Fee check when assigning to a group
         if ($request->group_id && !$request->boolean('tuition_paid')) {
-            $hasPaid = false;
-            $hasOverride = false;
+            $eligibility = $this->resolveGroupAssignmentEligibility(
+                $request->student_id,
+                $request->semester_id,
+                $request->department_id,
+                null
+            );
 
-            $invoice = \App\Models\StudentInvoice::where('student_id', $request->student_id)
-                ->where('semester_id', $request->semester_id)
-                ->first();
-            if ($invoice && $invoice->status === 'paid') {
-                $hasPaid = true;
-            }
-
-            $adminOverride = \App\Models\StudentSubjectEnrollment::where('student_id', $request->student_id)
-                ->where('semester_id', $request->semester_id)
-                ->where('admin_override', true)
-                ->where('attendance_allowed', true)
-                ->exists();
-            if ($adminOverride) {
-                $hasOverride = true;
-            }
-
-            if (!$hasPaid && !$hasOverride) {
+            if (!$eligibility['can_join_group']) {
                 return response()->json([
                     'message' => 'لا يمكن تعيين الطالب في مجموعة: الرسوم غير مدفوعة ولا يوجد تجاوز إداري.',
                     'error_code' => 'FEES_NOT_PAID'
                 ], 422);
+            }
+
+            if ($eligibility['fee_status'] === 'paid') {
+                $request->merge(['tuition_paid' => true]);
             }
         }
 
@@ -191,31 +183,24 @@ class StudentRegistrationController extends Controller
         if ($request->has('group_id') && $request->group_id && !$registration->group_id) {
             $tuitionPaid = $request->has('tuition_paid') ? $request->boolean('tuition_paid') : $registration->tuition_paid;
             if (!$tuitionPaid) {
-                $hasPaid = false;
-                $hasOverride = false;
-
                 $semesterId = $request->semester_id ?? $registration->semester_id;
-                $invoice = \App\Models\StudentInvoice::where('student_id', $registration->student_id)
-                    ->where('semester_id', $semesterId)
-                    ->first();
-                if ($invoice && $invoice->status === 'paid') {
-                    $hasPaid = true;
-                }
+                $departmentId = $request->department_id ?? $registration->department_id;
+                $eligibility = $this->resolveGroupAssignmentEligibility(
+                    $registration->student_id,
+                    $semesterId,
+                    $departmentId,
+                    $registration
+                );
 
-                $adminOverride = \App\Models\StudentSubjectEnrollment::where('student_id', $registration->student_id)
-                    ->where('semester_id', $semesterId)
-                    ->where('admin_override', true)
-                    ->where('attendance_allowed', true)
-                    ->exists();
-                if ($adminOverride) {
-                    $hasOverride = true;
-                }
-
-                if (!$hasPaid && !$hasOverride) {
+                if (!$eligibility['can_join_group']) {
                     return response()->json([
                         'message' => 'لا يمكن تعيين الطالب في مجموعة: الرسوم غير مدفوعة ولا يوجد تجاوز إداري.',
                         'error_code' => 'FEES_NOT_PAID'
                     ], 422);
+                }
+
+                if ($eligibility['fee_status'] === 'paid' && !$registration->tuition_paid) {
+                    $request->merge(['tuition_paid' => true]);
                 }
             }
         }
@@ -244,5 +229,69 @@ class StudentRegistrationController extends Controller
         return response()->json([
             'message' => 'Registration deleted successfully'
         ]);
+    }
+
+    private function resolveGroupAssignmentEligibility(
+        string $studentId,
+        string $semesterId,
+        string $departmentId,
+        ?StudentSemesterRegistration $registration = null
+    ): array {
+        $invoice = \App\Models\StudentInvoice::where('student_id', $studentId)
+            ->where('semester_id', $semesterId)
+            ->where(function ($query) use ($departmentId) {
+                $query->where('department_id', $departmentId)
+                    ->orWhereNull('department_id');
+            })
+            ->where('status', '!=', 'cancelled')
+            ->orderByRaw("CASE WHEN status = 'paid' THEN 0 WHEN status = 'partial' THEN 1 ELSE 2 END")
+            ->orderByDesc('invoice_date')
+            ->orderByDesc('created_at')
+            ->first();
+
+        $feeStatus = 'unpaid';
+
+        if ($invoice) {
+            if ($invoice->status === 'paid' || (float) $invoice->balance <= 0) {
+                $feeStatus = 'paid';
+            } elseif ($invoice->status === 'partial' || (float) $invoice->paid_amount > 0) {
+                $feeStatus = 'partial';
+            } elseif (!empty($invoice->status)) {
+                $feeStatus = $invoice->status;
+            }
+        }
+
+        if ($registration && $registration->tuition_paid) {
+            $feeStatus = 'paid';
+        }
+
+        $paidEnrollmentExists = \App\Models\StudentSubjectEnrollment::where('student_id', $studentId)
+            ->where('semester_id', $semesterId)
+            ->where('department_id', $departmentId)
+            ->where(function ($query) {
+                $query->where('payment_status', 'paid')
+                    ->orWhere(function ($subQuery) {
+                        $subQuery->where('attendance_allowed', true)
+                            ->where('admin_override', false);
+                    });
+            })
+            ->exists();
+
+        if ($paidEnrollmentExists) {
+            $feeStatus = 'paid';
+        }
+
+        $hasAdminOverride = \App\Models\StudentSubjectEnrollment::where('student_id', $studentId)
+            ->where('semester_id', $semesterId)
+            ->where('department_id', $departmentId)
+            ->where('admin_override', true)
+            ->where('attendance_allowed', true)
+            ->exists();
+
+        return [
+            'fee_status' => $feeStatus,
+            'has_admin_override' => $hasAdminOverride,
+            'can_join_group' => $feeStatus === 'paid' || $hasAdminOverride,
+        ];
     }
 }
