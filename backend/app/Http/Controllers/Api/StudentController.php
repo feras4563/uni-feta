@@ -403,17 +403,14 @@ class StudentController extends Controller
         }
         
         // Check prerequisites for all requested subjects
-        $completedSubjectIds = \App\Models\StudentSubjectEnrollment::where('student_id', $id)
-            ->where('status', 'completed')
-            ->pluck('subject_id')
-            ->toArray();
-
+        // Uses GradeFinalizationService::hasPassedSubject which checks both
+        // enrollment status AND actual published grades (handles un-synced enrollments)
         $prerequisiteErrors = [];
         foreach ($request->subject_ids as $subjectId) {
             $subjectToCheck = \App\Models\Subject::with('prerequisiteSubjects:id,name,code')->find($subjectId);
             if ($subjectToCheck && $subjectToCheck->prerequisiteSubjects->isNotEmpty()) {
-                $missing = $subjectToCheck->prerequisiteSubjects->filter(function ($prereq) use ($completedSubjectIds) {
-                    return !in_array($prereq->id, $completedSubjectIds);
+                $missing = $subjectToCheck->prerequisiteSubjects->filter(function ($prereq) use ($id) {
+                    return !\App\Services\GradeFinalizationService::hasPassedSubject($id, $prereq->id);
                 });
                 if ($missing->isNotEmpty()) {
                     $prerequisiteErrors[] = [

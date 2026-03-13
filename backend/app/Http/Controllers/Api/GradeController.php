@@ -7,6 +7,7 @@ use App\Http\Requests\StoreGradeRequest;
 use App\Http\Requests\UpdateGradeRequest;
 use App\Models\StudentGrade;
 use App\Models\Semester;
+use App\Services\GradeFinalizationService;
 use Illuminate\Http\Request;
 
 class GradeController extends Controller
@@ -83,6 +84,15 @@ class GradeController extends Controller
         $grade = StudentGrade::create($data);
         $grade->load('student', 'subject', 'teacher', 'semester');
 
+        // Sync enrollment status if grade is published
+        if ($grade->is_published) {
+            GradeFinalizationService::syncSingleEnrollment(
+                $grade->student_id,
+                $grade->subject_id,
+                $grade->semester_id
+            );
+        }
+
         return response()->json($grade, 201);
     }
 
@@ -109,6 +119,15 @@ class GradeController extends Controller
             'grade_date', 'due_date', 'description', 'feedback', 'is_published'
         ]));
         $grade->load('student', 'subject', 'teacher', 'semester');
+
+        // Sync enrollment status if grade is published
+        if ($grade->is_published) {
+            GradeFinalizationService::syncSingleEnrollment(
+                $grade->student_id,
+                $grade->subject_id,
+                $grade->semester_id
+            );
+        }
 
         return response()->json($grade);
     }

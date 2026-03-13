@@ -614,57 +614,7 @@ class TimetableSchedulingService
 
     private function buildHolidayDateSet(Collection $holidays, Carbon $semesterStart, Carbon $semesterEnd): array
     {
-        $set = [];
-        $years = range($semesterStart->year, $semesterEnd->year);
-
-        foreach ($holidays as $holiday) {
-            $start = Carbon::parse($holiday->start_date)->startOfDay();
-            $end = Carbon::parse($holiday->end_date)->startOfDay();
-
-            if (!$holiday->is_recurring) {
-                $cursor = $start->copy();
-                while ($cursor->lte($end)) {
-                    if ($cursor->betweenIncluded($semesterStart, $semesterEnd)) {
-                        $set[$cursor->toDateString()] = true;
-                    }
-                    $cursor->addDay();
-                }
-                continue;
-            }
-
-            foreach ($years as $year) {
-                $recurringStart = Carbon::create($year, $start->month, $start->day)->startOfDay();
-                $recurringEnd = Carbon::create($year, $end->month, $end->day)->startOfDay();
-
-                if ($recurringStart->gt($recurringEnd)) {
-                    $cursor = $recurringStart->copy();
-                    while ($cursor->year === $year) {
-                        if ($cursor->betweenIncluded($semesterStart, $semesterEnd)) {
-                            $set[$cursor->toDateString()] = true;
-                        }
-                        $cursor->addDay();
-                    }
-
-                    $cursor = Carbon::create($year, 1, 1)->startOfDay();
-                    while ($cursor->lte($recurringEnd)) {
-                        if ($cursor->betweenIncluded($semesterStart, $semesterEnd)) {
-                            $set[$cursor->toDateString()] = true;
-                        }
-                        $cursor->addDay();
-                    }
-                } else {
-                    $cursor = $recurringStart->copy();
-                    while ($cursor->lte($recurringEnd)) {
-                        if ($cursor->betweenIncluded($semesterStart, $semesterEnd)) {
-                            $set[$cursor->toDateString()] = true;
-                        }
-                        $cursor->addDay();
-                    }
-                }
-            }
-        }
-
-        return $set;
+        return $this->classSessionGenerationService->buildHolidayDateSet($holidays, $semesterStart, $semesterEnd);
     }
 
     private function countTeacherAvailabilityCoverage(string $teacherId): int

@@ -9,6 +9,7 @@ use App\Models\AccountDefault;
 use App\Models\StudentSemesterRegistration;
 use App\Models\StudentSubjectEnrollment;
 use Illuminate\Support\Facades\DB;
+use App\Services\GradeFinalizationService;
 
 class EnrollmentService
 {
@@ -160,16 +161,13 @@ class EnrollmentService
      */
     public static function checkPrerequisites(string $studentId, array $subjectIds): array
     {
-        $completedIds = StudentSubjectEnrollment::where('student_id', $studentId)
-            ->where('status', 'completed')
-            ->pluck('subject_id')
-            ->toArray();
-
         $errors = [];
         foreach ($subjectIds as $subjectId) {
             $subject = Subject::with('prerequisiteSubjects:id,name,code')->find($subjectId);
             if ($subject && $subject->prerequisiteSubjects->isNotEmpty()) {
-                $missing = $subject->prerequisiteSubjects->filter(fn($p) => !in_array($p->id, $completedIds));
+                $missing = $subject->prerequisiteSubjects->filter(
+                    fn($p) => !GradeFinalizationService::hasPassedSubject($studentId, $p->id)
+                );
                 if ($missing->isNotEmpty()) {
                     $errors[] = [
                         'subject' => $subject->name,

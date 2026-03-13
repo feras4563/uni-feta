@@ -271,6 +271,14 @@ export async function deleteStudyYear(id: string | number) {
   return api.delete<ApiMessage>(`/study-years/${id}`);
 }
 
+export async function toggleStudyYearActive(id: string | number) {
+  return api.post<Record<string, unknown>>(`/study-years/${id}/toggle-active`);
+}
+
+export async function toggleSemesterActive(id: string | number) {
+  return api.post<Record<string, unknown>>(`/semesters/${id}/toggle-active`);
+}
+
 // ============================================
 // ROOMS API
 // ============================================

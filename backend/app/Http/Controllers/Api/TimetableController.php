@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\TimetableEntry;
+use App\Services\ClassSessionGenerationService;
 use App\Services\TimetableSchedulingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -136,6 +137,9 @@ class TimetableController extends Controller
         $entry = TimetableEntry::create($entryData);
         $entry->load(['semester', 'department', 'group', 'subject', 'teacher', 'room', 'timeSlot']);
 
+        // Auto-generate date-specific class sessions for this entry within its semester
+        app(ClassSessionGenerationService::class)->syncForEntry($entry->id);
+
         return response()->json($entry, 201);
     }
 
@@ -221,6 +225,9 @@ class TimetableController extends Controller
         $entry->update($updateData);
         $entry->load(['semester', 'department', 'group', 'subject', 'teacher', 'room', 'timeSlot']);
 
+        // Re-sync date-specific class sessions after timetable change
+        app(ClassSessionGenerationService::class)->syncForEntry($entry->id);
+
         return response()->json($entry);
     }
 
@@ -236,6 +243,14 @@ class TimetableController extends Controller
                 'message' => 'Timetable entry not found'
             ], 404);
         }
+
+        // Cancel all non-completed sessions for this entry before deleting
+        \App\Models\ClassSession::where('timetable_id', $entry->id)
+            ->whereNotIn('status', ['completed', 'cancelled'])
+            ->update([
+                'status' => 'cancelled',
+                'notes' => \DB::raw("CONCAT(COALESCE(notes, ''), ' | Auto-cancelled: timetable entry deleted')"),
+            ]);
 
         $entry->delete();
 

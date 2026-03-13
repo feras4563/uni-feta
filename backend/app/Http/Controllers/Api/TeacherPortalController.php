@@ -16,6 +16,7 @@ use App\Models\TimetableEntry;
 use App\Models\AppUser;
 use App\Models\Semester;
 use App\Services\NotificationService;
+use App\Services\GradeFinalizationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -65,12 +66,15 @@ class TeacherPortalController extends Controller
         $today = now()->toDateString();
         $this->ensureSessionsForDate($teacher, $today);
 
-        // Today's timetable entries (from the weekly schedule)
-        // day_of_week: 0=Sunday, 1=Monday, ... 6=Saturday
+        // Today's timetable entries (only if today falls within an active semester)
         $todayDayOfWeek = now()->dayOfWeek; // Carbon: 0=Sunday
         $todayTimetable = TimetableEntry::where('teacher_id', $teacher->id)
             ->where('day_of_week', $todayDayOfWeek)
             ->where('is_active', true)
+            ->whereHas('semester', function ($q) use ($today) {
+                $q->where('start_date', '<=', $today)
+                  ->where('end_date', '>=', $today);
+            })
             ->with([
                 'subject:id,name,name_en,code',
                 'room:id,name,code,building',
@@ -87,13 +91,20 @@ class TeacherPortalController extends Controller
             ->orderBy('start_time')
             ->get();
 
-        // Upcoming timetable: next 3 days of scheduled classes
+        // Upcoming timetable: next days of scheduled classes (within semester dates)
         $upcomingEntries = collect();
-        for ($i = 1; $i <= 6; $i++) {
-            $futureDay = (now()->dayOfWeek + $i) % 7;
+        for ($i = 1; $i <= 14; $i++) {
+            $futureDate = now()->addDays($i);
+            $futureDateString = $futureDate->toDateString();
+            $futureDay = $futureDate->dayOfWeek;
+
             $entries = TimetableEntry::where('teacher_id', $teacher->id)
                 ->where('day_of_week', $futureDay)
                 ->where('is_active', true)
+                ->whereHas('semester', function ($q) use ($futureDateString) {
+                    $q->where('start_date', '<=', $futureDateString)
+                      ->where('end_date', '>=', $futureDateString);
+                })
                 ->with([
                     'subject:id,name,name_en,code',
                     'room:id,name,code,building',
@@ -101,8 +112,8 @@ class TeacherPortalController extends Controller
                 ])
                 ->orderBy('start_time')
                 ->get()
-                ->map(function ($entry) use ($futureDay, $i) {
-                    $entry->upcoming_date = now()->addDays($i)->toDateString();
+                ->map(function ($entry) use ($futureDay, $futureDateString) {
+                    $entry->upcoming_date = $futureDateString;
                     $entry->upcoming_day_name = $this->getDayName($futureDay);
                     return $entry;
                 });
@@ -479,11 +490,24 @@ class TeacherPortalController extends Controller
 
         $this->notifyStudentsForPublishedGrades(collect($publishedNotificationGrades));
 
+        // Sync enrollment status for all affected student+subject pairs with published grades
+        $allGrades = array_merge($created, $updated);
+        $publishedGrades = collect($allGrades)->filter(fn($g) => $g->is_published);
+        if ($publishedGrades->isNotEmpty()) {
+            $pairs = $publishedGrades->map(fn($g) => [
+                'student_id' => $g->student_id,
+                'subject_id' => $g->subject_id,
+                'semester_id' => $g->semester_id,
+            ])->unique(fn($p) => $p['student_id'] . '|' . $p['subject_id'])->values()->toArray();
+
+            GradeFinalizationService::syncEnrollmentStatusForPairs($pairs);
+        }
+
         return response()->json([
             'message' => 'Grades saved successfully',
             'created' => count($created),
             'updated' => count($updated),
-            'grades' => array_merge($created, $updated),
+            'grades' => $allGrades,
         ]);
     }
 
@@ -541,6 +565,15 @@ class TeacherPortalController extends Controller
             $this->notifyStudentsForPublishedGrades(collect([$grade]));
         }
 
+        // Sync enrollment status when a published grade is updated
+        if ($grade->is_published) {
+            GradeFinalizationService::syncSingleEnrollment(
+                $grade->student_id,
+                $grade->subject_id,
+                $grade->semester_id
+            );
+        }
+
         return response()->json([
             'message' => 'Grade updated successfully',
             'grade' => $grade->load('student:id,name,campus_id'),
@@ -571,7 +604,7 @@ class TeacherPortalController extends Controller
             ->where('teacher_id', $teacher->id)
             ->update(['is_published' => $request->is_published]);
 
-        // Notify students when grades are published
+        // Notify students when grades are published & sync enrollment status
         if ($request->is_published && $updated > 0) {
             $grades = StudentGrade::whereIn('id', $request->grade_ids)
                 ->with('student:id,name,auth_user_id', 'subject:id,name')
@@ -593,6 +626,15 @@ class TeacherPortalController extends Controller
                     $notifiedStudents[] = $grade->student_id;
                 }
             }
+
+            // Sync enrollment status for affected student+subject pairs
+            $pairs = $grades->map(fn($g) => [
+                'student_id' => $g->student_id,
+                'subject_id' => $g->subject_id,
+                'semester_id' => $g->semester_id,
+            ])->unique(fn($p) => $p['student_id'] . '|' . $p['subject_id'])->values()->toArray();
+
+            GradeFinalizationService::syncEnrollmentStatusForPairs($pairs);
         }
 
         return response()->json([
@@ -707,14 +749,30 @@ class TeacherPortalController extends Controller
         $date = \Carbon\Carbon::parse($dateString);
         $dayOfWeek = $date->dayOfWeek; // 0=Sunday ... 6=Saturday
 
-        // Find timetable entries for this teacher on this day of week
+        // Find timetable entries for this teacher on this day of week,
+        // and only for entries whose semester covers the requested date.
         $entries = TimetableEntry::where('teacher_id', $teacher->id)
             ->where('day_of_week', $dayOfWeek)
             ->where('is_active', true)
-            ->with(['subject:id,name,code', 'room:id,name,code,room_number'])
+            ->whereHas('semester', function ($q) use ($dateString) {
+                $q->where('start_date', '<=', $dateString)
+                  ->where('end_date', '>=', $dateString);
+            })
+            ->with(['subject:id,name,code', 'room:id,name,code,room_number', 'semester:id,start_date,end_date'])
             ->get();
 
         if ($entries->isEmpty()) {
+            return;
+        }
+
+        // Use proper holiday checking via ClassSessionGenerationService
+        // (handles recurring holidays correctly).
+        $sessionService = app(\App\Services\ClassSessionGenerationService::class);
+        $firstSemester = $entries->first()->semester;
+        $semesterStart = \Carbon\Carbon::parse($firstSemester->start_date)->startOfDay();
+        $semesterEnd = \Carbon\Carbon::parse($firstSemester->end_date)->startOfDay();
+
+        if ($sessionService->isHolidayDate($dateString, $semesterStart, $semesterEnd)) {
             return;
         }
 
@@ -724,16 +782,6 @@ class TeacherPortalController extends Controller
             ->whereNotNull('timetable_id')
             ->pluck('timetable_id')
             ->all();
-
-        // Check if date is a holiday
-        $isHoliday = \App\Models\Holiday::where(function ($q) use ($dateString) {
-            $q->where('start_date', '<=', $dateString)
-              ->where('end_date', '>=', $dateString);
-        })->exists();
-
-        if ($isHoliday) {
-            return;
-        }
 
         foreach ($entries as $entry) {
             if (in_array($entry->id, $existingTimetableIds)) {

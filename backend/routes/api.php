@@ -174,6 +174,7 @@ $registerRoutes = function () {
         Route::get('/current', [StudyYearController::class, 'current']);
         Route::post('/set-current', [StudyYearController::class, 'setCurrent']);
         Route::get('/{id}', [StudyYearController::class, 'show']);
+        Route::post('/{id}/toggle-active', [StudyYearController::class, 'toggleActive']);
         Route::put('/{id}', [StudyYearController::class, 'update']);
         Route::patch('/{id}', [StudyYearController::class, 'update']);
         Route::delete('/{id}', [StudyYearController::class, 'destroy']);
@@ -186,7 +187,9 @@ $registerRoutes = function () {
         Route::get('/current', [SemesterController::class, 'current']);
         Route::post('/set-current', [SemesterController::class, 'setCurrent']);
         Route::get('/{id}', [SemesterController::class, 'show']);
+        Route::post('/{id}/toggle-active', [SemesterController::class, 'toggleActive']);
         Route::post('/{id}/transition-status', [SemesterController::class, 'transitionStatus']);
+        Route::post('/{id}/sync-grades', [SemesterController::class, 'syncGrades']);
         Route::get('/{id}/registered-students', [SemesterController::class, 'getRegisteredStudents']);
         Route::put('/{id}', [SemesterController::class, 'update']);
         Route::patch('/{id}', [SemesterController::class, 'update']);

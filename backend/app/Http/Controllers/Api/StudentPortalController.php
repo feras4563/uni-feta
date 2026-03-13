@@ -151,6 +151,15 @@ class StudentPortalController extends Controller
 
         if ($dayOfWeek !== null) {
             $query->where('day_of_week', $dayOfWeek);
+
+            // When filtering by a specific day, also ensure the resolved date
+            // falls within the semester's start/end range so we don't show
+            // timetable rows for semesters that haven't started or have ended.
+            $today = now()->toDateString();
+            $query->whereHas('semester', function ($sq) use ($today) {
+                $sq->where('start_date', '<=', $today)
+                   ->where('end_date', '>=', $today);
+            });
         }
 
         $query->where(function ($outer) use ($groupIds, $subjectIds, $semesterDepartmentPairs) {
