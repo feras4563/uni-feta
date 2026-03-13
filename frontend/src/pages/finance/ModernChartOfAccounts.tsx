@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiRequest } from '@/lib/jwt-auth';
+import { apiRequest } from '@/lib/api-client';
 import { 
   TreeProvider, 
   TreeView, 

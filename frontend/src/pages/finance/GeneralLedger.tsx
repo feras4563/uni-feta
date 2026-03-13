@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiRequest } from '@/lib/jwt-auth';
+import { apiRequest } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
 
 interface Account {

@@ -71,7 +71,6 @@ export async function apiRequest<T>(
   }
 
   const url = `${API_URL}${endpoint}`;
-  console.log('🌐 API Request:', url);
 
   try {
     const response = await fetch(url, {
@@ -79,11 +78,8 @@ export async function apiRequest<T>(
       headers,
     });
 
-    console.log('📡 API Response:', response.status, response.statusText);
-
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: 'Request failed' }));
-      console.error('❌ API Error:', error);
       
       if (response.status === 401) {
         // For login endpoint, don't redirect - just throw the error
@@ -101,7 +97,6 @@ export async function apiRequest<T>(
 
     return response.json();
   } catch (error) {
-    console.error('❌ Network Error:', error);
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new Error('Cannot connect to server. Please ensure the backend is running at ' + API_URL);
     }
@@ -111,10 +106,6 @@ export async function apiRequest<T>(
 
 // Authentication functions
 export async function signIn(credentials: LoginCredentials): Promise<AppUser> {
-  console.log('🔍 JWT: Signing in:', credentials.email);
-  console.log('🔍 JWT: Credentials object:', credentials);
-  console.log('🔍 JWT: Stringified body:', JSON.stringify(credentials));
-  
   const response = await apiRequest<{
     access_token: string;
     user: any;
@@ -125,14 +116,8 @@ export async function signIn(credentials: LoginCredentials): Promise<AppUser> {
     body: JSON.stringify(credentials),
   });
 
-  console.log('✅ JWT: Login response received:', response);
-  console.log('✅ JWT: Token:', response.access_token ? 'Present' : 'Missing');
-  console.log('✅ JWT: User:', response.user);
-  console.log('✅ JWT: App User:', response.app_user);
-
   // Store token
   setToken(response.access_token);
-  console.log('✅ JWT: Token stored');
 
   // Create AppUser object
   const user: AppUser = {
@@ -158,11 +143,8 @@ export async function signIn(credentials: LoginCredentials): Promise<AppUser> {
     studentYear: response.app_user?.student_year,
   };
 
-  console.log('✅ JWT: User object created:', user);
-
   // Store user data
   setStoredUser(user);
-  console.log('✅ JWT: User stored in localStorage');
 
   // Store dynamic permissions from backend
   if (response.permissions) {
@@ -173,8 +155,6 @@ export async function signIn(credentials: LoginCredentials): Promise<AppUser> {
 }
 
 export async function signOut(): Promise<void> {
-  console.log('🔍 JWT: Signing out');
-  
   try {
     await apiRequest('/auth/logout', {
       method: 'POST',
@@ -378,5 +358,7 @@ export async function logUserAction(
   details?: Record<string, any>
 ): Promise<void> {
   // This can be implemented as a backend endpoint if needed
-  console.log('User action:', { userId, action, resource, resourceId, details });
+  if (import.meta.env.DEV) {
+    console.log('User action:', { userId, action, resource, resourceId, details });
+  }
 }

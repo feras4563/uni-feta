@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchStudents, fetchDepartments, deleteStudent } from "../lib/jwt-api";
+import { fetchStudents, fetchDepartments, deleteStudent, exportStudents } from "../lib/jwt-api";
 import StudentQRModal from "../components/students/StudentQRModal";
 import { usePermissions } from "../hooks/usePermissions";
 import { useAuth } from "../contexts/JWTAuthContext";
@@ -150,6 +150,21 @@ export default function StudentsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => {
+              const params: Record<string, string> = {};
+              if (searchTerm) params.search = searchTerm;
+              if (departmentFilter) params.department_id = departmentFilter;
+              if (yearFilter) params.year = yearFilter;
+              if (statusFilter) params.status = statusFilter;
+              if (genderFilter) params.gender = genderFilter;
+              exportStudents(params);
+            }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            تصدير CSV
+          </button>
           {canCreate('students') && (
             <button
               onClick={() => navigate('/students/create')}

@@ -21,11 +21,10 @@ import {
 import { 
   fetchAllInvoices, 
   fetchBasicInvoices,
-  testSupabaseConnection,
-  testBasicInvoiceQuery,
   updateInvoiceStatus,
   fetchDepartments,
-  fetchSemesters
+  fetchSemesters,
+  exportInvoices
 } from '@/lib/api';
 import { formatCurrency, formatDate, formatNumber, toLatinDigits } from '@/lib/utils';
 
@@ -189,6 +188,20 @@ export default function InvoicesPage() {
                 </div>
               </div>
             </div>
+            <button
+              onClick={() => {
+                const params: Record<string, string> = {};
+                if (searchTerm) params.search = searchTerm;
+                if (statusFilter) params.status = statusFilter;
+                if (semesterFilter) params.semester_id = semesterFilter;
+                if (departmentFilter) params.department_id = departmentFilter;
+                exportInvoices(params);
+              }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+            >
+              <Download className="h-4 w-4" />
+              تصدير CSV
+            </button>
           </div>
         </div>
       </div>
@@ -206,60 +219,6 @@ export default function InvoicesPage() {
                 className="text-sm text-green-600 hover:text-green-800 font-medium"
               >
                 تحديث البيانات
-              </button>
-              <button
-                onClick={async () => {
-                  console.log('🔍 Debug: Testing Supabase connection...');
-                  try {
-                    // Test Supabase connection
-                    const connectionTest = await testSupabaseConnection();
-                    console.log('🔍 Debug: Connection test result:', connectionTest);
-                    
-                    // Test basic invoice query
-                    const queryTest = await testBasicInvoiceQuery();
-                    console.log('🔍 Debug: Query test result:', queryTest);
-                    
-                    // Test basic fetch
-                    const basicInvoices = await fetchBasicInvoices();
-                    console.log('🔍 Debug: Basic invoices result:', basicInvoices);
-                    
-                    // Test full fetch
-                    const fullInvoices = await fetchAllInvoices();
-                    console.log('🔍 Debug: Full invoices result:', fullInvoices);
-                    
-                    // Show detailed info
-                    const message = `
-اختبار الاتصال:
-- عدد الفواتير في قاعدة البيانات: ${connectionTest.count}
-- خطأ في العد: ${connectionTest.countError ? 'نعم' : 'لا'}
-- خطأ في جلب سجل واحد: ${connectionTest.oneError ? 'نعم' : 'لا'}
-- المستخدم المسجل دخوله: ${connectionTest.user || 'غير مسجل'}
-
-اختبار الاستعلامات:
-- مع ORDER BY: ${queryTest.withOrderBy.data?.length || 0} فاتورة
-- بدون ORDER BY: ${queryTest.withoutOrderBy.data?.length || 0} فاتورة
-- مع LIMIT: ${queryTest.withLimit.data?.length || 0} فاتورة
-
-نتائج الدوال:
-- ${basicInvoices.length} فاتورة (fetchBasicInvoices)
-- ${fullInvoices.length} فاتورة (fetchAllInvoices)
-- ${invoices.length} فاتورة (في الواجهة)
-
-تفاصيل الفواتير:
-${basicInvoices.map(inv => 
-  `- ${inv.invoice_number}: ${inv.student_id} (${inv.total_amount} دينار)`
-).join('\n')}
-                    `;
-                    
-                    alert(message);
-                  } catch (error) {
-                    console.error('🔍 Debug: Test error:', error);
-                    alert('خطأ في الاختبار: ' + (error instanceof Error ? error.message : 'خطأ غير معروف'));
-                  }
-                }}
-                className="text-sm text-purple-600 hover:text-purple-800 font-medium"
-              >
-                اختبار مفصل
               </button>
               <button
                 onClick={clearFilters}

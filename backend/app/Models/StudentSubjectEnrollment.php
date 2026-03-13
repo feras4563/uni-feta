@@ -27,6 +27,8 @@ class StudentSubjectEnrollment extends Model
         'grade_letter',
         'passed',
         'notes',
+        'is_retake',
+        'original_enrollment_id',
     ];
 
     protected $casts = [
@@ -35,6 +37,7 @@ class StudentSubjectEnrollment extends Model
         'passed' => 'boolean',
         'attendance_allowed' => 'boolean',
         'admin_override' => 'boolean',
+        'is_retake' => 'boolean',
     ];
 
     protected static function boot()
@@ -76,5 +79,15 @@ class StudentSubjectEnrollment extends Model
     public function invoice()
     {
         return $this->belongsTo(StudentInvoice::class, 'invoice_id');
+    }
+
+    public function originalEnrollment()
+    {
+        return $this->belongsTo(self::class, 'original_enrollment_id');
+    }
+
+    public function retakeEnrollments()
+    {
+        return $this->hasMany(self::class, 'original_enrollment_id');
     }
 }

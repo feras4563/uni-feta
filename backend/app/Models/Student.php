@@ -3,11 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 
 class Student extends Model
 {
+    use SoftDeletes;
+
     protected $keyType = 'string';
     public $incrementing = false;
 

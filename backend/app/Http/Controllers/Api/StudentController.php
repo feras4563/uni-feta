@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreStudentRequest;
+use App\Http\Requests\UpdateStudentRequest;
+use App\Http\Requests\EnrollSubjectsRequest;
 use App\Models\Student;
 use App\Models\User;
 use App\Models\AppUser;
@@ -84,88 +87,54 @@ class StudentController extends Controller
     /**
      * Store a newly created student
      */
-    public function store(Request $request)
+    public function store(StoreStudentRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'name_en' => 'nullable|string|max:255',
-            'email' => 'required|email|unique:students,email|unique:users,email',
-            'national_id_passport' => 'required|string|unique:students,national_id_passport',
-            'phone' => 'nullable|string|max:20',
-            'address' => 'nullable|string',
-            'department_id' => 'nullable|exists:departments,id',
-            'specialization_track' => 'nullable|in:fine_arts_media,advertising_design,photography_cinema,multimedia_media',
-            'year' => 'nullable|integer|min:1|max:10',
-            'status' => 'nullable|in:active,inactive,graduated,suspended',
-            'gender' => 'nullable|in:male,female',
-            'nationality' => 'nullable|string|max:100',
-            'birth_date' => 'nullable|date',
-            'enrollment_date' => 'nullable|date',
-            'sponsor_name' => 'nullable|string|max:255',
-            'sponsor_contact' => 'nullable|string|max:255',
-            'academic_history' => 'nullable|string',
-            'academic_score' => 'nullable|numeric|min:0|max:100',
-            'transcript_file' => 'nullable|string',
-            'qr_code' => 'nullable|string',
-            // New enrollment fields
-            'birth_place' => 'nullable|string|max:255',
-            'certification_type' => 'nullable|string|max:255',
-            'certification_date' => 'nullable|date',
-            'certification_school' => 'nullable|string|max:255',
-            'certification_specialization' => 'nullable|string|max:255',
-            'port_of_entry' => 'nullable|string|max:255',
-            'visa_type' => 'nullable|string|max:255',
-            'mother_name' => 'nullable|string|max:255',
-            'mother_nationality' => 'nullable|string|max:255',
-            'passport_number' => 'nullable|string|max:100',
-            'passport_issue_date' => 'nullable|date',
-            'passport_expiry_date' => 'nullable|date',
-            'passport_place_of_issue' => 'nullable|string|max:255',
-        ]);
+        try {
+            return \DB::transaction(function () use ($request) {
+                // Generate unique student ID
+                $year = date('y'); // Last 2 digits of year
+                $random = str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
+                $studentId = "ST{$year}{$random}";
+                
+                // Ensure uniqueness
+                while (Student::where('id', $studentId)->exists()) {
+                    $random = str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
+                    $studentId = "ST{$year}{$random}";
+                }
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+                $data = $request->all();
+                $data['id'] = $studentId;
+
+                $student = Student::create($data);
+                $student->load('department:id,name,name_en');
+
+                // Auto-create login account if student has email
+                $generatedPassword = null;
+                if ($student->email) {
+                    // Keep student onboarding predictable unless an explicit password is provided.
+                    $generatedPassword = $request->input('password', 'student123');
+                    $this->createStudentLoginAccount($student, $generatedPassword);
+                }
+
+                $this->logAction('create', 'students', $student->id, [
+                    'student_name' => $student->name,
+                    'department_id' => $student->department_id,
+                ]);
+
+                $response = $student->toArray();
+                if ($generatedPassword) {
+                    $response['login_credentials'] = [
+                        'email' => $student->email,
+                        'password' => $generatedPassword,
+                    ];
+                }
+
+                return response()->json($response, 201);
+            });
+        } catch (\Exception $e) {
+            \Log::error('Failed to create student', ['error' => $e->getMessage()]);
+            return response()->json(['message' => 'فشل في إنشاء الطالب', 'error' => $e->getMessage()], 500);
         }
-
-        // Generate unique student ID
-        $year = date('y'); // Last 2 digits of year
-        $random = str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
-        $studentId = "ST{$year}{$random}";
-        
-        // Ensure uniqueness
-        while (Student::where('id', $studentId)->exists()) {
-            $random = str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
-            $studentId = "ST{$year}{$random}";
-        }
-
-        $data = $request->all();
-        $data['id'] = $studentId;
-
-        $student = Student::create($data);
-        $student->load('department:id,name,name_en');
-
-        // Auto-create login account if student has email
-        $generatedPassword = null;
-        if ($student->email) {
-            // Keep student onboarding predictable unless an explicit password is provided.
-            $generatedPassword = $request->input('password', 'student123');
-            $this->createStudentLoginAccount($student, $generatedPassword);
-        }
-
-        $this->logAction('create', 'students', $student->id, [
-            'student_name' => $student->name,
-            'department_id' => $student->department_id,
-        ]);
-
-        $response = $student->toArray();
-        if ($generatedPassword) {
-            $response['login_credentials'] = [
-                'email' => $student->email,
-                'password' => $generatedPassword,
-            ];
-        }
-
-        return response()->json($response, 201);
     }
 
     /**
@@ -189,50 +158,9 @@ class StudentController extends Controller
     /**
      * Update the specified student
      */
-    public function update(Request $request, $id)
+    public function update(UpdateStudentRequest $request, $id)
     {
         $student = Student::findOrFail($id);
-
-        $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|required|string|max:255',
-            'name_en' => 'nullable|string|max:255',
-            'email' => 'sometimes|required|email|unique:students,email,' . $id . '|unique:users,email,' . ($student->auth_user_id ?? 'NULL'),
-            'national_id_passport' => 'sometimes|required|string|unique:students,national_id_passport,' . $id,
-            'phone' => 'nullable|string|max:20',
-            'address' => 'nullable|string',
-            'department_id' => 'nullable|exists:departments,id',
-            'specialization_track' => 'nullable|in:fine_arts_media,advertising_design,photography_cinema,multimedia_media',
-            'year' => 'nullable|integer|min:1|max:10',
-            'status' => 'nullable|in:active,inactive,graduated,suspended',
-            'gender' => 'nullable|in:male,female',
-            'nationality' => 'nullable|string|max:100',
-            'birth_date' => 'nullable|date',
-            'enrollment_date' => 'nullable|date',
-            'sponsor_name' => 'nullable|string|max:255',
-            'sponsor_contact' => 'nullable|string|max:255',
-            'academic_history' => 'nullable|string',
-            'academic_score' => 'nullable|numeric|min:0|max:100',
-            'transcript_file' => 'nullable|string',
-            'qr_code' => 'nullable|string',
-            // New enrollment fields
-            'birth_place' => 'nullable|string|max:255',
-            'certification_type' => 'nullable|string|max:255',
-            'certification_date' => 'nullable|date',
-            'certification_school' => 'nullable|string|max:255',
-            'certification_specialization' => 'nullable|string|max:255',
-            'port_of_entry' => 'nullable|string|max:255',
-            'visa_type' => 'nullable|string|max:255',
-            'mother_name' => 'nullable|string|max:255',
-            'mother_nationality' => 'nullable|string|max:255',
-            'passport_number' => 'nullable|string|max:100',
-            'passport_issue_date' => 'nullable|date',
-            'passport_expiry_date' => 'nullable|date',
-            'passport_place_of_issue' => 'nullable|string|max:255',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
 
         $student->update($request->all());
         $student->load('department:id,name,name_en');
@@ -349,25 +277,8 @@ class StudentController extends Controller
     /**
      * Enroll student in subjects
      */
-    public function enrollInSubjects(Request $request, $id)
+    public function enrollInSubjects(EnrollSubjectsRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'subject_ids' => 'required|array',
-            'subject_ids.*' => 'exists:subjects,id',
-            'semester_id' => 'required|exists:semesters,id',
-            'study_year_id' => 'required|exists:study_years,id',
-            'department_id' => 'required|exists:departments,id',
-            'semester_number' => 'required|integer|min:1',
-            'specialization_track' => 'nullable|in:fine_arts_media,advertising_design,photography_cinema,multimedia_media',
-            'is_paying' => 'nullable|boolean',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
 
         $student = Student::findOrFail($id);
 
@@ -491,40 +402,6 @@ class StudentController extends Controller
             ], 400);
         }
         
-        // Create or update semester registration without auto-creating/auto-assigning groups.
-        // Group membership is handled manually from Student Groups screens.
-        $existingSemesterRegistration = \App\Models\StudentSemesterRegistration::with('group:id,department_id,semester_id')
-            ->where('student_id', $id)
-            ->where('semester_id', $request->semester_id)
-            ->first();
-
-        $preservedGroupId = $existingSemesterRegistration?->group_id;
-        if ($existingSemesterRegistration && $existingSemesterRegistration->group_id) {
-            $existingGroup = $existingSemesterRegistration->group;
-            $groupIsInvalid = !$existingGroup
-                || (string) $existingGroup->department_id !== (string) $request->department_id
-                || (string) $existingGroup->semester_id !== (string) $request->semester_id;
-
-            if ($groupIsInvalid) {
-                $preservedGroupId = null;
-            }
-        }
-
-        $semesterRegistration = \App\Models\StudentSemesterRegistration::updateOrCreate(
-            [
-                'student_id' => $id,
-                'semester_id' => $request->semester_id,
-            ],
-            [
-                'study_year_id' => $request->study_year_id,
-                'department_id' => $request->department_id,
-                'group_id' => $preservedGroupId,
-                'semester_number' => $request->semester_number,
-                'registration_date' => now(),
-                'status' => 'active',
-            ]
-        );
-        
         // Check prerequisites for all requested subjects
         $completedSubjectIds = \App\Models\StudentSubjectEnrollment::where('student_id', $id)
             ->where('status', 'completed')
@@ -555,121 +432,165 @@ class StudentController extends Controller
             ], 422);
         }
 
-        $enrollments = [];
-        $subjects = [];
+        try {
+            return \DB::transaction(function () use ($request, $id, $student) {
+                // Create or update semester registration without auto-creating/auto-assigning groups.
+                // Group membership is handled manually from Student Groups screens.
+                $existingSemesterRegistration = \App\Models\StudentSemesterRegistration::with('group:id,department_id,semester_id')
+                    ->where('student_id', $id)
+                    ->where('semester_id', $request->semester_id)
+                    ->first();
 
-        foreach ($request->subject_ids as $subjectId) {
-            // Check if already enrolled
-            $existing = \App\Models\StudentSubjectEnrollment::where([
-                'student_id' => $id,
-                'subject_id' => $subjectId,
-                'semester_id' => $request->semester_id,
-            ])->first();
+                $preservedGroupId = $existingSemesterRegistration?->group_id;
+                if ($existingSemesterRegistration && $existingSemesterRegistration->group_id) {
+                    $existingGroup = $existingSemesterRegistration->group;
+                    $groupIsInvalid = !$existingGroup
+                        || (string) $existingGroup->department_id !== (string) $request->department_id
+                        || (string) $existingGroup->semester_id !== (string) $request->semester_id;
 
-            if (!$existing) {
-                $isPaying = $request->boolean('is_paying', false);
-                
-                $enrollment = \App\Models\StudentSubjectEnrollment::create([
-                    'student_id' => $id,
-                    'subject_id' => $subjectId,
-                    'semester_id' => $request->semester_id,
-                    'study_year_id' => $request->study_year_id,
-                    'department_id' => $request->department_id,
-                    'semester_number' => $request->semester_number,
-                    'enrollment_date' => now(),
-                    'status' => 'enrolled',
-                    'payment_status' => $isPaying ? 'paid' : 'unpaid',
-                    'attendance_allowed' => $isPaying,
-                ]);
-                $enrollments[] = $enrollment;
-                
-                // Load subject for invoice
-                $subject = \App\Models\Subject::find($subjectId);
-                if ($subject) {
-                    $subjects[] = $subject;
+                    if ($groupIsInvalid) {
+                        $preservedGroupId = null;
+                    }
                 }
-            }
-        }
 
-        // Create/update invoice if there are new enrollments
-        $invoice = null;
-        $journalEntry = null;
-        
-        if (count($enrollments) > 0) {
-            $isPaying = $request->boolean('is_paying', false);
-            
-            // Calculate total credits for ALL enrollments in this semester (not just new ones)
-            $totalCredits = \App\Models\StudentSubjectEnrollment::where('student_id', $id)
-                ->where('semester_id', $request->semester_id)
-                ->whereHas('subject')
-                ->with('subject')
-                ->get()
-                ->sum(fn($e) => $e->subject->credits ?? 0);
-            
-            // Use FeeService to find or reuse existing invoice
-            $invoice = \App\Services\FeeService::findOrCreateInvoice(
-                $id,
-                $request->semester_id,
-                $request->study_year_id,
-                $request->department_id,
-                $request->semester_number,
-                $isPaying
-            );
-            
-            // Add subject items to invoice
-            \App\Services\FeeService::addSubjectItemsToInvoice($invoice, $enrollments, $subjects);
-            
-            // Get NEW fees to charge (prevents duplicates across invoices)
-            $newFees = \App\Services\FeeService::getNewFeesToCharge(
-                $id,
-                $request->semester_id,
-                $request->department_id,
-                $request->semester_number,
-                $totalCredits,
-                $student,
-                $request->study_year_id
-            );
-            
-            // Add fee items to invoice
-            if (!empty($newFees)) {
-                \App\Services\FeeService::addFeeItemsToInvoice($invoice, $newFees, $totalCredits);
-            }
-            
-            // Recalculate invoice totals
-            $invoice = \App\Services\FeeService::recalculateInvoice($invoice);
-            
-            // If paying immediately, update paid amount
-            if ($isPaying) {
-                $invoice->update([
-                    'paid_amount' => $invoice->total_amount,
-                    'balance' => 0,
-                    'status' => 'paid',
+                $semesterRegistration = \App\Models\StudentSemesterRegistration::updateOrCreate(
+                    [
+                        'student_id' => $id,
+                        'semester_id' => $request->semester_id,
+                    ],
+                    [
+                        'study_year_id' => $request->study_year_id,
+                        'department_id' => $request->department_id,
+                        'group_id' => $preservedGroupId,
+                        'semester_number' => $request->semester_number,
+                        'registration_date' => now(),
+                        'status' => 'active',
+                    ]
+                );
+
+                $enrollments = [];
+                $subjects = [];
+
+                foreach ($request->subject_ids as $subjectId) {
+                    // Check if already enrolled
+                    $existing = \App\Models\StudentSubjectEnrollment::where([
+                        'student_id' => $id,
+                        'subject_id' => $subjectId,
+                        'semester_id' => $request->semester_id,
+                    ])->first();
+
+                    if (!$existing) {
+                        $isPaying = $request->boolean('is_paying', false);
+                        
+                        $enrollment = \App\Models\StudentSubjectEnrollment::create([
+                            'student_id' => $id,
+                            'subject_id' => $subjectId,
+                            'semester_id' => $request->semester_id,
+                            'study_year_id' => $request->study_year_id,
+                            'department_id' => $request->department_id,
+                            'semester_number' => $request->semester_number,
+                            'enrollment_date' => now(),
+                            'status' => 'enrolled',
+                            'payment_status' => $isPaying ? 'paid' : 'unpaid',
+                            'attendance_allowed' => $isPaying,
+                        ]);
+                        $enrollments[] = $enrollment;
+                        
+                        // Load subject for invoice
+                        $subject = \App\Models\Subject::find($subjectId);
+                        if ($subject) {
+                            $subjects[] = $subject;
+                        }
+                    }
+                }
+
+                // Create/update invoice if there are new enrollments
+                $invoice = null;
+                $journalEntry = null;
+                
+                if (count($enrollments) > 0) {
+                    $isPaying = $request->boolean('is_paying', false);
+                    
+                    // Calculate total credits for ALL enrollments in this semester (for fee rule matching)
+                    $totalCredits = \App\Models\StudentSubjectEnrollment::where('student_id', $id)
+                        ->where('semester_id', $request->semester_id)
+                        ->whereHas('subject')
+                        ->with('subject')
+                        ->get()
+                        ->sum(fn($e) => $e->subject->credits ?? 0);
+
+                    // Calculate credits for NEWLY enrolled subjects only (for per_credit fee pricing)
+                    $newlyEnrolledCredits = collect($subjects)->sum(fn($s) => $s->credits ?? 0);
+                    
+                    // Use FeeService to find or reuse existing invoice
+                    $invoice = \App\Services\FeeService::findOrCreateInvoice(
+                        $id,
+                        $request->semester_id,
+                        $request->study_year_id,
+                        $request->department_id,
+                        $request->semester_number,
+                        $isPaying
+                    );
+                    
+                    // Add subject items to invoice
+                    \App\Services\FeeService::addSubjectItemsToInvoice($invoice, $enrollments, $subjects);
+                    
+                    // Get NEW fees to charge (prevents duplicates across invoices)
+                    $newFees = \App\Services\FeeService::getNewFeesToCharge(
+                        $id,
+                        $request->semester_id,
+                        $request->department_id,
+                        $request->semester_number,
+                        $totalCredits,
+                        $student,
+                        $request->study_year_id
+                    );
+                    
+                    // Add fee items to invoice — per_credit fees use newly enrolled credits
+                    if (!empty($newFees)) {
+                        \App\Services\FeeService::addFeeItemsToInvoice($invoice, $newFees, $newlyEnrolledCredits);
+                    }
+                    
+                    // Recalculate invoice totals
+                    $invoice = \App\Services\FeeService::recalculateInvoice($invoice);
+                    
+                    // If paying immediately, update paid amount
+                    if ($isPaying) {
+                        $invoice->update([
+                            'paid_amount' => $invoice->total_amount,
+                            'balance' => 0,
+                            'status' => 'paid',
+                        ]);
+                        $invoice = $invoice->fresh();
+                    }
+                    
+                    // Create or update journal entry for the invoice
+                    \App\Services\FeeService::updateOrCreateInvoiceJournalEntry($invoice);
+                    
+                    // If paying immediately, create payment journal entry
+                    if ($isPaying) {
+                        $this->createPaymentJournalEntry($invoice, (float) $invoice->total_amount, $student);
+                    }
+                }
+
+                $this->logAction('enroll', 'student-enrollments', $id, [
+                    'student_name' => $student->name,
+                    'subject_count' => count($enrollments),
+                    'semester_id' => $request->semester_id,
+                    'subject_ids' => $request->subject_ids,
                 ]);
-                $invoice = $invoice->fresh();
-            }
-            
-            // Create or update journal entry for the invoice
-            \App\Services\FeeService::updateOrCreateInvoiceJournalEntry($invoice);
-            
-            // If paying immediately, create payment journal entry
-            if ($isPaying) {
-                $this->createPaymentJournalEntry($invoice, (float) $invoice->total_amount, $student);
-            }
+
+                return response()->json([
+                    'message' => 'Student enrolled successfully',
+                    'enrollments' => $enrollments,
+                    'invoice' => $invoice ? $invoice->fresh(['items.subject', 'items.feeDefinition']) : null,
+                    'count' => count($enrollments)
+                ], 201);
+            });
+        } catch (\Exception $e) {
+            \Log::error('Failed to enroll student in subjects', ['student_id' => $id, 'error' => $e->getMessage()]);
+            return response()->json(['message' => 'فشل في تسجيل الطالب في المقررات', 'error' => $e->getMessage()], 500);
         }
-
-        $this->logAction('enroll', 'student-enrollments', $id, [
-            'student_name' => $student->name,
-            'subject_count' => count($enrollments),
-            'semester_id' => $request->semester_id,
-            'subject_ids' => $request->subject_ids,
-        ]);
-
-        return response()->json([
-            'message' => 'Student enrolled successfully',
-            'enrollments' => $enrollments,
-            'invoice' => $invoice ? $invoice->fresh(['items.subject', 'items.feeDefinition']) : null,
-            'count' => count($enrollments)
-        ], 201);
     }
 
     /**

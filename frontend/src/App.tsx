@@ -69,7 +69,9 @@ import TimetableGroupView from "./pages/TimetableGroupView";
 import Attendance from "./pages/Attendance";
 import Grades from "./pages/Grades";
 import { JWTAuthProvider, useAuth } from "./contexts/JWTAuthContext";
+import ErrorBoundary from "./components/ErrorBoundary";
 import logo1 from "./assets/logo1.png";
+import NotificationBell from "./components/NotificationBell";
 import { useSystemSettings } from "./hooks/useSystemSettings";
 
 function AppContent() {
@@ -313,21 +315,9 @@ function AppContent() {
                   </div>
                   <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                     <div className="py-2">
-                      <Link to="/settings/profile" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-user-cog text-xs ml-2"></i>
-                        الملف الشخصي
-                      </Link>
                       <Link to="/settings/system" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
                         <i className="fas fa-server text-xs ml-2"></i>
                         إعدادات النظام
-                      </Link>
-                      <Link to="/settings/notifications" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-bell text-xs ml-2"></i>
-                        الإشعارات
-                      </Link>
-                      <Link to="/settings/backup" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
-                        <i className="fas fa-download text-xs ml-2"></i>
-                        النسخ الاحتياطي
                       </Link>
                       <div className="border-t border-gray-200 my-2"></div>
                       {hasPermission('users', 'view') && (
@@ -459,7 +449,9 @@ function AppContent() {
               
             </div>
 
-            {/* Right side - User Profile & Logout */}
+            {/* Right side - Notifications + User Profile */}
+            <div className="flex items-center gap-2">
+              <NotificationBell />
             <div className="relative group">
                 <div className="text-white hover:bg-slate-600 px-3 py-2 rounded text-sm font-medium transition-colors duration-200 flex items-center cursor-pointer">
                   <i className="fas fa-user text-xs ml-2"></i>
@@ -495,6 +487,7 @@ function AppContent() {
                   </div>
                 </div>
               </div>
+            </div>
           </div>
         </nav>
       </header>
@@ -1093,8 +1086,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <JWTAuthProvider>
-      <AppContent />
-    </JWTAuthProvider>
+    <ErrorBoundary>
+      <JWTAuthProvider>
+        <AppContent />
+      </JWTAuthProvider>
+    </ErrorBoundary>
   );
 }

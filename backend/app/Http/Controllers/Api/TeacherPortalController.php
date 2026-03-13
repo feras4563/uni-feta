@@ -14,6 +14,8 @@ use App\Models\ClassSession;
 use App\Models\AttendanceRecord;
 use App\Models\TimetableEntry;
 use App\Models\AppUser;
+use App\Models\Semester;
+use App\Services\NotificationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -174,12 +176,21 @@ class TeacherPortalController extends Controller
             ])
             ->get();
 
-        // Enrich with student count per subject
-        $subjects->each(function ($ts) use ($teacher) {
-            $ts->student_count = $this->getScopedEnrollmentQuery($teacher, $ts->subject_id)
+        // Batch student counts in a single query to avoid N+1
+        $subjectIds = $subjects->pluck('subject_id')->filter()->unique()->values()->all();
+        $studentCounts = [];
+        if (!empty($subjectIds)) {
+            $studentCounts = $this->getScopedEnrollmentQuery($teacher)
+                ->whereIn('subject_id', $subjectIds)
                 ->whereIn('status', ['enrolled', 'active'])
-                ->distinct('student_id')
-                ->count('student_id');
+                ->selectRaw('subject_id, COUNT(DISTINCT student_id) as student_count')
+                ->groupBy('subject_id')
+                ->pluck('student_count', 'subject_id')
+                ->all();
+        }
+
+        $subjects->each(function ($ts) use ($studentCounts) {
+            $ts->student_count = $studentCounts[$ts->subject_id] ?? 0;
         });
 
         return response()->json($subjects);
@@ -389,7 +400,16 @@ class TeacherPortalController extends Controller
             ->value('semester_id');
 
         if (!$semesterId) {
-            $semesterId = \App\Models\Semester::where('is_current', true)->value('id');
+            $semesterId = Semester::where('is_current', true)->value('id');
+        }
+
+        // Block if semester is finalized (teachers cannot override)
+        $semester = $semesterId ? Semester::find($semesterId) : null;
+        if ($semester && $semester->isFinalized()) {
+            return response()->json([
+                'error' => 'الفصل الدراسي مغلق. لا يمكن تعديل الدرجات بعد إغلاق الفصل. يرجى التواصل مع الإدارة.',
+                'semester_status' => 'finalized',
+            ], 403);
         }
 
         // Batch-load existing grades for this subject/teacher (1 query instead of N)
@@ -418,6 +438,8 @@ class TeacherPortalController extends Controller
             ], 403);
         }
 
+        $publishedNotificationGrades = [];
+
         foreach ($request->grades as $gradeData) {
             $lookupKey = $gradeData['student_id'] . '|' . $gradeData['grade_type'] . '|' . $gradeData['grade_name'];
             $existing = $existingGrades->get($lookupKey);
@@ -439,13 +461,23 @@ class TeacherPortalController extends Controller
             ];
 
             if ($existing) {
+                $wasPublished = (bool) $existing->is_published;
                 $existing->update($gradePayload);
+                $existing = $existing->fresh();
+                if (!$wasPublished && $existing->is_published) {
+                    $publishedNotificationGrades[] = $existing;
+                }
                 $updated[] = $existing;
             } else {
                 $grade = StudentGrade::create($gradePayload);
+                if ($grade->is_published) {
+                    $publishedNotificationGrades[] = $grade;
+                }
                 $created[] = $grade;
             }
         }
+
+        $this->notifyStudentsForPublishedGrades(collect($publishedNotificationGrades));
 
         return response()->json([
             'message' => 'Grades saved successfully',
@@ -473,6 +505,17 @@ class TeacherPortalController extends Controller
             return response()->json(['error' => 'Grade not found or not yours'], 404);
         }
 
+        // Block if semester is finalized (teachers cannot override)
+        if ($grade->semester_id) {
+            $semester = Semester::find($grade->semester_id);
+            if ($semester && $semester->isFinalized()) {
+                return response()->json([
+                    'error' => 'الفصل الدراسي مغلق. لا يمكن تعديل الدرجات بعد إغلاق الفصل. يرجى التواصل مع الإدارة.',
+                    'semester_status' => 'finalized',
+                ], 403);
+            }
+        }
+
         $validator = Validator::make($request->all(), [
             'grade_value' => 'sometimes|numeric|min:0',
             'max_grade' => 'sometimes|numeric|min:0.01',
@@ -486,13 +529,21 @@ class TeacherPortalController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        $wasPublished = (bool) $grade->is_published;
+
         $grade->update($request->only([
             'grade_value', 'max_grade', 'weight', 'description', 'feedback', 'is_published'
         ]));
 
+        $grade = $grade->fresh();
+
+        if (!$wasPublished && $grade->is_published) {
+            $this->notifyStudentsForPublishedGrades(collect([$grade]));
+        }
+
         return response()->json([
             'message' => 'Grade updated successfully',
-            'grade' => $grade->fresh('student:id,name,campus_id'),
+            'grade' => $grade->load('student:id,name,campus_id'),
         ]);
     }
 
@@ -519,6 +570,30 @@ class TeacherPortalController extends Controller
         $updated = StudentGrade::whereIn('id', $request->grade_ids)
             ->where('teacher_id', $teacher->id)
             ->update(['is_published' => $request->is_published]);
+
+        // Notify students when grades are published
+        if ($request->is_published && $updated > 0) {
+            $grades = StudentGrade::whereIn('id', $request->grade_ids)
+                ->with('student:id,name,auth_user_id', 'subject:id,name')
+                ->get();
+
+            $notifiedStudents = [];
+            foreach ($grades as $grade) {
+                if ($grade->student && $grade->student->auth_user_id && !in_array($grade->student_id, $notifiedStudents)) {
+                    [$title, $body] = $this->buildGradePublishedNotificationContent($grade);
+                    \App\Services\NotificationService::notify(
+                        (int) $grade->student->auth_user_id,
+                        'grade_published',
+                        $title,
+                        $body,
+                        'clipboard-check',
+                        '/student/grades',
+                        ['subject_id' => $grade->subject_id, 'grade_id' => $grade->id]
+                    );
+                    $notifiedStudents[] = $grade->student_id;
+                }
+            }
+        }
 
         return response()->json([
             'message' => $request->is_published ? 'تم نشر الدرجات بنجاح' : 'تم إلغاء نشر الدرجات',
@@ -1027,5 +1102,76 @@ class TeacherPortalController extends Controller
         return Subject::where('id', $subjectId)
             ->where('teacher_id', $teacher->id)
             ->exists();
+    }
+
+    private function notifyStudentsForPublishedGrades($grades): void
+    {
+        $grades = collect($grades)
+            ->filter(fn ($grade) => $grade && $grade->is_published)
+            ->values();
+
+        if ($grades->isEmpty()) {
+            return;
+        }
+
+        $grades = StudentGrade::whereIn('id', $grades->pluck('id'))
+            ->with('student:id,name,auth_user_id', 'subject:id,name')
+            ->get();
+
+        $notifiedStudents = [];
+
+        foreach ($grades as $grade) {
+            if (!$grade->student || !$grade->student->auth_user_id || in_array($grade->student_id, $notifiedStudents)) {
+                continue;
+            }
+
+            [$title, $body] = $this->buildGradePublishedNotificationContent($grade);
+
+            NotificationService::notify(
+                (int) $grade->student->auth_user_id,
+                'grade_published',
+                $title,
+                $body,
+                'clipboard-check',
+                '/student/grades',
+                ['subject_id' => $grade->subject_id, 'grade_id' => $grade->id]
+            );
+
+            $notifiedStudents[] = $grade->student_id;
+        }
+    }
+
+    private function buildGradePublishedNotificationContent(StudentGrade $grade): array
+    {
+        $gradeTypeLabels = [
+            'assignment' => 'واجب',
+            'quiz' => 'اختبار قصير',
+            'midterm' => 'امتحان نصف الفصل',
+            'final' => 'الامتحان النهائي',
+            'project' => 'مشروع',
+            'participation' => 'مشاركة',
+            'homework' => 'واجب بيتي',
+            'classwork' => 'نشاط صفي',
+        ];
+
+        $subjectName = $grade->subject?->name ?? 'المادة';
+        $gradeTypeLabel = $gradeTypeLabels[$grade->grade_type] ?? 'تقييم';
+        $gradeName = trim((string) ($grade->grade_name ?? ''));
+
+        $assessmentLabel = $gradeName !== '' && $gradeName !== $grade->grade_type
+            ? $gradeName
+            : $gradeTypeLabel;
+
+        $title = 'تم نشر درجة ' . $assessmentLabel;
+
+        $body = 'تم نشر درجتك الخاصة بـ ' . $assessmentLabel . ' في مادة ' . $subjectName;
+
+        if ($grade->grade_value !== null && $grade->max_grade !== null) {
+            $body .= ' (' . rtrim(rtrim((string) $grade->grade_value, '0'), '.') . '/' . rtrim(rtrim((string) $grade->max_grade, '0'), '.') . ')';
+        }
+
+        $body .= '.';
+
+        return [$title, $body];
     }
 }

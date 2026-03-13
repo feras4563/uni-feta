@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TreeView, TreeNode } from '@/components/ui/tree-view';
 import { Building2, Users, Calculator, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
-import { apiRequest } from '@/lib/jwt-auth';
+import { apiRequest } from '@/lib/api-client';
 import { useNavigate } from 'react-router-dom';
 
 interface Account {

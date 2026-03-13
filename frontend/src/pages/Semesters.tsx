@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { fetchSemesters, fetchStudyYears, createSemester, updateSemester, deleteSemester, setCurrentSemester } from "../lib/api";
+import { transitionSemesterStatus } from "../lib/jwt-api";
 import { usePermissions } from "../hooks/usePermissions";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import ErrorMessage from "../components/ui/ErrorMessage";
@@ -97,6 +98,25 @@ export default function Semesters() {
     } catch (error: any) {
       console.error("Error setting current semester:", error);
       alert("خطأ في تعيين الفصل الدراسي: " + error.message);
+    }
+  };
+
+  const SEMESTER_STATUS_CONFIG: Record<string, { label: string; bg: string; next: string | null; nextLabel: string | null }> = {
+    registration_open: { label: "التسجيل مفتوح", bg: "bg-blue-100 text-blue-800", next: "in_progress", nextLabel: "بدء الفصل" },
+    in_progress: { label: "قيد التنفيذ", bg: "bg-yellow-100 text-yellow-800", next: "grade_entry", nextLabel: "فتح إدخال الدرجات" },
+    grade_entry: { label: "إدخال الدرجات", bg: "bg-purple-100 text-purple-800", next: "finalized", nextLabel: "إغلاق الفصل" },
+    finalized: { label: "مُغلق", bg: "bg-gray-200 text-gray-700", next: null, nextLabel: null },
+  };
+
+  const handleTransitionStatus = async (semesterId: string, newStatus: string) => {
+    const statusConf = SEMESTER_STATUS_CONFIG[newStatus];
+    if (!window.confirm(`هل تريد تغيير حالة الفصل إلى "${statusConf?.label || newStatus}"؟${newStatus === 'finalized' ? '\n\nتحذير: إغلاق الفصل سيمنع المدرسين من تعديل الدرجات.' : ''}`)) return;
+    try {
+      await transitionSemesterStatus(semesterId, newStatus);
+      queryClient.invalidateQueries({ queryKey: ["semesters"] });
+      alert("تم تحديث حالة الفصل بنجاح!");
+    } catch (error: any) {
+      alert("خطأ: " + (error?.message || "فشل تغيير الحالة"));
     }
   };
 
@@ -272,12 +292,15 @@ export default function Semesters() {
                           </span>
                         )}
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          semester.is_active 
-                            ? 'bg-blue-100 text-blue-800' 
-                            : 'bg-red-100 text-red-800'
+                          SEMESTER_STATUS_CONFIG[semester.status || 'registration_open']?.bg || 'bg-gray-100 text-gray-600'
                         }`}>
-                          {semester.is_active ? 'نشط' : 'غير نشط'}
+                          {SEMESTER_STATUS_CONFIG[semester.status || 'registration_open']?.label || 'غير محدد'}
                         </span>
+                        {!semester.is_active && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            غير نشط
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -291,6 +314,15 @@ export default function Semesters() {
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
+                          </button>
+                        )}
+                        {SEMESTER_STATUS_CONFIG[semester.status || 'registration_open']?.next && hasClientPermission('semesters', 'update') && (
+                          <button
+                            onClick={() => handleTransitionStatus(semester.id, SEMESTER_STATUS_CONFIG[semester.status || 'registration_open'].next!)}
+                            className="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors duration-200"
+                            title={SEMESTER_STATUS_CONFIG[semester.status || 'registration_open'].nextLabel || ''}
+                          >
+                            {SEMESTER_STATUS_CONFIG[semester.status || 'registration_open'].nextLabel}
                           </button>
                         )}
                         {hasClientPermission("semesters", "update") && (

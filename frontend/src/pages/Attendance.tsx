@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchSemesters, fetchDepartments, fetchStudentGroups, fetchStudents } from "@/lib/api";
-import { Calendar, Users, Check, X, Clock, UserCheck } from "lucide-react";
+import { fetchSemesters, fetchDepartments, fetchStudentGroups, fetchStudents, exportAttendance } from "@/lib/api";
+import { Calendar, Users, Check, X, Clock, UserCheck, Download } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
 export default function Attendance() {
@@ -40,9 +40,18 @@ export default function Attendance() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">الحضور والغياب</h1>
-        <p className="text-gray-600">تسجيل ومتابعة حضور الطلاب</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">الحضور والغياب</h1>
+          <p className="text-gray-600">تسجيل ومتابعة حضور الطلاب</p>
+        </div>
+        <button
+          onClick={() => exportAttendance()}
+          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+        >
+          <Download className="h-4 w-4" />
+          تصدير CSV
+        </button>
       </div>
 
       {/* Filters */}

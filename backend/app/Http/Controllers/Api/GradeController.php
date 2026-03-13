@@ -3,12 +3,37 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreGradeRequest;
+use App\Http\Requests\UpdateGradeRequest;
 use App\Models\StudentGrade;
+use App\Models\Semester;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class GradeController extends Controller
 {
+    /**
+     * Check if the semester is finalized. Returns error response if finalized and user is not a manager.
+     */
+    private function checkSemesterFinalized(?string $semesterId): ?\Illuminate\Http\JsonResponse
+    {
+        if (!$semesterId) return null;
+
+        $semester = Semester::find($semesterId);
+        if (!$semester || !$semester->isFinalized()) return null;
+
+        // Allow managers to override
+        $user = auth()->user();
+        $appUser = $user ? \App\Models\AppUser::where('user_id', $user->id)->first() : null;
+        $role = $appUser->role ?? ($appUser->roleModel->name ?? null);
+
+        if ($role === 'manager') return null;
+
+        return response()->json([
+            'message' => 'الفصل الدراسي مغلق. لا يمكن تعديل الدرجات بعد إغلاق الفصل. يرجى التواصل مع الإدارة.',
+            'semester_status' => 'finalized',
+        ], 403);
+    }
+
     public function index(Request $request)
     {
         $query = StudentGrade::with('student', 'subject', 'teacher', 'semester');
@@ -42,28 +67,10 @@ class GradeController extends Controller
         return response()->json($query->get());
     }
 
-    public function store(Request $request)
+    public function store(StoreGradeRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'student_id' => 'required|exists:students,id',
-            'subject_id' => 'required|exists:subjects,id',
-            'teacher_id' => 'required|exists:teachers,id',
-            'semester_id' => 'nullable|exists:semesters,id',
-            'grade_type' => 'required|in:midterm,final,assignment,quiz,project,participation,homework,classwork',
-            'grade_name' => 'required|string',
-            'grade_value' => 'required|numeric|min:0',
-            'max_grade' => 'required|numeric|min:0.01',
-            'weight' => 'nullable|numeric|min:0|max:1',
-            'grade_date' => 'nullable|date',
-            'due_date' => 'nullable|date',
-            'description' => 'nullable|string',
-            'feedback' => 'nullable|string',
-            'is_published' => 'nullable|boolean',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
+        $semesterId = $request->semester_id ?: Semester::where('is_current', true)->value('id');
+        if ($blocked = $this->checkSemesterFinalized($semesterId)) return $blocked;
 
         if ($request->grade_value > $request->max_grade) {
             return response()->json(['errors' => ['grade_value' => ['الدرجة لا يمكن أن تتجاوز الدرجة القصوى']]], 422);
@@ -85,26 +92,11 @@ class GradeController extends Controller
         return response()->json($grade);
     }
 
-    public function update(Request $request, $id)
+    public function update(UpdateGradeRequest $request, $id)
     {
         $grade = StudentGrade::findOrFail($id);
 
-        $validator = Validator::make($request->all(), [
-            'grade_type' => 'sometimes|required|in:midterm,final,assignment,quiz,project,participation,homework,classwork',
-            'grade_name' => 'sometimes|required|string',
-            'grade_value' => 'sometimes|required|numeric|min:0',
-            'max_grade' => 'sometimes|required|numeric|min:0.01',
-            'weight' => 'nullable|numeric|min:0|max:1',
-            'grade_date' => 'nullable|date',
-            'due_date' => 'nullable|date',
-            'description' => 'nullable|string',
-            'feedback' => 'nullable|string',
-            'is_published' => 'nullable|boolean',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
+        if ($blocked = $this->checkSemesterFinalized($grade->semester_id)) return $blocked;
 
         $finalValue = $request->grade_value ?? $grade->grade_value;
         $finalMax = $request->max_grade ?? $grade->max_grade;
@@ -173,6 +165,108 @@ class GradeController extends Controller
             'gpa' => $gpa,
             'status' => $percentage < 50 ? 'failed' : 'passed',
             'needs_retake' => $percentage < 50,
+        ]);
+    }
+
+    /**
+     * Manager-facing summary: per-student per-subject aggregated grades.
+     * Filters: semester_id (required), department_id (optional), student_id (optional).
+     */
+    public function summary(Request $request)
+    {
+        $request->validate([
+            'semester_id' => 'required|string|exists:semesters,id',
+            'department_id' => 'nullable|string|exists:departments,id',
+            'student_id' => 'nullable|string|exists:students,id',
+        ]);
+
+        $semesterId = $request->input('semester_id');
+        $departmentId = $request->input('department_id');
+        $studentId = $request->input('student_id');
+
+        // Get enrollments for this semester (optionally filtered)
+        $enrollmentQuery = \App\Models\StudentSubjectEnrollment::where('semester_id', $semesterId)
+            ->with([
+                'student:id,name,campus_id,department_id,year,status',
+                'subject:id,name,name_en,code,credits,semester_number',
+            ]);
+
+        if ($departmentId) {
+            $enrollmentQuery->where('department_id', $departmentId);
+        }
+        if ($studentId) {
+            $enrollmentQuery->where('student_id', $studentId);
+        }
+
+        $enrollments = $enrollmentQuery->get();
+
+        // Get all grades for these student+subject+semester combos
+        $studentIds = $enrollments->pluck('student_id')->unique()->values();
+        $subjectIds = $enrollments->pluck('subject_id')->unique()->values();
+
+        $grades = StudentGrade::where('semester_id', $semesterId)
+            ->whereIn('student_id', $studentIds)
+            ->whereIn('subject_id', $subjectIds)
+            ->get()
+            ->groupBy(fn($g) => $g->student_id . '|' . $g->subject_id);
+
+        // Build summary rows
+        $rows = [];
+        foreach ($enrollments as $enrollment) {
+            $key = $enrollment->student_id . '|' . $enrollment->subject_id;
+            $subjectGrades = $grades->get($key, collect());
+
+            $totalValue = $subjectGrades->sum('grade_value');
+            $totalMax = $subjectGrades->sum('max_grade');
+            $percentage = $totalMax > 0 ? round(($totalValue / $totalMax) * 100, 1) : null;
+            $letterGrade = $percentage !== null ? $this->getLetterGrade($percentage) : null;
+            $gpa = $percentage !== null ? $this->getGPA($percentage) : null;
+            $isFailing = $percentage !== null && $percentage < 50;
+            $publishedCount = $subjectGrades->where('is_published', true)->count();
+
+            $rows[] = [
+                'enrollment_id' => $enrollment->id,
+                'student_id' => $enrollment->student_id,
+                'student_name' => $enrollment->student?->name,
+                'student_campus_id' => $enrollment->student?->campus_id,
+                'student_year' => $enrollment->student?->year,
+                'student_status' => $enrollment->student?->status,
+                'subject_id' => $enrollment->subject_id,
+                'subject_name' => $enrollment->subject?->name,
+                'subject_code' => $enrollment->subject?->code,
+                'subject_credits' => $enrollment->subject?->credits,
+                'semester_number' => $enrollment->semester_number,
+                'enrollment_status' => $enrollment->status,
+                'is_retake' => $enrollment->is_retake ?? false,
+                'grade_count' => $subjectGrades->count(),
+                'published_count' => $publishedCount,
+                'total_value' => round($totalValue, 2),
+                'total_max' => round($totalMax, 2),
+                'percentage' => $percentage,
+                'letter_grade' => $letterGrade,
+                'gpa' => $gpa,
+                'status' => $percentage === null ? 'no_grades' : ($isFailing ? 'failed' : 'passed'),
+                'needs_retake' => $isFailing,
+                'enrollment_passed' => $enrollment->passed,
+            ];
+        }
+
+        // Compute department-level stats
+        $withGrades = collect($rows)->where('percentage', '!=', null);
+        $stats = [
+            'total_enrollments' => count($rows),
+            'graded' => $withGrades->count(),
+            'ungraded' => count($rows) - $withGrades->count(),
+            'passed' => $withGrades->where('status', 'passed')->count(),
+            'failed' => $withGrades->where('status', 'failed')->count(),
+            'retake_count' => collect($rows)->where('is_retake', true)->count(),
+            'avg_percentage' => $withGrades->count() > 0 ? round($withGrades->avg('percentage'), 1) : null,
+            'avg_gpa' => $withGrades->count() > 0 ? round($withGrades->avg('gpa'), 2) : null,
+        ];
+
+        return response()->json([
+            'rows' => $rows,
+            'stats' => $stats,
         ]);
     }
 

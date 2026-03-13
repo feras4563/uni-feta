@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Save, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { apiRequest } from '@/lib/jwt-auth';
+import { apiRequest } from '@/lib/api-client';
 
 interface JournalEntryLine {
   id: string;

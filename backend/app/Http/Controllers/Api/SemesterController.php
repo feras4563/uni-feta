@@ -117,6 +117,60 @@ class SemesterController extends Controller
     }
 
     /**
+     * Transition semester status: registration_open → in_progress → grade_entry → finalized
+     */
+    public function transitionStatus(Request $request, $id)
+    {
+        $semester = Semester::findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|in:registration_open,in_progress,grade_entry,finalized',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $newStatus = $request->input('status');
+
+        if (!$semester->canTransitionTo($newStatus)) {
+            $currentLabel = self::statusLabel($semester->status ?? 'registration_open');
+            $newLabel = self::statusLabel($newStatus);
+            return response()->json([
+                'message' => "لا يمكن الانتقال من \"{$currentLabel}\" إلى \"{$newLabel}\"",
+                'current_status' => $semester->status,
+                'allowed_transitions' => Semester::STATUS_TRANSITIONS[$semester->status ?? 'registration_open'] ?? [],
+            ], 422);
+        }
+
+        $updateData = ['status' => $newStatus];
+
+        if ($newStatus === 'finalized') {
+            $updateData['finalized_at'] = now();
+            $updateData['finalized_by'] = auth()->id();
+        }
+
+        $semester->update($updateData);
+        $semester->load('studyYear');
+
+        return response()->json([
+            'message' => 'تم تحديث حالة الفصل الدراسي بنجاح',
+            'semester' => $semester,
+        ]);
+    }
+
+    private static function statusLabel(string $status): string
+    {
+        return match ($status) {
+            'registration_open' => 'التسجيل مفتوح',
+            'in_progress' => 'قيد التنفيذ',
+            'grade_entry' => 'إدخال الدرجات',
+            'finalized' => 'مُغلق',
+            default => $status,
+        };
+    }
+
+    /**
      * Get all students registered in a specific semester
      */
     public function getRegisteredStudents(Request $request, $id)

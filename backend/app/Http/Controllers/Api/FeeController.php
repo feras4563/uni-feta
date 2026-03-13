@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\RecordPaymentRequest;
+use App\Http\Requests\ApplyDiscountRequest;
 use App\Models\StudentInvoice;
 use App\Traits\LogsUserActions;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class FeeController extends Controller
 {
@@ -85,22 +86,8 @@ class FeeController extends Controller
     /**
      * Record payment for an invoice
      */
-    public function recordPayment(Request $request, $id)
+    public function recordPayment(RecordPaymentRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'amount' => 'required|numeric|min:0.01',
-            'payment_date' => 'nullable|date',
-            'notes' => 'nullable|string',
-            'allow_attendance' => 'nullable|boolean', // Admin can override attendance permission
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         $invoice = StudentInvoice::findOrFail($id);
         $paymentAmount = $request->amount;
         
@@ -113,38 +100,45 @@ class FeeController extends Controller
             ], 422);
         }
 
-        // Update invoice
-        $invoice->paid_amount = $newPaidAmount;
-        $invoice->balance = $invoice->total_amount - $newPaidAmount;
-        
-        // Update status
-        if ($invoice->balance == 0) {
-            $invoice->status = 'paid';
-        } elseif ($invoice->paid_amount > 0) {
-            $invoice->status = 'partial';
+        try {
+            return \DB::transaction(function () use ($request, $invoice, $paymentAmount, $newPaidAmount) {
+                // Update invoice
+                $invoice->paid_amount = $newPaidAmount;
+                $invoice->balance = $invoice->total_amount - $newPaidAmount;
+                
+                // Update status
+                if ($invoice->balance == 0) {
+                    $invoice->status = 'paid';
+                } elseif ($invoice->paid_amount > 0) {
+                    $invoice->status = 'partial';
+                }
+                
+                $invoice->save();
+
+                // Handle admin override for attendance permission
+                if ($request->has('allow_attendance')) {
+                    $this->updateAttendancePermission($invoice, $request->boolean('allow_attendance'));
+                }
+
+                // Create journal entry for payment
+                $this->createPaymentJournalEntry($invoice, $paymentAmount, $request);
+
+                $this->logAction('update', 'fees', (string) $invoice->id, [
+                    'action_type' => 'payment',
+                    'student_name' => $invoice->student->name ?? null,
+                    'amount' => $paymentAmount,
+                    'invoice_number' => $invoice->invoice_number,
+                ]);
+
+                return response()->json([
+                    'message' => 'Payment recorded successfully',
+                    'invoice' => $invoice->fresh(['student', 'semester', 'studyYear', 'department'])
+                ]);
+            });
+        } catch (\Exception $e) {
+            \Log::error('Failed to record payment', ['invoice_id' => $id, 'error' => $e->getMessage()]);
+            return response()->json(['message' => 'فشل في تسجيل الدفعة', 'error' => $e->getMessage()], 500);
         }
-        
-        $invoice->save();
-
-        // Handle admin override for attendance permission
-        if ($request->has('allow_attendance')) {
-            $this->updateAttendancePermission($invoice, $request->boolean('allow_attendance'));
-        }
-
-        // Create journal entry for payment
-        $this->createPaymentJournalEntry($invoice, $paymentAmount, $request);
-
-        $this->logAction('update', 'fees', (string) $invoice->id, [
-            'action_type' => 'payment',
-            'student_name' => $invoice->student->name ?? null,
-            'amount' => $paymentAmount,
-            'invoice_number' => $invoice->invoice_number,
-        ]);
-
-        return response()->json([
-            'message' => 'Payment recorded successfully',
-            'invoice' => $invoice->fresh(['student', 'semester', 'studyYear', 'department'])
-        ]);
     }
 
     /**
@@ -166,16 +160,9 @@ class FeeController extends Controller
      */
     public function toggleAttendance(Request $request, $id)
     {
-        $validator = Validator::make($request->all(), [
+        $request->validate([
             'allow_attendance' => 'required|boolean',
         ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
 
         $invoice = StudentInvoice::findOrFail($id);
         $this->updateAttendancePermission($invoice, $request->boolean('allow_attendance'));
@@ -242,20 +229,8 @@ class FeeController extends Controller
     /**
      * Apply discount/waiver to an invoice
      */
-    public function applyDiscount(Request $request, $id)
+    public function applyDiscount(ApplyDiscountRequest $request, $id)
     {
-        $validator = Validator::make($request->all(), [
-            'discount_type' => 'required|in:none,percentage,fixed,full_waiver',
-            'discount_value' => 'nullable|numeric|min:0',
-            'discount_reason' => 'nullable|string|max:500',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
 
         $invoice = StudentInvoice::findOrFail($id);
 
@@ -308,17 +283,10 @@ class FeeController extends Controller
      */
     public function applyPendingFees(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $request->validate([
             'student_id' => 'required|exists:students,id',
             'semester_id' => 'required|exists:semesters,id',
         ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
 
         $result = \App\Services\FeeService::checkAndApplyPendingFees(
             $request->student_id,

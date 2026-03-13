@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Edit, CheckCircle, XCircle, Trash2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { apiRequest } from '@/lib/jwt-auth';
+import { apiRequest } from '@/lib/api-client';
 import { formatDate, formatDateTime, formatDecimal, formatNumber, toLatinDigits } from '@/lib/utils';
 
 interface JournalEntryLine {

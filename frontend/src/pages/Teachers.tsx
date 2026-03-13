@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { fetchTeachers, fetchDepartments, fetchSubjects } from "../lib/api";
+import { fetchTeachers, fetchDepartments, fetchSubjects, exportTeachers } from "../lib/api";
 import { useState, useMemo } from "react";
 
 export default function TeachersPage() {
@@ -147,12 +147,25 @@ export default function TeachersPage() {
         <div className="px-8 py-6">
           <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold text-gray-900">إدارة المدرسين</h1>
-            <button
-              onClick={() => navigate("/teachers/create")}
-              className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
-            >
-              إضافة مدرس جديد
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const params: Record<string, string> = {};
+                  if (searchTerm) params.search = searchTerm;
+                  if (departmentFilter) params.department_id = departmentFilter;
+                  exportTeachers(params);
+                }}
+                className="px-4 py-2 text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 text-sm"
+              >
+                تصدير CSV
+              </button>
+              <button
+                onClick={() => navigate("/teachers/create")}
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+              >
+                إضافة مدرس جديد
+              </button>
+            </div>
           </div>
         </div>
       </div>

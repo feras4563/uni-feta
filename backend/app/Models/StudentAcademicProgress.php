@@ -19,6 +19,9 @@ class StudentAcademicProgress extends Model
         'total_credits_earned',
         'gpa',
         'status',
+        'academic_standing',
+        'progression_notes',
+        'last_evaluated_at',
         'graduation_date',
     ];
 
@@ -27,6 +30,7 @@ class StudentAcademicProgress extends Model
         'total_credits_earned' => 'integer',
         'gpa' => 'decimal:2',
         'graduation_date' => 'date',
+        'last_evaluated_at' => 'datetime',
     ];
 
     protected static function boot()

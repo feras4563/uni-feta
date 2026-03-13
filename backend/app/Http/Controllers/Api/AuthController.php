@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\RegisterRequest;
+use App\Http\Requests\LoginRequest;
+use App\Http\Requests\ChangePasswordRequest;
 use App\Models\User;
 use App\Models\AppUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
@@ -25,18 +27,8 @@ class AuthController extends Controller
     /**
      * Register a new user
      */
-    public function register(Request $request)
+    public function register(RegisterRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:6|confirmed',
-            'role' => 'nullable|in:manager,staff,teacher',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
 
         $user = User::create([
             'name' => $request->name,
@@ -68,27 +60,8 @@ class AuthController extends Controller
     /**
      * Get a JWT via given credentials.
      */
-    public function login(Request $request)
+    public function login(LoginRequest $request)
     {
-        \Log::info('Login attempt', [
-            'email' => $request->email, 
-            'has_password' => !empty($request->password),
-            'password_length' => strlen($request->password ?? ''),
-            'all_data' => $request->all()
-        ]);
-        
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|email',
-            'password' => 'required|string|min:6',
-        ]);
-
-        if ($validator->fails()) {
-            \Log::error('Login validation failed', ['errors' => $validator->errors()]);
-            return response()->json([
-                'message' => 'The provided credentials are incorrect.',
-                'errors' => $validator->errors()
-            ], 422);
-        }
 
         $credentials = $request->only('email', 'password');
         \Log::info('Attempting authentication', [
@@ -128,35 +101,9 @@ class AuthController extends Controller
         $user = auth('api')->user();
         $appUser = AppUser::where('auth_user_id', $user->id)->first();
 
-        // Enrich with teacher data if applicable
-        $appUserData = $appUser ? $appUser->toArray() : null;
-        if ($appUser && $appUser->role === 'teacher' && $appUser->teacher_id) {
-            $teacher = \App\Models\Teacher::with('department:id,name,name_en')->find($appUser->teacher_id);
-            if ($teacher) {
-                $appUserData['teacher_id'] = $teacher->id;
-                $appUserData['teacher_name'] = $teacher->name;
-                $appUserData['teacher_campus_id'] = $teacher->campus_id;
-                $appUserData['department_id'] = $teacher->department_id;
-                $appUserData['department_name'] = $teacher->department?->name;
-            }
-        }
-
-        // Enrich with student data if applicable
-        if ($appUser && $appUser->role === 'student' && $appUser->student_id) {
-            $student = \App\Models\Student::with('department:id,name,name_en')->find($appUser->student_id);
-            if ($student) {
-                $appUserData['student_id'] = $student->id;
-                $appUserData['student_name'] = $student->name;
-                $appUserData['student_campus_id'] = $student->campus_id;
-                $appUserData['department_id'] = $student->department_id;
-                $appUserData['department_name'] = $student->department?->name;
-                $appUserData['student_year'] = $student->year;
-            }
-        }
-
         return response()->json([
             'user' => $user,
-            'app_user' => $appUserData,
+            'app_user' => $this->enrichAppUserData($appUser),
             'permissions' => $appUser ? $this->getUserPermissions($appUser) : []
         ]);
     }
@@ -188,40 +135,51 @@ class AuthController extends Controller
      */
     protected function respondWithToken($token, $user = null, $appUser = null)
     {
-        // Enrich app_user with teacher data if role is teacher
-        $appUserData = $appUser ? $appUser->toArray() : null;
-        if ($appUser && $appUser->role === 'teacher' && $appUser->teacher_id) {
-            $teacher = \App\Models\Teacher::with('department:id,name,name_en')->find($appUser->teacher_id);
-            if ($teacher) {
-                $appUserData['teacher_id'] = $teacher->id;
-                $appUserData['teacher_name'] = $teacher->name;
-                $appUserData['teacher_campus_id'] = $teacher->campus_id;
-                $appUserData['department_id'] = $teacher->department_id;
-                $appUserData['department_name'] = $teacher->department?->name;
-            }
-        }
-
-        // Enrich app_user with student data if role is student
-        if ($appUser && $appUser->role === 'student' && $appUser->student_id) {
-            $student = \App\Models\Student::with('department:id,name,name_en')->find($appUser->student_id);
-            if ($student) {
-                $appUserData['student_id'] = $student->id;
-                $appUserData['student_name'] = $student->name;
-                $appUserData['student_campus_id'] = $student->campus_id;
-                $appUserData['department_id'] = $student->department_id;
-                $appUserData['department_name'] = $student->department?->name;
-                $appUserData['student_year'] = $student->year;
-            }
-        }
-
         return response()->json([
             'access_token' => $token,
             'token_type' => 'bearer',
             'expires_in' => auth('api')->factory()->getTTL() * 60,
             'user' => $user ?? auth('api')->user(),
-            'app_user' => $appUserData,
+            'app_user' => $this->enrichAppUserData($appUser),
             'permissions' => $appUser ? $this->getUserPermissions($appUser) : []
         ]);
+    }
+
+    /**
+     * Enrich app_user data with teacher or student profile information.
+     */
+    private function enrichAppUserData(?AppUser $appUser): ?array
+    {
+        if (!$appUser) {
+            return null;
+        }
+
+        $data = $appUser->toArray();
+
+        if ($appUser->role === 'teacher' && $appUser->teacher_id) {
+            $teacher = \App\Models\Teacher::with('department:id,name,name_en')->find($appUser->teacher_id);
+            if ($teacher) {
+                $data['teacher_id'] = $teacher->id;
+                $data['teacher_name'] = $teacher->name;
+                $data['teacher_campus_id'] = $teacher->campus_id;
+                $data['department_id'] = $teacher->department_id;
+                $data['department_name'] = $teacher->department?->name;
+            }
+        }
+
+        if ($appUser->role === 'student' && $appUser->student_id) {
+            $student = \App\Models\Student::with('department:id,name,name_en')->find($appUser->student_id);
+            if ($student) {
+                $data['student_id'] = $student->id;
+                $data['student_name'] = $student->name;
+                $data['student_campus_id'] = $student->campus_id;
+                $data['department_id'] = $student->department_id;
+                $data['department_name'] = $student->department?->name;
+                $data['student_year'] = $student->year;
+            }
+        }
+
+        return $data;
     }
 
     /**
@@ -242,16 +200,8 @@ class AuthController extends Controller
     /**
      * Change password
      */
-    public function changePassword(Request $request)
+    public function changePassword(ChangePasswordRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'current_password' => 'required|string',
-            'new_password' => 'required|string|min:6|confirmed',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
 
         $user = auth('api')->user();
 
@@ -273,14 +223,10 @@ class AuthController extends Controller
     {
         $user = auth('api')->user();
 
-        $validator = Validator::make($request->all(), [
+        $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'email' => 'sometimes|required|email|unique:users,email,' . $user->id,
         ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
 
         $user->update($request->only('name', 'email'));
 

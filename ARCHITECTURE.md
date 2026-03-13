@@ -124,7 +124,7 @@ The `manager` role has full access to everything. Permission checks happen both 
 | `department_semester_subjects` | DepartmentSemesterSubject | Curriculum: which subjects in which semester per department |
 | `subject_titles` | SubjectTitle | Reusable subject name templates |
 | `study_years` | StudyYear | Academic years (e.g., 2024-2025) |
-| `semesters` | Semester | Semester periods within study years |
+| `semesters` | Semester | Semester periods within study years (`status`: registration_open/in_progress/grade_entry/finalized, `finalized_at`, `finalized_by`) |
 
 ### People
 | Table | Model | Description |
@@ -138,9 +138,9 @@ The `manager` role has full access to everything. Permission checks happen both 
 | Table | Model | Description |
 |-------|-------|-------------|
 | `student_semester_registrations` | StudentSemesterRegistration | Student registration per semester |
-| `student_subject_enrollments` | StudentSubjectEnrollment | Student enrolled in specific subjects |
+| `student_subject_enrollments` | StudentSubjectEnrollment | Student enrolled in specific subjects (`is_retake`, `original_enrollment_id` for retake tracking) |
 | `student_groups` | StudentGroup | Groups of students for scheduling |
-| `student_academic_progress` | StudentAcademicProgress | Academic progress tracking |
+| `student_academic_progress` | StudentAcademicProgress | Academic progress tracking (`academic_standing`, `progression_notes`, `last_evaluated_at`) |
 
 ### Scheduling & Timetable
 | Table | Model | Description |
@@ -170,6 +170,16 @@ The `manager` role has full access to everything. Permission checks happen both 
 | `student_invoice_items` | StudentInvoiceItem | Line items per invoice |
 | `payment_modes` | PaymentMode | Payment methods (cash, bank, etc.) |
 | `payment_entries` | PaymentEntry | Recorded payments against invoices |
+
+### Transfers
+| Table | Model | Description |
+|-------|-------|-------------|
+| `department_transfers` | DepartmentTransfer | Student department transfer requests with audit trail (`status`, `credits_transferred`, `transferred_subjects` JSON) |
+
+### Notifications
+| Table | Model | Description |
+|-------|-------|-------------|
+| `notifications` | Notification | In-app notifications per user (`type`, `title`, `body`, `icon`, `link`, `data` JSON, `is_read`) |
 
 ### System
 | Table | Model | Description |
@@ -212,7 +222,7 @@ Each resource follows standard REST patterns: `GET /`, `POST /`, `GET /{id}`, `P
 | `/subjects` | SubjectController | `/department/{id}`, `/semester/{n}`, `/{id}/check-prerequisites` |
 | `/teachers` | TeacherController | `/with-departments`, `/{id}/subjects`, `/{id}/sessions`, `/{id}/statistics`, `/{id}/upload-photo` |
 | `/study-years` | StudyYearController | `/current`, `/set-current` |
-| `/semesters` | SemesterController | `/current`, `/set-current`, `/{id}/registered-students` |
+| `/semesters` | SemesterController | `/current`, `/set-current`, `/{id}/transition-status`, `/{id}/registered-students` |
 | `/rooms` | RoomController | — |
 | `/student-groups` | StudentGroupController | `/create-from-registrations`, `/auto-create`, `/auto-assign`, `/{id}/students`, `/{id}/available-students` |
 | `/student-enrollments` | StudentEnrollmentController | `/student/{id}` |
@@ -221,7 +231,7 @@ Each resource follows standard REST patterns: `GET /`, `POST /`, `GET /{id}`, `P
 | `/attendance` | AttendanceController | `/sessions`, `/session/{id}`, `/session/{id}/statistics`, `/student/{id}` |
 | `/class-sessions` | AttendanceController | `/{id}/generate-qr`, `/{id}/attendance` |
 | `/holidays` | HolidayController | `/sync-schedule` (manager-only) |
-| `/grades` | GradeController | `/student/{id}`, `/subject/{id}`, `/student/{sid}/subject/{subid}` |
+| `/grades` | GradeController | `/summary`, `/student/{id}`, `/subject/{id}`, `/student/{sid}/subject/{subid}` |
 | `/timetable` | TimetableController | `/entries`, `/group/{id}`, `/teacher/{id}`, `/auto-generate`, `/semester/{id}` |
 | `/class-schedules` | ClassScheduleController | `/teacher/{id}` |
 | `/accounts` | AccountController | `/tree`, `/parent-accounts`, `/general-ledger/summary`, `/{id}/general-ledger` |
@@ -231,6 +241,9 @@ Each resource follows standard REST patterns: `GET /`, `POST /`, `GET /{id}`, `P
 | `/payment-modes` | PaymentModeController | — |
 | `/payment-entries` | PaymentEntryController | — |
 | `/fees` | FeeController | `/statistics`, `/{id}/payment`, `/{id}/toggle-attendance` |
+| `/academic-progression` | AcademicProgressionController | `/student/{id}/evaluate`, `/student/{id}/promote`, `/student/{id}/retakeable-subjects`, `/student/{id}/enroll-retake`, `/bulk-evaluate`, `/bulk-promote` |
+| `/department-transfers` | DepartmentTransferController | `/initiate`, `/{id}/execute`, `/{id}/reject`, `/student/{studentId}` |
+| `/notifications` | NotificationController | `/unread-count`, `/mark-read`, `/mark-all-read` |
 | `/subject-titles` | SubjectTitleController | — |
 | `/system-settings` | SystemSettingsController | `/upload-logo` |
 
@@ -270,7 +283,7 @@ Each resource follows standard REST patterns: `GET /`, `POST /`, `GET /{id}`, `P
 | `/schedule` | SchedulingPage | Scheduling overview (manager only) |
 | `/holidays` | HolidayManagement | Holiday calendar + schedule sync (manager only) |
 | `/attendance` | Attendance | Attendance management |
-| `/grades` | Grades | Grade management |
+| `/grades` | Grades | Grade overview (Tab 1: real per-student per-subject grade summary with stats) + Academic Progression (Tab 2: evaluate, promote, retake enrollment) |
 | `/fees` | FeesPage | Fee/invoice management |
 
 ### Finance Pages
@@ -420,6 +433,88 @@ Models use Eloquent relationships extensively:
 - `ClassSession` → belongsTo Teacher, Subject, Department, TimetableEntry; hasMany AttendanceRecord
 - `AttendanceRecord` → belongsTo ClassSession (via `session()` and `classSession()` aliases), Student, User (markedBy)
 - `TimetableEntry` → belongsTo Semester, Department, Subject, Teacher, Room, TimeSlot, StudentGroup
+
+### Department Transfer Flow
+
+**Service:** `app/Services/DepartmentTransferService.php`
+**Controller:** `app/Http/Controllers/Api/DepartmentTransferController.php`
+
+1. Manager initiates transfer: `POST /department-transfers/initiate` with `student_id`, `to_department_id`, `reason`
+2. Transfer executes in DB transaction: identifies passed credits, drops active enrollments in old dept, clears group assignment, updates student `department_id` + resets `specialization_track`, updates academic progress, records transferred subjects/credits
+3. Student receives notification on completion
+4. Transfer can be rejected with admin notes
+
+### Notification System
+
+**Service:** `app/Services/NotificationService.php`
+**Controller:** `app/Http/Controllers/Api/NotificationController.php`
+**Frontend:** `NotificationBell` component in App.tsx header (all roles)
+
+- `notify()`, `notifyMany()`, `notifyRole()`, `notifyStudent()` — send notifications
+- `unreadCount()`, `markAsRead()`, `markAllAsRead()` — manage read state
+- Auto-polls every 30s from frontend
+- **Triggers:** grade published (→ student), department transfer completed (→ student)
+- Extensible: any backend service can call `NotificationService::notify()` to send notifications
+
+### Semester Status Lifecycle
+
+Semesters follow a strict status lifecycle: `registration_open` → `in_progress` → `grade_entry` → `finalized`.
+
+- **`Semester` model** defines `STATUS_TRANSITIONS` constant, `canTransitionTo()` validator, `isFinalized()` helper.
+- **`POST /semesters/{id}/transition-status`** — validates transition rules, records `finalized_at`/`finalized_by` on finalization.
+- **Grade finalization guard:** When a semester is `finalized`:
+  - Teachers are blocked (403) from creating/updating grades via `TeacherPortalController` (storeGrades, updateGrade)
+  - Admin `GradeController` (store, update) also blocked unless user role is `manager`
+  - Managers can still override grade edits for finalized semesters
+- **Frontend:** Semesters page shows status badges + transition buttons with confirmation dialogs
+
+### Academic Progression & Retake Enrollment
+
+**Service:** `app/Services/AcademicProgressionService.php`
+**Controller:** `app/Http/Controllers/Api/AcademicProgressionController.php`
+**Frontend:** Integrated as Tab 2 ("الترقية الأكاديمية") in `frontend/src/pages/Grades.tsx`
+**Permission:** `students:edit` (manager only)
+
+#### Evaluation Flow
+1. Manager searches for a student on the "الترقية الأكاديمية" page (`/academic-progression`)
+2. `evaluateStudent()` computes:
+   - **Credits earned** — sum of `subject.credits` from unique passed `StudentSubjectEnrollment` records (no double-counting retakes)
+   - **Cumulative GPA** — groups enrollments by subject, takes best result per subject (passed > highest grade), computes `sum(gpa_points × credits) / sum(credits)` using the `StudentPortalService::aggregateGrades()` grading scale
+   - **Academic standing** — determined by GPA thresholds:
+     - ≥ 3.5 → `deans_list`
+     - ≥ 2.0 → `good_standing`
+     - < 2.0 (first time) → `probation`
+     - < 2.0 (already `probation`) → `dismissed` (escalation)
+     - < 1.0 → `dismissed` immediately
+   - **Highest completed semester** — highest consecutive semester number with at least one passed enrollment
+3. Result is persisted to `student_academic_progress` via upsert
+
+#### Promotion Flow
+1. Promotion eligibility: not `dismissed`, GPA ≥ 1.0, at least one completed semester, not exceeding 8 semesters
+2. On promote: student `year` is updated (`year = ceil(next_semester / 2)`), progress record advances to next semester
+3. **Bulk operations:** bulk-evaluate and bulk-promote iterate all active students (optionally filtered by department)
+
+#### Retake Enrollment Flow (5.2)
+1. `getRetakeableSubjects(studentId)` finds enrollments with `status=failed` or `passed=false`, excludes subjects with active retake enrollments or already passed
+2. Manager selects subjects, target semester/year in the retake modal
+3. `enrollRetakeSubjects()` validates subjects are retakeable, re-checks prerequisites via `EnrollmentService::checkPrerequisites()`, creates new `StudentSubjectEnrollment` with `is_retake=true` and `original_enrollment_id` pointing to the failed enrollment
+
+#### API Routes
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/academic-progression/student/{id}/evaluate` | Evaluate student academic standing |
+| POST | `/academic-progression/student/{id}/promote` | Promote student to next semester |
+| GET | `/academic-progression/student/{id}/retakeable-subjects` | Get failed subjects eligible for retake |
+| POST | `/academic-progression/student/{id}/enroll-retake` | Enroll student in retake subjects |
+| POST | `/academic-progression/bulk-evaluate` | Bulk evaluate all active students |
+| POST | `/academic-progression/bulk-promote` | Bulk promote all eligible students |
+
+#### Key Constants
+- `GPA_GOOD_STANDING` = 2.0
+- `GPA_DEANS_LIST` = 3.5
+- `GPA_DISMISSAL` = 1.0
+- `PASS_PERCENTAGE` = 50.0
+- `MAX_SEMESTERS` = 8
 
 ### Grade Management Flow
 - **Draft → Publish workflow:**

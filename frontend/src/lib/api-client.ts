@@ -6,12 +6,19 @@ export type APIClientError = Error & {
   status?: number;
   details?: string[];
   fields?: Record<string, string[]>;
+  data?: Record<string, unknown>;
 };
 
-function buildAPIError(message: string, status?: number, fields?: Record<string, string[]>) {
+function buildAPIError(
+  message: string,
+  status?: number,
+  fields?: Record<string, string[]>,
+  data?: Record<string, unknown>
+) {
   const error = new Error(message) as APIClientError;
   error.status = status;
   error.fields = fields;
+  error.data = data;
   error.details = fields
     ? Object.values(fields).flat().filter((value): value is string => Boolean(value))
     : undefined;
@@ -72,11 +79,17 @@ class APIClient {
           throw buildAPIError(
             error.message || validationMessages || `HTTP ${response.status}`,
             response.status,
-            error.errors as Record<string, string[]>
+            error.errors as Record<string, string[]>,
+            error as Record<string, unknown>
           );
         }
         
-        throw buildAPIError(error.message || error.error || `HTTP ${response.status}`, response.status);
+        throw buildAPIError(
+          error.message || error.error || `HTTP ${response.status}`,
+          response.status,
+          undefined,
+          error as Record<string, unknown>
+        );
       }
 
       // Handle empty responses
@@ -128,6 +141,49 @@ class APIClient {
     });
   }
 
+  async download(endpoint: string, params?: Record<string, any>, explicitFilename?: string): Promise<void> {
+    const token = getToken();
+    const headers: Record<string, string> = {
+      'Accept': 'text/csv',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const queryString = params
+      ? '?' + new URLSearchParams(params).toString()
+      : '';
+    const url = `${this.baseURL}${endpoint}${queryString}`;
+
+    const response = await fetch(url, { method: 'GET', headers });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        removeToken();
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+      }
+      const error = await response.json().catch(() => ({ message: `HTTP ${response.status}` }));
+      throw buildAPIError(error.message || `HTTP ${response.status}`, response.status);
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('content-disposition');
+    let filename = explicitFilename || 'export.csv';
+    if (!explicitFilename && disposition) {
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      if (match) filename = match[1];
+    }
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  }
+
   async upload<T>(endpoint: string, formData: FormData): Promise<T> {
     const token = getToken();
     const headers: Record<string, string> = {
@@ -171,6 +227,11 @@ class APIClient {
 
 export const apiClient = new APIClient(API_URL);
 
+// Re-export apiRequest from jwt-auth for backward compatibility
+// All API requests should use the `api` convenience methods below,
+// but apiRequest is still available for direct low-level calls.
+export { apiRequest } from './jwt-auth';
+
 // Export convenience methods
 export const api = {
   get: <T>(endpoint: string, params?: Record<string, any>) => 
@@ -185,4 +246,6 @@ export const api = {
     apiClient.delete<T>(endpoint),
   upload: <T>(endpoint: string, formData: FormData) =>
     apiClient.upload<T>(endpoint, formData),
+  download: (endpoint: string, params?: Record<string, any>, explicitFilename?: string) =>
+    apiClient.download(endpoint, params, explicitFilename),
 };

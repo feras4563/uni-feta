@@ -23,6 +23,7 @@ import {
   Layers,
   Info
 } from "lucide-react";
+import type { APIClientError } from "@/lib/api-client";
 
 type CurriculumItem = {
   id: string;
@@ -43,6 +44,50 @@ type CurriculumItem = {
  const formatNumber = (value: number) => new Intl.NumberFormat("en-US").format(value);
 
  const formatCurrency = (value: number) => `${formatNumber(value)} دينار`;
+
+ type PrerequisiteErrorItem = {
+   subject?: string;
+   subject_code?: string;
+   missing?: Array<{
+     id?: string;
+     name?: string;
+     code?: string;
+   }>;
+ };
+
+ const formatRegistrationError = (error: APIClientError) => {
+   const errorData = error.data as {
+     prerequisite_errors?: PrerequisiteErrorItem[];
+     invalid_subjects?: Array<{ code?: string; name?: string; semester_number?: number }>;
+   } | undefined;
+
+   const prerequisiteErrors = errorData?.prerequisite_errors;
+   if (Array.isArray(prerequisiteErrors) && prerequisiteErrors.length > 0) {
+     const details = prerequisiteErrors.map((item) => {
+       const subjectLabel = [item.subject_code, item.subject].filter(Boolean).join(" - ");
+       const missingLabel = (item.missing || [])
+         .map((prerequisite) => [prerequisite.code, prerequisite.name].filter(Boolean).join(" - "))
+         .filter(Boolean)
+         .join("، ");
+
+       return `- لا يمكن تسجيل ${subjectLabel || "هذا المقرر"} لأن الطالب لم ينجح في: ${missingLabel || "المتطلبات السابقة المطلوبة"}`;
+     });
+
+     return [error.message, ...details].join("\n");
+   }
+
+   const invalidSubjects = errorData?.invalid_subjects;
+   if (Array.isArray(invalidSubjects) && invalidSubjects.length > 0) {
+     const details = invalidSubjects.map((item) => {
+       const subjectLabel = [item.code, item.name].filter(Boolean).join(" - ");
+       return `- ${subjectLabel || "مقرر غير صالح"}`;
+     });
+
+     return [error.message, ...details].join("\n");
+   }
+
+   return error.message || "حدث خطأ أثناء تسجيل الطالب";
+ };
 
 export default function EnhancedStudentRegistration() {
   const TRACK_LABELS: Record<string, string> = {
@@ -380,7 +425,8 @@ export default function EnhancedStudentRegistration() {
       setAcademicYear(""); // Clear academic year
       setIsPaying(false); // Reset payment checkbox
     } catch (error: any) {
-      alert("خطأ في تسجيل الطالب: " + error.message);
+      const formattedError = formatRegistrationError(error as APIClientError);
+      alert(`خطأ في تسجيل الطالب:\n${formattedError}`);
     }
   };
 

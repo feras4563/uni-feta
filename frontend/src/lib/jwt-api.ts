@@ -1,45 +1,109 @@
 import { api } from './api-client';
+import type {
+  Student,
+  StudentCreateData,
+  Teacher,
+  Department,
+  DepartmentWithStats,
+  Subject,
+  SubjectDepartment,
+  Semester,
+  StudyYear,
+  Room,
+  StudentGroup,
+  StudentSemesterRegistration,
+  StudentSubjectEnrollment,
+  TimetableEntry,
+  TimeSlot,
+  StudentInvoice,
+  StudentGrade,
+  FeeDefinition,
+  FeeRule,
+  Holiday,
+  HolidaySyncResult,
+  DashboardStats,
+  SystemSettings,
+  InvoiceStatistics,
+  ApiMessage,
+  TeacherSubject,
+  ClassSession,
+  AttendanceRecord,
+  SchedulingResources,
+  ScheduleEntry,
+  AutoGenerationConstraints,
+} from '../types/api';
+
+// Re-export types for consumers
+export type {
+  Student,
+  Teacher,
+  Department,
+  Subject,
+  Semester,
+  StudyYear,
+  Room,
+  StudentGroup,
+  StudentSemesterRegistration,
+  StudentSubjectEnrollment,
+  TimetableEntry,
+  TimeSlot,
+  StudentInvoice,
+  StudentGrade,
+  FeeDefinition,
+  FeeRule,
+  Holiday,
+  HolidaySyncResult,
+  DashboardStats,
+  SystemSettings,
+  InvoiceStatistics,
+  TeacherSubject,
+  ClassSession,
+  AttendanceRecord,
+  SchedulingResources,
+  ScheduleEntry,
+  AutoGenerationConstraints,
+};
 
 // ============================================
 // STUDENTS API
 // ============================================
 
 export async function fetchStudents(search?: string) {
-  const params: any = { paginate: 'false' };
+  const params: Record<string, string> = { paginate: 'false' };
   if (search) params.search = search.trim();
-  return api.get<any[]>('/students', params);
+  return api.get<Student[]>('/students', params);
 }
 
 export async function getStudent(id: string | number) {
-  return api.get<any>(`/students/${id}`);
+  return api.get<Student>(`/students/${id}`);
 }
 
 export async function fetchNextStudentId() {
   return api.get<{ id: string }>('/students/next-id');
 }
 
-export async function createStudent(data: any) {
-  return api.post<any>('/students', data);
+export async function createStudent(data: StudentCreateData) {
+  return api.post<Student>('/students', data);
 }
 
-export async function updateStudent(id: string | number, data: any) {
-  return api.put<any>(`/students/${id}`, data);
+export async function updateStudent(id: string | number, data: Partial<StudentCreateData>) {
+  return api.put<Student>(`/students/${id}`, data);
 }
 
 export async function deleteStudent(id: string | number) {
-  return api.delete<any>(`/students/${id}`);
+  return api.delete<ApiMessage>(`/students/${id}`);
 }
 
 export async function uploadStudentPhoto(id: string | number, file: File) {
   const formData = new FormData();
   formData.append('photo', file);
-  return api.upload<any>(`/students/${id}/upload-photo`, formData);
+  return api.upload<{ message: string; photo_url: string }>(`/students/${id}/upload-photo`, formData);
 }
 
 export async function uploadTeacherPhoto(id: string | number, file: File) {
   const formData = new FormData();
   formData.append('photo', file);
-  return api.upload<any>(`/teachers/${id}/upload-photo`, formData);
+  return api.upload<{ message: string; photo_url: string }>(`/teachers/${id}/upload-photo`, formData);
 }
 
 // ============================================
@@ -47,35 +111,35 @@ export async function uploadTeacherPhoto(id: string | number, file: File) {
 // ============================================
 
 export async function fetchTeachers(search?: string, activeOnly: boolean = true, departmentId?: string) {
-  const params: any = { paginate: 'false' };
+  const params: Record<string, string | boolean> = { paginate: 'false' };
   if (search) params.search = search.trim();
   if (activeOnly) params.is_active = true;
   if (departmentId) params.department_id = departmentId;
-  return api.get<any[]>('/teachers', params);
+  return api.get<Teacher[]>('/teachers', params);
 }
 
 export async function getTeacher(id: string | number) {
-  return api.get<any>(`/teachers/${id}`);
+  return api.get<Teacher>(`/teachers/${id}`);
 }
 
-export async function createTeacher(data: any) {
-  return api.post<any>('/teachers', data);
+export async function createTeacher(data: Partial<Teacher>) {
+  return api.post<Teacher>('/teachers', data);
 }
 
-export async function updateTeacher(id: string | number, data: any, departmentIds?: string[], primaryDepartmentId?: string) {
-  const payload = { ...data };
+export async function updateTeacher(id: string | number, data: Partial<Teacher>, departmentIds?: string[], primaryDepartmentId?: string) {
+  const payload: Record<string, unknown> = { ...data };
   if (departmentIds && departmentIds.length > 0) {
     payload.department_id = primaryDepartmentId || departmentIds[0];
   }
-  return api.put<any>(`/teachers/${id}`, payload);
+  return api.put<Teacher>(`/teachers/${id}`, payload);
 }
 
 export async function deleteTeacher(id: string | number) {
-  return api.delete<any>(`/teachers/${id}`);
+  return api.delete<ApiMessage>(`/teachers/${id}`);
 }
 
-export async function createTeacherWithDepartments(teacherData: any, departmentIds: string[], primaryDepartmentId?: string) {
-  return api.post<any>('/teachers/with-departments', {
+export async function createTeacherWithDepartments(teacherData: Partial<Teacher>, departmentIds: string[], primaryDepartmentId?: string) {
+  return api.post<Teacher>('/teachers/with-departments', {
     teacher: teacherData,
     department_ids: departmentIds,
     primary_department_id: primaryDepartmentId || departmentIds[0]
@@ -83,7 +147,7 @@ export async function createTeacherWithDepartments(teacherData: any, departmentI
 }
 
 export async function getTeacherDepartments(teacherId: string | number) {
-  return api.get<any[]>(`/teachers/${teacherId}/departments`);
+  return api.get<Department[]>(`/teachers/${teacherId}/departments`);
 }
 
 // ============================================
@@ -91,31 +155,31 @@ export async function getTeacherDepartments(teacherId: string | number) {
 // ============================================
 
 export async function fetchDepartments() {
-  return api.get<any[]>('/departments', { paginate: 'false' });
+  return api.get<Department[]>('/departments', { paginate: 'false' });
 }
 
 export async function getDepartment(id: string | number) {
-  return api.get<any>(`/departments/${id}`);
+  return api.get<Department>(`/departments/${id}`);
 }
 
-export async function createDepartment(data: any) {
-  return api.post<any>('/departments', data);
+export async function createDepartment(data: Partial<Department>) {
+  return api.post<Department>('/departments', data);
 }
 
-export async function updateDepartment(id: string | number, data: any) {
-  return api.put<any>(`/departments/${id}`, data);
+export async function updateDepartment(id: string | number, data: Partial<Department>) {
+  return api.put<Department>(`/departments/${id}`, data);
 }
 
 export async function deleteDepartment(id: string | number) {
-  return api.delete<any>(`/departments/${id}`);
+  return api.delete<ApiMessage>(`/departments/${id}`);
 }
 
 export async function fetchDepartmentWithStats(id: string | number) {
-  return api.get<any>(`/departments/${id}/details`);
+  return api.get<DepartmentWithStats>(`/departments/${id}/details`);
 }
 
 export async function fetchDepartmentSemesterSubjects(departmentId: string | number, semesterId: number) {
-  return api.get<any[]>(`/departments/${departmentId}/semesters/${semesterId}/subjects`);
+  return api.get<Subject[]>(`/departments/${departmentId}/semesters/${semesterId}/subjects`);
 }
 
 export async function updateDepartmentSemesterSubjects(
@@ -123,7 +187,7 @@ export async function updateDepartmentSemesterSubjects(
   semesterId: number,
   subjectIds: string[]
 ) {
-  return api.put<any>(`/departments/${departmentId}/semesters/${semesterId}/subjects`, {
+  return api.put<ApiMessage>(`/departments/${departmentId}/semesters/${semesterId}/subjects`, {
     subject_ids: subjectIds
   });
 }
@@ -133,30 +197,30 @@ export async function updateDepartmentSemesterSubjects(
 // ============================================
 
 export async function fetchSubjects(search?: string, departmentId?: string) {
-  const params: any = { paginate: 'false' };
+  const params: Record<string, string> = { paginate: 'false' };
   if (search) params.search = search.trim();
   if (departmentId) params.department_id = departmentId;
-  return api.get<any[]>('/subjects', params);
+  return api.get<Subject[]>('/subjects', params);
 }
 
 export async function getSubject(id: string | number) {
-  return api.get<any>(`/subjects/${id}`);
+  return api.get<Subject>(`/subjects/${id}`);
 }
 
-export async function createSubject(data: any) {
-  return api.post<any>('/subjects', data);
+export async function createSubject(data: Partial<Subject>) {
+  return api.post<Subject>('/subjects', data);
 }
 
-export async function updateSubject(id: string | number, data: any) {
-  return api.put<any>(`/subjects/${id}`, data);
+export async function updateSubject(id: string | number, data: Partial<Subject>) {
+  return api.put<Subject>(`/subjects/${id}`, data);
 }
 
 export async function deleteSubject(id: string | number) {
-  return api.delete<any>(`/subjects/${id}`);
+  return api.delete<ApiMessage>(`/subjects/${id}`);
 }
 
 export async function checkSubjectPrerequisites(subjectId: string | number, studentId: string | number) {
-  return api.post<any>(`/subjects/${subjectId}/check-prerequisites`, { student_id: studentId });
+  return api.post<{ met: boolean; missing?: Subject[] }>(`/subjects/${subjectId}/check-prerequisites`, { student_id: studentId });
 }
 
 // ============================================
@@ -164,23 +228,23 @@ export async function checkSubjectPrerequisites(subjectId: string | number, stud
 // ============================================
 
 export async function fetchSemesters() {
-  return api.get<any[]>('/semesters', { paginate: 'false' });
+  return api.get<Semester[]>('/semesters', { paginate: 'false' });
 }
 
 export async function getSemester(id: string | number) {
-  return api.get<any>(`/semesters/${id}`);
+  return api.get<Semester>(`/semesters/${id}`);
 }
 
-export async function createSemester(data: any) {
-  return api.post<any>('/semesters', data);
+export async function createSemester(data: Partial<Semester>) {
+  return api.post<Semester>('/semesters', data);
 }
 
-export async function updateSemester(id: string | number, data: any) {
-  return api.put<any>(`/semesters/${id}`, data);
+export async function updateSemester(id: string | number, data: Partial<Semester>) {
+  return api.put<Semester>(`/semesters/${id}`, data);
 }
 
 export async function deleteSemester(id: string | number) {
-  return api.delete<any>(`/semesters/${id}`);
+  return api.delete<ApiMessage>(`/semesters/${id}`);
 }
 
 // ============================================
@@ -188,23 +252,23 @@ export async function deleteSemester(id: string | number) {
 // ============================================
 
 export async function fetchStudyYears() {
-  return api.get<any[]>('/study-years', { paginate: 'false' });
+  return api.get<StudyYear[]>('/study-years', { paginate: 'false' });
 }
 
 export async function getStudyYear(id: string | number) {
-  return api.get<any>(`/study-years/${id}`);
+  return api.get<StudyYear>(`/study-years/${id}`);
 }
 
-export async function createStudyYear(data: any) {
-  return api.post<any>('/study-years', data);
+export async function createStudyYear(data: Partial<StudyYear>) {
+  return api.post<StudyYear>('/study-years', data);
 }
 
-export async function updateStudyYear(id: string | number, data: any) {
-  return api.put<any>(`/study-years/${id}`, data);
+export async function updateStudyYear(id: string | number, data: Partial<StudyYear>) {
+  return api.put<StudyYear>(`/study-years/${id}`, data);
 }
 
 export async function deleteStudyYear(id: string | number) {
-  return api.delete<any>(`/study-years/${id}`);
+  return api.delete<ApiMessage>(`/study-years/${id}`);
 }
 
 // ============================================
@@ -212,23 +276,23 @@ export async function deleteStudyYear(id: string | number) {
 // ============================================
 
 export async function fetchRooms() {
-  return api.get<any[]>('/rooms', { paginate: 'false' });
+  return api.get<Room[]>('/rooms', { paginate: 'false' });
 }
 
 export async function getRoom(id: string | number) {
-  return api.get<any>(`/rooms/${id}`);
+  return api.get<Room>(`/rooms/${id}`);
 }
 
-export async function createRoom(data: any) {
-  return api.post<any>('/rooms', data);
+export async function createRoom(data: Partial<Room>) {
+  return api.post<Room>('/rooms', data);
 }
 
-export async function updateRoom(id: string | number, data: any) {
-  return api.put<any>(`/rooms/${id}`, data);
+export async function updateRoom(id: string | number, data: Partial<Room>) {
+  return api.put<Room>(`/rooms/${id}`, data);
 }
 
 export async function deleteRoom(id: string | number) {
-  return api.delete<any>(`/rooms/${id}`);
+  return api.delete<ApiMessage>(`/rooms/${id}`);
 }
 
 // ============================================
@@ -236,33 +300,33 @@ export async function deleteRoom(id: string | number) {
 // ============================================
 
 export async function fetchStudentGroups(departmentId?: string | number) {
-  const params: any = { paginate: 'false' };
-  if (departmentId) params.department_id = departmentId;
-  return api.get<any[]>('/student-groups', params);
+  const params: Record<string, string> = { paginate: 'false' };
+  if (departmentId) params.department_id = String(departmentId);
+  return api.get<StudentGroup[]>('/student-groups', params);
 }
 
 export async function getStudentGroup(id: string | number) {
-  return api.get<any>(`/student-groups/${id}`);
+  return api.get<StudentGroup>(`/student-groups/${id}`);
 }
 
-export async function createStudentGroup(data: any) {
-  return api.post<any>('/student-groups', data);
+export async function createStudentGroup(data: Partial<StudentGroup>) {
+  return api.post<StudentGroup>('/student-groups', data);
 }
 
-export async function updateStudentGroup(id: string | number, data: any) {
-  return api.put<any>(`/student-groups/${id}`, data);
+export async function updateStudentGroup(id: string | number, data: Partial<StudentGroup>) {
+  return api.put<StudentGroup>(`/student-groups/${id}`, data);
 }
 
 export async function deleteStudentGroup(id: string | number) {
-  return api.delete<any>(`/student-groups/${id}`);
+  return api.delete<ApiMessage>(`/student-groups/${id}`);
 }
 
 export async function getRegisteredStudentsBySemester(departmentId: string, semesterId: string) {
-  return api.get<any[]>(`/semesters/${semesterId}/registered-students`, { department_id: departmentId });
+  return api.get<Student[]>(`/semesters/${semesterId}/registered-students`, { department_id: departmentId });
 }
 
 export async function createGroupsForRegisteredStudents(departmentId: string, semesterId: string, maxStudentsPerGroup: number) {
-  return api.post<any>(`/student-groups/create-from-registrations`, {
+  return api.post<StudentGroup[]>(`/student-groups/create-from-registrations`, {
     department_id: departmentId,
     semester_id: semesterId,
     max_students_per_group: maxStudentsPerGroup
@@ -274,23 +338,23 @@ export async function createGroupsForRegisteredStudents(departmentId: string, se
 // ============================================
 
 export async function fetchStudentRegistrations() {
-  return api.get<any[]>('/student-registrations');
+  return api.get<StudentSemesterRegistration[]>('/student-registrations');
 }
 
 export async function getStudentRegistration(id: string | number) {
-  return api.get<any>(`/student-registrations/${id}`);
+  return api.get<StudentSemesterRegistration>(`/student-registrations/${id}`);
 }
 
-export async function createStudentRegistration(data: any) {
-  return api.post<any>('/student-registrations', data);
+export async function createStudentRegistration(data: Partial<StudentSemesterRegistration>) {
+  return api.post<StudentSemesterRegistration>('/student-registrations', data);
 }
 
-export async function updateStudentRegistration(id: string | number, data: any) {
-  return api.put<any>(`/student-registrations/${id}`, data);
+export async function updateStudentRegistration(id: string | number, data: Partial<StudentSemesterRegistration>) {
+  return api.put<StudentSemesterRegistration>(`/student-registrations/${id}`, data);
 }
 
 export async function deleteStudentRegistration(id: string | number) {
-  return api.delete<any>(`/student-registrations/${id}`);
+  return api.delete<ApiMessage>(`/student-registrations/${id}`);
 }
 
 // ============================================
@@ -299,39 +363,39 @@ export async function deleteStudentRegistration(id: string | number) {
 
 export async function fetchTeacherSubjects(teacherId?: string | number) {
   const params = teacherId ? { teacher_id: teacherId } : undefined;
-  return api.get<any[]>('/teacher-subjects', params);
+  return api.get<TeacherSubject[]>('/teacher-subjects', params);
 }
 
-export async function createTeacherSubjectAssignment(data: any) {
-  return api.post<any>('/teacher-subjects', data);
+export async function createTeacherSubjectAssignment(data: Partial<TeacherSubject>) {
+  return api.post<TeacherSubject>('/teacher-subjects', data);
 }
 
 export async function deleteTeacherSubjectAssignment(id: string | number) {
-  return api.delete<any>(`/teacher-subjects/${id}`);
+  return api.delete<ApiMessage>(`/teacher-subjects/${id}`);
 }
 
 // ============================================
 // TIMETABLE API
 // ============================================
 
-export async function fetchTimetable(params?: any) {
-  return api.get<any[]>('/timetable/entries', params);
+export async function fetchTimetable(params?: Record<string, string | number | boolean>) {
+  return api.get<TimetableEntry[]>('/timetable/entries', params);
 }
 
-export async function createTimetableEntry(data: any) {
-  return api.post<any>('/timetable/entries', data);
+export async function createTimetableEntry(data: Partial<TimetableEntry>) {
+  return api.post<TimetableEntry>('/timetable/entries', data);
 }
 
-export async function updateTimetableEntry(id: string | number, data: any) {
-  return api.put<any>(`/timetable/entries/${id}`, data);
+export async function updateTimetableEntry(id: string | number, data: Partial<TimetableEntry>) {
+  return api.put<TimetableEntry>(`/timetable/entries/${id}`, data);
 }
 
 export async function deleteTimetableEntry(id: string | number) {
-  return api.delete<any>(`/timetable/entries/${id}`);
+  return api.delete<ApiMessage>(`/timetable/entries/${id}`);
 }
 
-export async function generateTimetable(data: any) {
-  return api.post<any>('/timetable/auto-generate', data);
+export async function generateTimetable(data: Record<string, unknown>) {
+  return api.post<TimetableEntry[]>('/timetable/auto-generate', data);
 }
 
 export async function fetchScheduleOverview(params?: {
@@ -341,7 +405,7 @@ export async function fetchScheduleOverview(params?: {
   semester_id?: string;
   include_inactive?: boolean;
 }) {
-  return api.get<any>('/schedule/overview', params);
+  return api.get<Record<string, unknown>>('/schedule/overview', params);
 }
 
 // ============================================
@@ -349,75 +413,47 @@ export async function fetchScheduleOverview(params?: {
 // ============================================
 
 export async function fetchFees() {
-  return api.get<any[]>('/fees');
+  return api.get<FeeDefinition[]>('/fees');
 }
 
 export async function getFee(id: string | number) {
-  return api.get<any>(`/fees/${id}`);
+  return api.get<StudentInvoice>(`/fees/${id}`);
 }
 
-export async function createFee(data: any) {
-  return api.post<any>('/fees', data);
+export async function createFee(data: Record<string, unknown>) {
+  return api.post<StudentInvoice>('/fees', data);
 }
 
-export async function updateFee(id: string | number, data: any) {
-  return api.put<any>(`/fees/${id}`, data);
+export async function updateFee(id: string | number, data: Record<string, unknown>) {
+  return api.put<StudentInvoice>(`/fees/${id}`, data);
 }
 
 export async function deleteFee(id: string | number) {
-  return api.delete<any>(`/fees/${id}`);
+  return api.delete<ApiMessage>(`/fees/${id}`);
 }
 
 // ============================================
 // INVOICES API
 // ============================================
 
-export async function fetchInvoices(params?: any) {
-  return api.get<any[]>('/invoices', params);
+export async function fetchInvoices(params?: Record<string, string>) {
+  return api.get<StudentInvoice[]>('/invoices', params);
 }
 
 export async function getInvoice(id: string | number) {
-  return api.get<any>(`/invoices/${id}`);
+  return api.get<StudentInvoice>(`/invoices/${id}`);
 }
 
-export async function createInvoice(data: any) {
-  return api.post<any>('/invoices', data);
+export async function createInvoice(data: Partial<StudentInvoice>) {
+  return api.post<StudentInvoice>('/invoices', data);
 }
 
-export async function updateInvoice(id: string | number, data: any) {
-  return api.put<any>(`/invoices/${id}`, data);
+export async function updateInvoice(id: string | number, data: Partial<StudentInvoice>) {
+  return api.put<StudentInvoice>(`/invoices/${id}`, data);
 }
 
 export async function deleteInvoice(id: string | number) {
-  return api.delete<any>(`/invoices/${id}`);
-}
-
-// ============================================
-// PAYMENTS API
-// ============================================
-
-export async function fetchPayments(params?: any) {
-  return api.get<any[]>('/payments', params);
-}
-
-export async function createPayment(data: any) {
-  return api.post<any>('/payments', data);
-}
-
-// ============================================
-// QR CODES API
-// ============================================
-
-export async function getQRCode(id: string) {
-  return api.get<any>(`/qr-codes/${id}`);
-}
-
-export async function createQRCode(data: any) {
-  return api.post<any>('/qr-codes', data);
-}
-
-export async function updateQRCode(id: string, data: any) {
-  return api.put<any>(`/qr-codes/${id}`, data);
+  return api.delete<ApiMessage>(`/invoices/${id}`);
 }
 
 // ============================================
@@ -425,94 +461,55 @@ export async function updateQRCode(id: string, data: any) {
 // ============================================
 
 export async function getSystemSettings() {
-  return api.get<any>('/system-settings');
+  return api.get<SystemSettings>('/system-settings');
 }
 
-export async function updateSystemSettings(data: any) {
-  return api.put<any>('/system-settings', data);
+export async function updateSystemSettings(data: Partial<SystemSettings>) {
+  return api.put<SystemSettings>('/system-settings', data);
 }
 
 // ============================================
 // ATTENDANCE API
 // ============================================
 
-export async function fetchAttendance(params?: any) {
-  return api.get<any[]>('/attendance', params);
+export async function fetchAttendance(params?: Record<string, string>) {
+  return api.get<AttendanceRecord[]>('/attendance', params);
 }
 
-export async function createAttendance(data: any) {
-  return api.post<any>('/attendance', data);
+export async function createAttendance(data: Partial<AttendanceRecord>) {
+  return api.post<AttendanceRecord>('/attendance', data);
 }
 
-export async function updateAttendance(id: string | number, data: any) {
-  return api.put<any>(`/attendance/${id}`, data);
+export async function updateAttendance(id: string | number, data: Partial<AttendanceRecord>) {
+  return api.put<AttendanceRecord>(`/attendance/${id}`, data);
 }
 
 // ============================================
 // GRADES API
 // ============================================
 
-export async function fetchGrades(params?: any) {
-  return api.get<any[]>('/grades', params);
+export async function fetchGrades(params?: Record<string, string>) {
+  return api.get<StudentGrade[]>('/grades', params);
 }
 
-export async function createGrade(data: any) {
-  return api.post<any>('/grades', data);
+export async function fetchGradeSummary(semesterId: string, departmentId?: string, studentId?: string) {
+  const params: Record<string, string> = { semester_id: semesterId };
+  if (departmentId) params.department_id = departmentId;
+  if (studentId) params.student_id = studentId;
+  return api.get<Record<string, unknown>>('/grades/summary', params);
 }
 
-export async function updateGrade(id: string | number, data: any) {
-  return api.put<any>(`/grades/${id}`, data);
+export async function createGrade(data: Partial<StudentGrade>) {
+  return api.post<StudentGrade>('/grades', data);
+}
+
+export async function updateGrade(id: string | number, data: Partial<StudentGrade>) {
+  return api.put<StudentGrade>(`/grades/${id}`, data);
 }
 
 // ============================================
 // TEACHER DASHBOARD API
 // ============================================
-
-export interface ClassSession {
-  id: string | number;
-  timetable_id?: string | null;
-  teacher_id?: string | number;
-  subject_id: string | number;
-  session_name: string;
-  session_date: string;
-  start_time: string;
-  end_time: string;
-  room?: string;
-  notes?: string;
-  qr_code_data?: string;
-  qr_signature?: string;
-  qr_generated_at?: string;
-  qr_expires_at?: string;
-  status?: string;
-  max_students?: number;
-  subject?: any;
-}
-
-export interface TeacherSubject {
-  id: string | number;
-  subject_id: string | number;
-  teacher_id: string | number;
-  department_id?: string;
-  subject?: any;
-  name?: string;
-}
-
-export interface AttendanceRecord {
-  id: string | number;
-  session_id: string | number;
-  student_id: string | number;
-  marked_by_id?: number | null;
-  status: string;
-  scan_time?: string;
-  notes?: string;
-  is_override?: boolean;
-  student?: any;
-  markedBy?: { id: number; name: string; email: string };
-}
-
-export async function getTeacherDashboard(teacherId: number) {
-  return api.get<any>(`/teachers/${teacherId}/dashboard`);
-}
 
 export async function getTeacherSessions(
   teacherId: string | number,
@@ -523,59 +520,38 @@ export async function getTeacherSessions(
 
 export async function getTeacherSubjectGroups(teacherId?: string | number, academicYear?: string) {
   if (!teacherId) {
-    return [] as any[];
+    return [] as TeacherSubject[];
   }
 
-  const params: any = {};
+  const params: Record<string, string> = {};
   if (academicYear) params.academic_year = academicYear;
 
-  return api.get<any[]>(`/teachers/${teacherId}/subject-groups`, params);
+  return api.get<TeacherSubject[]>(`/teachers/${teacherId}/subject-groups`, params);
 }
 
-export async function fetchTeacherStats(teacherId: number) {
-  return api.get<any>(`/teachers/${teacherId}/stats`);
+export async function createClassSession(data: Partial<ClassSession>) {
+  return api.post<ClassSession>('/class-sessions', data);
 }
 
-export async function fetchTeacherSessions(
-  teacherId: string | number,
-  params?: { status?: string; start_date?: string; end_date?: string }
-) {
-  return api.get<ClassSession[]>(`/teachers/${teacherId}/sessions`, params);
-}
-
-export async function createClassSession(data: any) {
-  return api.post<any>('/class-sessions', data);
-}
-
-export async function updateClassSession(sessionId: string | number, data: any) {
-  return api.put<any>(`/class-sessions/${sessionId}`, data);
+export async function updateClassSession(sessionId: string | number, data: Partial<ClassSession>) {
+  return api.put<ClassSession>(`/class-sessions/${sessionId}`, data);
 }
 
 export async function deleteClassSession(sessionId: string | number) {
-  return api.delete<any>(`/class-sessions/${sessionId}`);
+  return api.delete<ApiMessage>(`/class-sessions/${sessionId}`);
 }
 
 export async function generateSessionQR(sessionId: string | number) {
-  return api.post<any>(`/teacher-portal/sessions/${sessionId}/generate-qr`);
+  return api.post<ClassSession>(`/teacher-portal/sessions/${sessionId}/generate-qr`);
 }
 
 export async function fetchSessionAttendance(sessionId: string | number) {
-  return api.get<any[]>(`/class-sessions/${sessionId}/attendance`);
+  return api.get<AttendanceRecord[]>(`/class-sessions/${sessionId}/attendance`);
 }
 
 // ============================================
 // HOLIDAYS API
 // ============================================
-
-export interface Holiday {
-  id: string;
-  name: string;
-  start_date: string;
-  end_date: string;
-  is_recurring: boolean;
-  created_at: string;
-  updated_at: string;
-}
 
 export async function fetchHolidays() {
   return api.get<Holiday[]>('/holidays');
@@ -591,20 +567,11 @@ export async function createHoliday(data: {
 }
 
 export async function deleteHoliday(id: string) {
-  return api.delete<{ message: string }>(`/holidays/${id}`);
+  return api.delete<ApiMessage>(`/holidays/${id}`);
 }
 
 export async function syncHolidaySchedule(semesterId: string) {
-  return api.post<{
-    message: string;
-    result: {
-      created: number;
-      updated: number;
-      cancelled: number;
-      skipped_holidays: number;
-      total_entries: number;
-    };
-  }>('/holidays/sync-schedule', { semester_id: semesterId });
+  return api.post<HolidaySyncResult>('/holidays/sync-schedule', { semester_id: semesterId });
 }
 
 // ============================================
@@ -612,7 +579,7 @@ export async function syncHolidaySchedule(semesterId: string) {
 // ============================================
 
 export async function fetchDashboardStats() {
-  return api.get<any>('/dashboard/stats');
+  return api.get<DashboardStats>('/dashboard/stats');
 }
 
 // ============================================
@@ -621,7 +588,7 @@ export async function fetchDashboardStats() {
 
 // Student Groups
 export async function addStudentToGroup(studentId: string, groupId: string, semesterId?: string, departmentId?: string, semesterNumber?: number) {
-  return api.post<any>(`/student-groups/${groupId}/students`, {
+  return api.post<ApiMessage>(`/student-groups/${groupId}/students`, {
     student_id: studentId,
     semester_id: semesterId,
     department_id: departmentId,
@@ -630,33 +597,33 @@ export async function addStudentToGroup(studentId: string, groupId: string, seme
 }
 
 export async function removeStudentFromGroup(registrationId: string, groupId: string) {
-  return api.delete<any>(`/student-groups/${groupId}/students/${registrationId}`);
+  return api.delete<ApiMessage>(`/student-groups/${groupId}/students/${registrationId}`);
 }
 
 export async function getStudentsInGroup(groupId: string) {
-  return api.get<any[]>(`/student-groups/${groupId}/students`);
+  return api.get<Student[]>(`/student-groups/${groupId}/students`);
 }
 
 export async function getAvailableStudentsForGroup(groupId: string, departmentId?: string, semesterId?: string) {
-  return api.get<any[]>(`/student-groups/${groupId}/available-students`);
+  return api.get<Student[]>(`/student-groups/${groupId}/available-students`);
 }
 
 export async function getStudentsWithoutGroups(departmentId?: string, semesterId?: string) {
-  const params: any = {};
+  const params: Record<string, string> = {};
   if (departmentId) params.department_id = departmentId;
   if (semesterId) params.semester_id = semesterId;
-  return api.get<any[]>('/students/without-groups', params);
+  return api.get<Student[]>('/students/without-groups', params);
 }
 
 export async function assignStudentsToGroupsAutomatically(departmentId: string, semesterId: string) {
-  return api.post<any>('/student-groups/auto-assign', {
+  return api.post<ApiMessage>('/student-groups/auto-assign', {
     department_id: departmentId,
     semester_id: semesterId
   });
 }
 
 export async function createAutoGroupsForDepartment(departmentId: string, semesterId: string, groupsPerSemester: number, maxStudents: number) {
-  return api.post<any>(`/student-groups/auto-create`, {
+  return api.post<StudentGroup[]>(`/student-groups/auto-create`, {
     department_id: departmentId,
     semester_id: semesterId,
     groups_per_semester: groupsPerSemester,
@@ -665,29 +632,30 @@ export async function createAutoGroupsForDepartment(departmentId: string, semest
 }
 
 // Subject Management
-export async function createSubjectWithDepartments(subjectData: any, departmentIds: Array<number | string>, primaryDepartmentId?: number | string) {
-  return api.post<any>('/subjects', {
+export async function createSubjectWithDepartments(subjectData: Partial<Subject>, departmentIds: Array<number | string>, primaryDepartmentId?: number | string) {
+  return api.post<Subject>('/subjects', {
     ...subjectData,
     department_ids: departmentIds,
     primary_department_id: primaryDepartmentId || departmentIds[0]
   });
 }
 
-export async function getSubjectDepartments(subjectId: string) {
-  const subject = await api.get<any>(`/subjects/${subjectId}`);
+export async function getSubjectDepartments(subjectId: string): Promise<SubjectDepartment[]> {
+  const subject = await api.get<Subject>(`/subjects/${subjectId}`);
 
   if (Array.isArray(subject.subject_departments) && subject.subject_departments.length > 0) {
     return subject.subject_departments;
   }
 
-  if (Array.isArray(subject.subjectDepartments) && subject.subjectDepartments.length > 0) {
-    return subject.subjectDepartments;
+  const subjectAny = subject as unknown as Record<string, SubjectDepartment[]>;
+  if (Array.isArray(subjectAny.subjectDepartments) && subjectAny.subjectDepartments.length > 0) {
+    return subjectAny.subjectDepartments;
   }
 
   if (Array.isArray(subject.departments) && subject.departments.length > 0) {
-    return subject.departments.map((department: any) => ({
+    return subject.departments.map((department: Department) => ({
       id: `${subjectId}-${department.id}`,
-      subject_id: subjectId,
+      subject_id: Number(subjectId),
       department_id: department.id,
       is_primary_department: subject.department_id === department.id,
       department,
@@ -698,58 +666,55 @@ export async function getSubjectDepartments(subjectId: string) {
 }
 
 export async function updateSubjectDepartments(subjectId: string, departmentIds: number[] | string[], primaryDepartmentId?: string) {
-  return api.put<any>(`/subjects/${subjectId}`, { 
+  return api.put<Subject>(`/subjects/${subjectId}`, { 
     department_ids: departmentIds,
     ...(primaryDepartmentId ? { primary_department_id: primaryDepartmentId } : {})
   });
 }
 
 export async function fetchSubjectWithStats(subjectId: string) {
-  // Get subject with all related data
-  const subject = await api.get<any>(`/subjects/${subjectId}`);
-  return { subject, stats: {} }; // Backend doesn't have separate stats endpoint
+  const subject = await api.get<Subject>(`/subjects/${subjectId}`);
+  return { subject, stats: {} };
 }
 
 export async function fetchSubjectTeachers(subjectId: string) {
-  // Get teacher-subject assignments for this subject
-  return api.get<any[]>('/teacher-subjects', { subject_id: subjectId });
+  return api.get<TeacherSubject[]>('/teacher-subjects', { subject_id: subjectId });
 }
 
 // Subject Titles & PDFs
-export async function createSubjectTitle(data: any) {
-  return api.post<any>('/subject-titles', data);
+export async function createSubjectTitle(data: Record<string, unknown>) {
+  return api.post<Record<string, unknown>>('/subject-titles', data);
 }
 
-export async function updateSubjectTitle(id: number, data: any) {
-  return api.put<any>(`/subject-titles/${id}`, data);
+export async function updateSubjectTitle(id: number, data: Record<string, unknown>) {
+  return api.put<Record<string, unknown>>(`/subject-titles/${id}`, data);
 }
 
 export async function deleteSubjectTitle(id: string | number) {
-  return api.delete<any>(`/subject-titles/${id}`);
+  return api.delete<ApiMessage>(`/subject-titles/${id}`);
 }
 
 export async function uploadSubjectPDF(subjectId: string | number, file: File) {
   const formData = new FormData();
   formData.append('pdf', file);
-  return api.upload<any>(`/subjects/${subjectId}/pdf`, formData);
+  return api.upload<{ message: string; pdf_url: string }>(`/subjects/${subjectId}/pdf`, formData);
 }
 
 export async function deleteSubjectPDF(subjectId: string | number) {
-  return api.delete<any>(`/subjects/${subjectId}/pdf`);
+  return api.delete<ApiMessage>(`/subjects/${subjectId}/pdf`);
 }
 
 // Department Curriculum
 export async function fetchDepartmentCurriculum(departmentId: string | number) {
-  return api.get<any>(`/departments/${departmentId}/curriculum`);
+  return api.get<Record<string, unknown>>(`/departments/${departmentId}/curriculum`);
 }
 
 export async function fetchDepartmentCurriculumBySemesterNumber(departmentId: string | number, semesterNumber: number) {
-  return api.get<any>(`/departments/${departmentId}/curriculum/semester/${semesterNumber}`);
+  return api.get<Record<string, unknown>>(`/departments/${departmentId}/curriculum/semester/${semesterNumber}`);
 }
 
-export async function fetchDepartmentDetails(departmentId: number) {
-  return api.get<any>(`/departments/${departmentId}/details`);
-}
+/** @deprecated Use fetchDepartmentWithStats instead */
+export const fetchDepartmentDetails = fetchDepartmentWithStats;
 
 // Student Enrollments
 export async function enrollStudentInSubjects(
@@ -762,7 +727,7 @@ export async function enrollStudentInSubjects(
   isPaying: boolean = false,
   specializationTrack?: 'fine_arts_media' | 'advertising_design' | 'photography_cinema' | 'multimedia_media'
 ) {
-  return api.post<any>(`/students/${studentId}/enroll-subjects`, {
+  return api.post<Record<string, unknown>>(`/students/${studentId}/enroll-subjects`, {
     subject_ids: subjectIds,
     semester_id: semesterId,
     study_year_id: studyYearId,
@@ -774,86 +739,87 @@ export async function enrollStudentInSubjects(
 }
 
 export async function fetchStudentSubjectEnrollments(studentId: string) {
-  return api.get<any[]>(`/students/${studentId}/subject-enrollments`);
+  return api.get<StudentSubjectEnrollment[]>(`/students/${studentId}/subject-enrollments`);
 }
 
 export async function fetchAllStudentSubjectEnrollments() {
-  return api.get<any[]>('/student-subject-enrollments');
+  return api.get<StudentSubjectEnrollment[]>('/student-subject-enrollments');
 }
 
 export async function fetchStudentSubjectEnrollmentById(enrollmentId: string) {
-  return api.get<any>(`/student-subject-enrollments/${enrollmentId}`);
+  return api.get<StudentSubjectEnrollment>(`/student-subject-enrollments/${enrollmentId}`);
 }
 
 // Student Registration
-export async function registerStudentForSemester(data: any) {
-  return api.post<any>('/student-registrations/register', data);
+export async function registerStudentForSemester(data: Record<string, unknown>) {
+  return api.post<StudentSemesterRegistration>('/student-registrations/register', data);
 }
 
 // Teacher Subject Assignments
 export async function fetchAllTeacherSubjectAssignments() {
-  return api.get<any[]>('/teacher-subjects/all');
+  return api.get<TeacherSubject[]>('/teacher-subjects/all');
 }
 
-export async function updateTeacherSubjectAssignment(id: number, data: any) {
-  return api.put<any>(`/teacher-subjects/${id}`, data);
+export async function updateTeacherSubjectAssignment(id: number, data: Partial<TeacherSubject>) {
+  return api.put<TeacherSubject>(`/teacher-subjects/${id}`, data);
 }
 
 // Time Slots
 export async function fetchTimeSlots() {
-  return api.get<any[]>('/time-slots');
+  return api.get<TimeSlot[]>('/time-slots');
 }
 
 // Timetable
 export async function fetchTimetableEntries(
-  paramsOrSemester?: any,
+  paramsOrSemester?: Record<string, unknown> | string | number | null,
   departmentId?: string | number,
   groupId?: string | number
 ) {
-  let params: any = paramsOrSemester;
+  let params: Record<string, unknown> = {};
 
   if (
     typeof paramsOrSemester !== 'object' ||
     paramsOrSemester === null ||
     Array.isArray(paramsOrSemester)
   ) {
-    params = {};
     if (paramsOrSemester) params.semester_id = paramsOrSemester;
     if (departmentId) params.department_id = departmentId;
     if (groupId) params.group_id = groupId;
+  } else {
+    params = paramsOrSemester;
   }
 
-  return api.get<any[]>('/timetable/entries', params);
+  return api.get<TimetableEntry[]>('/timetable/entries', params);
 }
 
 // Attendance
-export async function createAttendanceSession(data: any) {
-  return api.post<any>('/attendance/sessions', data);
+export async function createAttendanceSession(data: Record<string, unknown>) {
+  return api.post<ClassSession>('/attendance/sessions', data);
 }
 
 export async function getAttendanceSession(sessionId: number) {
-  return api.get<any>(`/attendance/sessions/${sessionId}`);
+  return api.get<ClassSession>(`/attendance/sessions/${sessionId}`);
 }
 
 export async function getSessionAttendance(sessionId: number) {
-  return api.get<any[]>(`/attendance/sessions/${sessionId}/attendance`);
+  return api.get<AttendanceRecord[]>(`/attendance/sessions/${sessionId}/attendance`);
 }
 
 // Invoices
-export async function fetchAllInvoices(params?: any) {
-  return api.get<any[]>('/invoices/all', params);
+export async function fetchAllInvoices(params?: Record<string, string>) {
+  return api.get<StudentInvoice[]>('/invoices/all', params);
 }
 
-export async function fetchBasicInvoices(params?: any) {
-  return api.get<any[]>('/invoices/basic', params);
+export async function fetchBasicInvoices(params?: Record<string, string>) {
+  return api.get<StudentInvoice[]>('/invoices/basic', params);
 }
 
 export async function fetchStudentInvoices(studentId: string | number) {
-  return api.get<any[]>(`/students/${studentId}/invoices`);
+  return api.get<StudentInvoice[]>(`/students/${studentId}/invoices`);
 }
 
 export async function fetchApplicableFees(departmentId: string, semesterNumber: number, totalCredits: number = 0, studentYear: number = 1, nationality: string = '') {
-  return api.get<any[]>('/fee-rules/applicable', {
+  return api.get<FeeRule[]>('/fee-rules/applicable', {
     department_id: departmentId,
     semester_number: String(semesterNumber),
     total_credits: String(totalCredits),
@@ -863,93 +829,31 @@ export async function fetchApplicableFees(departmentId: string, semesterNumber: 
 }
 
 export async function fetchStudentFeeSummary(studentId: string, semesterId: string) {
-  return api.get<any>(`/students/${studentId}/fee-summary`, { semester_id: semesterId });
+  return api.get<Record<string, unknown>>(`/students/${studentId}/fee-summary`, { semester_id: semesterId });
 }
 
 export async function applyPendingFees(studentId: string, semesterId: string) {
-  return api.post<any>('/fees/apply-pending', { student_id: studentId, semester_id: semesterId });
+  return api.post<ApiMessage>('/fees/apply-pending', { student_id: studentId, semester_id: semesterId });
 }
 
-export async function updateInvoiceStatus(invoiceId: string | number, status: string, paymentData?: any) {
-  return api.put<any>(`/invoices/${invoiceId}/status`, {
+export async function updateInvoiceStatus(invoiceId: string | number, status: string, paymentData?: Record<string, unknown>) {
+  return api.put<StudentInvoice>(`/invoices/${invoiceId}/status`, {
     status,
     ...(paymentData || {}),
   });
 }
 
 export async function getInvoiceStatistics() {
-  return api.get<any>('/invoices/statistics');
+  return api.get<InvoiceStatistics>('/invoices/statistics');
 }
 
 // Current Academic Period
 export async function setCurrentSemester(semesterId: string | number) {
-  return api.post<any>('/semesters/set-current', { semester_id: semesterId });
+  return api.post<ApiMessage>('/semesters/set-current', { semester_id: semesterId });
 }
 
 export async function setCurrentStudyYear(yearId: string | number) {
-  return api.post<any>('/study-years/set-current', { year_id: yearId });
-}
-
-// Testing/Debug Functions
-export async function testSupabaseConnection() {
-  return api.get<any>('/test/connection');
-}
-
-export async function testTablesExist() {
-  return api.get<any>('/test/tables');
-}
-
-export async function testBasicInvoiceQuery() {
-  return api.get<any>('/test/invoice-query');
-}
-
-// ============================================
-// SCHEDULING API
-// ============================================
-
-export interface SchedulingResources {
-  teachers: { id: number; name: string; subjects: any[]; teaching_hours?: number }[];
-  rooms: { id: number; name: string; capacity: number; room_type: string; code?: string; building?: string; equipment?: string[] }[];
-  subjects: { id: number; name: string; hours_per_week?: number }[];
-  students: { id: number; name: string; count: number }[];
-  timeSlots: { id: number; code: string; label: string }[];
-}
-
-export interface ScheduleEntry {
-  id: number;
-  day_of_week: string;
-  time_slot: string;
-  subject_name: string;
-  teacher_name: string;
-  teacher_id: number;
-  room_name: string;
-  room_id: number;
-  current_enrollment?: number;
-  max_students?: number;
-}
-
-export interface AutoGenerationConstraints {
-  maxHoursPerDay: number;
-  minBreakBetweenClasses: number;
-  preferredTimeSlots: string[];
-  avoidTimeSlots: string[];
-  roomPreferences: Record<string, any>;
-  teacherPreferences: Record<string, any>;
-}
-
-export async function fetchSchedulingResources(departmentId: string | number) {
-  return api.get<any>(`/departments/${departmentId}/scheduling-resources`);
-}
-
-export async function fetchDepartmentSchedule(departmentId: string | number, semester: string) {
-  return api.get<any>(`/departments/${departmentId}/schedule`, { semester });
-}
-
-export async function generateAutoSchedule(departmentId: string | number, semester: string, constraints: any) {
-  return api.post<any>(`/departments/${departmentId}/schedule/auto-generate`, {
-    semester,
-    constraints
-  });
+  return api.post<ApiMessage>('/study-years/set-current', { year_id: yearId });
 }
 
 // ============================================
@@ -957,61 +861,61 @@ export async function generateAutoSchedule(departmentId: string | number, semest
 // ============================================
 
 export async function fetchTeacherPortalDashboard() {
-  return api.get<any>('/teacher-portal/dashboard');
+  return api.get<Record<string, unknown>>('/teacher-portal/dashboard');
 }
 
 export async function fetchMySubjects() {
-  return api.get<any[]>('/teacher-portal/my-subjects');
+  return api.get<Subject[]>('/teacher-portal/my-subjects');
 }
 
 export async function fetchMyStudents(params?: { subject_id?: string; semester_id?: string }) {
-  return api.get<any[]>('/teacher-portal/my-students', params);
+  return api.get<Student[]>('/teacher-portal/my-students', params);
 }
 
 export async function fetchMySchedule() {
-  return api.get<any>('/teacher-portal/my-schedule');
+  return api.get<Record<string, unknown>>('/teacher-portal/my-schedule');
 }
 
 export async function fetchMyAttendance() {
-  return api.get<any[]>('/teacher-portal/my-attendance');
+  return api.get<AttendanceRecord[]>('/teacher-portal/my-attendance');
 }
 
 export async function fetchSubjectGrades(subjectId: string) {
-  return api.get<any>(`/teacher-portal/subjects/${subjectId}/grades`);
+  return api.get<Record<string, unknown>>(`/teacher-portal/subjects/${subjectId}/grades`);
 }
 
-export async function storeTeacherGrades(subjectId: string, grades: any[]) {
-  return api.post<any>('/teacher-portal/grades', {
+export async function storeTeacherGrades(subjectId: string, grades: Partial<StudentGrade>[]) {
+  return api.post<ApiMessage>('/teacher-portal/grades', {
     subject_id: subjectId,
     grades,
   });
 }
 
-export async function updateTeacherGrade(gradeId: string, data: any) {
-  return api.put<any>(`/teacher-portal/grades/${gradeId}`, data);
+export async function updateTeacherGrade(gradeId: string, data: Partial<StudentGrade>) {
+  return api.put<StudentGrade>(`/teacher-portal/grades/${gradeId}`, data);
 }
 
 export async function publishTeacherGrades(gradeIds: string[], isPublished: boolean) {
-  return api.post<any>('/teacher-portal/grades/publish', {
+  return api.post<ApiMessage>('/teacher-portal/grades/publish', {
     grade_ids: gradeIds,
     is_published: isPublished,
   });
 }
 
 export async function deleteTeacherGrade(gradeId: string) {
-  return api.delete<any>(`/teacher-portal/grades/${gradeId}`);
+  return api.delete<ApiMessage>(`/teacher-portal/grades/${gradeId}`);
 }
 
 export async function fetchMySessions(params?: { date?: string; start_date?: string; end_date?: string; status?: string; subject_id?: string }) {
-  return api.get<any[]>('/teacher-portal/my-sessions', params);
+  return api.get<ClassSession[]>('/teacher-portal/my-sessions', params);
 }
 
 export async function fetchSessionDetail(sessionId: string) {
-  return api.get<any>(`/teacher-portal/sessions/${sessionId}`);
+  return api.get<ClassSession>(`/teacher-portal/sessions/${sessionId}`);
 }
 
 export async function markSessionAttendance(sessionId: string, records: { student_id: string; status: string; notes?: string }[]) {
-  return api.post<any>(`/teacher-portal/sessions/${sessionId}/attendance`, { records });
+  return api.post<ApiMessage>(`/teacher-portal/sessions/${sessionId}/attendance`, { records });
 }
 
 // ============================================
@@ -1019,37 +923,170 @@ export async function markSessionAttendance(sessionId: string, records: { studen
 // ============================================
 
 export async function fetchStudentPortalDashboard() {
-  return api.get<any>('/student-portal/dashboard');
+  return api.get<Record<string, unknown>>('/student-portal/dashboard');
 }
 
 export async function fetchStudentMySubjects(params?: { semester_id?: string; status?: string }) {
-  return api.get<any[]>('/student-portal/my-subjects', params);
+  return api.get<Subject[]>('/student-portal/my-subjects', params);
 }
 
 export async function fetchStudentMySubjectDetail(subjectId: string) {
-  return api.get<any>(`/student-portal/my-subjects/${subjectId}`);
+  return api.get<Record<string, unknown>>(`/student-portal/my-subjects/${subjectId}`);
 }
 
 export async function fetchStudentMyTeachers() {
-  return api.get<any>('/student-portal/my-teachers');
+  return api.get<Record<string, unknown>>('/student-portal/my-teachers');
 }
 
 export async function fetchStudentMyFees(params?: { semester_id?: string; status?: string }) {
-  return api.get<any>('/student-portal/my-fees', params);
+  return api.get<Record<string, unknown>>('/student-portal/my-fees', params);
 }
 
 export async function fetchStudentMySchedule() {
-  return api.get<any>('/student-portal/my-schedule');
+  return api.get<Record<string, unknown>>('/student-portal/my-schedule');
 }
 
 export async function fetchStudentMyGrades(params?: { subject_id?: string }) {
-  return api.get<any>('/student-portal/my-grades', params);
+  return api.get<Record<string, unknown>>('/student-portal/my-grades', params);
 }
 
 export async function fetchStudentMyAttendance(params?: { subject_id?: string }) {
-  return api.get<any>('/student-portal/my-attendance', params);
+  return api.get<Record<string, unknown>>('/student-portal/my-attendance', params);
 }
 
 export async function fetchStudentMyProfile() {
-  return api.get<any>('/student-portal/my-profile');
+  return api.get<Student>('/student-portal/my-profile');
+}
+
+// ============================================
+// ACADEMIC PROGRESSION API
+// ============================================
+
+export async function evaluateStudent(studentId: string, studyYearId?: string) {
+  const params: Record<string, string> = {};
+  if (studyYearId) params.study_year_id = studyYearId;
+  return api.get<Record<string, unknown>>(`/academic-progression/student/${studentId}/evaluate`, params);
+}
+
+export async function promoteStudent(studentId: string, studyYearId?: string) {
+  return api.post<Record<string, unknown>>(`/academic-progression/student/${studentId}/promote`, {
+    study_year_id: studyYearId,
+  });
+}
+
+export async function fetchRetakeableSubjects(studentId: string) {
+  return api.get<Record<string, unknown>[]>(`/academic-progression/student/${studentId}/retakeable-subjects`);
+}
+
+export async function enrollRetakeSubjects(
+  studentId: string,
+  subjectIds: string[],
+  semesterId: string,
+  studyYearId: string,
+  departmentId: string,
+  semesterNumber: number,
+  isPaying: boolean = false
+) {
+  return api.post<Record<string, unknown>>(`/academic-progression/student/${studentId}/enroll-retake`, {
+    subject_ids: subjectIds,
+    semester_id: semesterId,
+    study_year_id: studyYearId,
+    department_id: departmentId,
+    semester_number: semesterNumber,
+    is_paying: isPaying,
+  });
+}
+
+export async function bulkEvaluateStudents(departmentId?: string, studyYearId?: string) {
+  return api.post<Record<string, unknown>>('/academic-progression/bulk-evaluate', {
+    department_id: departmentId,
+    study_year_id: studyYearId,
+  });
+}
+
+export async function transitionSemesterStatus(semesterId: string, status: string) {
+  return api.post<Record<string, unknown>>(`/semesters/${semesterId}/transition-status`, { status });
+}
+
+export async function bulkPromoteStudents(departmentId?: string, studyYearId?: string) {
+  return api.post<Record<string, unknown>>('/academic-progression/bulk-promote', {
+    department_id: departmentId,
+    study_year_id: studyYearId,
+  });
+}
+
+// ============================================
+// DEPARTMENT TRANSFER API
+// ============================================
+
+export async function fetchDepartmentTransfers(params?: Record<string, string>) {
+  return api.get<Record<string, unknown>[]>('/department-transfers', params);
+}
+
+export async function initiateDepartmentTransfer(studentId: string, toDepartmentId: string, reason?: string) {
+  return api.post<Record<string, unknown>>('/department-transfers/initiate', {
+    student_id: studentId,
+    to_department_id: toDepartmentId,
+    reason,
+  });
+}
+
+export async function executeDepartmentTransfer(transferId: string, adminNotes?: string) {
+  return api.post<Record<string, unknown>>(`/department-transfers/${transferId}/execute`, { admin_notes: adminNotes });
+}
+
+export async function rejectDepartmentTransfer(transferId: string, adminNotes?: string) {
+  return api.post<Record<string, unknown>>(`/department-transfers/${transferId}/reject`, { admin_notes: adminNotes });
+}
+
+export async function fetchStudentTransfers(studentId: string) {
+  return api.get<Record<string, unknown>[]>(`/department-transfers/student/${studentId}`);
+}
+
+// ============================================
+// NOTIFICATIONS API
+// ============================================
+
+export async function fetchNotifications(params?: Record<string, string>) {
+  return api.get<Record<string, unknown>>('/notifications', params);
+}
+
+export async function fetchUnreadNotificationCount() {
+  return api.get<{ unread_count: number }>('/notifications/unread-count');
+}
+
+export async function markNotificationsAsRead(notificationIds: string[]) {
+  return api.post<Record<string, unknown>>('/notifications/mark-read', { notification_ids: notificationIds });
+}
+
+export async function markAllNotificationsAsRead() {
+  return api.post<Record<string, unknown>>('/notifications/mark-all-read', {});
+}
+
+// ============================================
+// DATA EXPORT API (CSV Downloads)
+// ============================================
+
+export async function exportStudents(params?: Record<string, string>) {
+  return api.download('/export/students', params, `student_list_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+export async function exportTeachers(params?: Record<string, string>) {
+  return api.download('/export/teachers', params, `teacher_list_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+export async function exportSubjects(params?: Record<string, string>) {
+  return api.download('/export/subjects', params, `subject_list_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+export async function exportGrades(params?: Record<string, string>) {
+  return api.download('/export/grades', params, `grade_sheet_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+export async function exportAttendance(params?: Record<string, string>) {
+  return api.download('/export/attendance', params, `attendance_report_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+export async function exportInvoices(params?: Record<string, string>) {
+  return api.download('/export/invoices', params, `invoice_report_${new Date().toISOString().slice(0, 10)}.csv`);
 }

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api-client";
+import { exportInvoices } from "@/lib/jwt-api";
 import { DollarSign, Search, Download, CheckCircle, Clock, AlertCircle, X, CreditCard, Settings, ChevronDown, ChevronUp, Tag, Percent, Gift, BookOpen, Layers } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -205,9 +206,18 @@ export default function FeesPage() {
                 هيكل الرسوم
               </button>
             )}
-            <button type="button" className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            <button
+              type="button"
+              onClick={() => {
+                const params: Record<string, string> = {};
+                if (searchTerm) params.search = searchTerm;
+                if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
+                exportInvoices(params);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
               <Download className="h-4 w-4" />
-              تصدير
+              تصدير CSV
             </button>
           </div>
         </div>

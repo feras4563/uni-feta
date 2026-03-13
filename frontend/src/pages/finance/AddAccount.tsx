@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Save, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { apiRequest } from '@/lib/jwt-auth';
+import { apiRequest } from '@/lib/api-client';
 
 type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
 type RootAccountType = 'assets' | 'liabilities' | 'equity' | 'revenue' | 'expenses';

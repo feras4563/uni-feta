@@ -5,7 +5,7 @@ import {
   fetchSemesters, 
   fetchDepartments
 } from "@/lib/api";
-import { apiRequest } from "@/lib/jwt-auth";
+import { apiRequest } from "@/lib/api-client";
 import { Calendar, Zap, List, AlertCircle, CheckCircle, Loader } from "lucide-react";
 
 type TimetableGroupResponse = {

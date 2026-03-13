@@ -39,34 +39,45 @@ use App\Http\Controllers\Api\UserManagementController;
 use App\Http\Controllers\Api\StudentPortalController;
 use App\Http\Controllers\Api\HolidayController;
 use App\Http\Controllers\Api\ScheduleOverviewController;
+use App\Http\Controllers\Api\AcademicProgressionController;
+use App\Http\Controllers\Api\DepartmentTransferController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\ExportController;
 
 /*
 |--------------------------------------------------------------------------
 | API Routes
 |--------------------------------------------------------------------------
+|
+| All routes are registered under /api/v1/ as the canonical prefix.
+| For backward compatibility, the same routes are also available
+| at /api/ (no version prefix). New clients should use /api/v1/.
+|
 */
 
-// Public routes (no authentication required)
-Route::post('/auth/register', [AuthController::class, 'register']);
-Route::post('/auth/login', [AuthController::class, 'login']);
+$registerRoutes = function () {
+    // Public routes (no authentication required)
+    Route::post('/auth/register', [AuthController::class, 'register']);
+    Route::post('/auth/login', [AuthController::class, 'login']);
 
-// Health check
-Route::get('/health', function () {
-    return response()->json([
-        'status' => 'ok',
-        'timestamp' => now()->toIso8601String(),
-    ]);
-});
+    // Health check
+    Route::get('/health', function () {
+        return response()->json([
+            'status' => 'ok',
+            'timestamp' => now()->toIso8601String(),
+            'api_version' => 'v1',
+        ]);
+    });
 
-// System Settings (public access for app initialization)
-Route::get('/system-settings', [SystemSettingsController::class, 'index']);
+    // System Settings (public access for app initialization)
+    Route::get('/system-settings', [SystemSettingsController::class, 'index']);
 
-// Time Slots (public read access for timetable display)
-Route::get('/time-slots', [TimeSlotController::class, 'index']);
-Route::get('/time-slots/{id}', [TimeSlotController::class, 'show']);
+    // Time Slots (public read access for timetable display)
+    Route::get('/time-slots', [TimeSlotController::class, 'index']);
+    Route::get('/time-slots/{id}', [TimeSlotController::class, 'show']);
 
-// Protected routes (authentication required)
-Route::middleware('auth:api')->group(function () {
+    // Protected routes (authentication required)
+    Route::middleware('auth:api')->group(function () {
     
     // Auth routes
     Route::prefix('auth')->group(function () {
@@ -175,6 +186,7 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/current', [SemesterController::class, 'current']);
         Route::post('/set-current', [SemesterController::class, 'setCurrent']);
         Route::get('/{id}', [SemesterController::class, 'show']);
+        Route::post('/{id}/transition-status', [SemesterController::class, 'transitionStatus']);
         Route::get('/{id}/registered-students', [SemesterController::class, 'getRegisteredStudents']);
         Route::put('/{id}', [SemesterController::class, 'update']);
         Route::patch('/{id}', [SemesterController::class, 'update']);
@@ -212,6 +224,7 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('grades')->group(function () {
         Route::get('/', [GradeController::class, 'index']);
         Route::post('/', [GradeController::class, 'store']);
+        Route::get('/summary', [GradeController::class, 'summary']);
         Route::get('/student/{studentId}', [GradeController::class, 'byStudent']);
         Route::get('/subject/{subjectId}', [GradeController::class, 'bySubject']);
         Route::get('/student/{studentId}/subject/{subjectId}', [GradeController::class, 'studentSubjectGrades']);
@@ -466,6 +479,44 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/{id}', [ActionLogController::class, 'show']);
     });
 
+    // Department Transfer Routes (manager only)
+    Route::prefix('department-transfers')->middleware('permission:students,edit')->group(function () {
+        Route::get('/', [DepartmentTransferController::class, 'index']);
+        Route::post('/initiate', [DepartmentTransferController::class, 'initiate']);
+        Route::post('/{id}/execute', [DepartmentTransferController::class, 'execute']);
+        Route::post('/{id}/reject', [DepartmentTransferController::class, 'reject']);
+        Route::get('/{id}', [DepartmentTransferController::class, 'show']);
+        Route::get('/student/{studentId}', [DepartmentTransferController::class, 'studentTransfers']);
+    });
+
+    // Notification Routes (all authenticated users)
+    Route::prefix('notifications')->group(function () {
+        Route::get('/', [NotificationController::class, 'index']);
+        Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::post('/mark-read', [NotificationController::class, 'markAsRead']);
+        Route::post('/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+    });
+
+    // Data Export Routes (CSV)
+    Route::prefix('export')->group(function () {
+        Route::get('/students', [ExportController::class, 'students'])->middleware('permission:students,view');
+        Route::get('/teachers', [ExportController::class, 'teachers'])->middleware('permission:teachers,view');
+        Route::get('/subjects', [ExportController::class, 'subjects']);
+        Route::get('/grades', [ExportController::class, 'grades']);
+        Route::get('/attendance', [ExportController::class, 'attendance'])->middleware('permission:attendance,view');
+        Route::get('/invoices', [ExportController::class, 'invoices'])->middleware('permission:fees,view');
+    });
+
+    // Academic Progression Routes (manager only)
+    Route::prefix('academic-progression')->middleware('permission:students,edit')->group(function () {
+        Route::get('/student/{studentId}/evaluate', [AcademicProgressionController::class, 'evaluate']);
+        Route::post('/student/{studentId}/promote', [AcademicProgressionController::class, 'promote']);
+        Route::get('/student/{studentId}/retakeable-subjects', [AcademicProgressionController::class, 'retakeableSubjects']);
+        Route::post('/student/{studentId}/enroll-retake', [AcademicProgressionController::class, 'enrollRetake']);
+        Route::post('/bulk-evaluate', [AcademicProgressionController::class, 'bulkEvaluate']);
+        Route::post('/bulk-promote', [AcademicProgressionController::class, 'bulkPromote']);
+    });
+
     // Teacher Portal Routes (teacher role only - scoped to their own data)
     Route::prefix('teacher-portal')->middleware('role:teacher')->group(function () {
         Route::get('/dashboard', [TeacherPortalController::class, 'dashboard']);
@@ -496,4 +547,11 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/my-attendance', [StudentPortalController::class, 'myAttendance']);
         Route::get('/my-profile', [StudentPortalController::class, 'myProfile']);
     });
-});
+    }); // end auth:api middleware
+}; // end $registerRoutes closure
+
+// Register routes under /api/v1/ (canonical versioned prefix)
+Route::prefix('v1')->group($registerRoutes);
+
+// Backward compatibility: register the same routes at /api/ (no version prefix)
+$registerRoutes();
