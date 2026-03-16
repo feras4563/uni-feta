@@ -14,7 +14,7 @@ class UpdateGradeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'grade_type' => 'sometimes|required|in:midterm,final,assignment,quiz,project,participation,homework,classwork',
+            'grade_type' => 'sometimes|required|in:classwork,midterm,final',
             'grade_name' => 'sometimes|required|string',
             'grade_value' => 'sometimes|required|numeric|min:0',
             'max_grade' => 'sometimes|required|numeric|min:0.01',

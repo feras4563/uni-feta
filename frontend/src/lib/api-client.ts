@@ -169,7 +169,7 @@ class APIClient {
 
     const blob = await response.blob();
     const disposition = response.headers.get('content-disposition');
-    let filename = explicitFilename || 'export.csv';
+    let filename = explicitFilename || 'export.xls';
     if (!explicitFilename && disposition) {
       const match = disposition.match(/filename="?([^"]+)"?/);
       if (match) filename = match[1];

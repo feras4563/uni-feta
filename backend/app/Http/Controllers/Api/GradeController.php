@@ -7,6 +7,7 @@ use App\Http\Requests\StoreGradeRequest;
 use App\Http\Requests\UpdateGradeRequest;
 use App\Models\StudentGrade;
 use App\Models\Semester;
+use App\Services\GradeCalculationService;
 use App\Services\GradeFinalizationService;
 use Illuminate\Http\Request;
 
@@ -169,21 +170,18 @@ class GradeController extends Controller
             ->orderBy('grade_date', 'desc')
             ->get();
 
-        $totalValue = $grades->sum('grade_value');
-        $totalMax = $grades->sum('max_grade');
-        $percentage = $totalMax > 0 ? round(($totalValue / $totalMax) * 100, 1) : 0;
-        $letterGrade = $this->getLetterGrade($percentage);
-        $gpa = $this->getGPA($percentage);
+        $agg = GradeCalculationService::aggregateGrades($grades);
+        $isFailing = $agg['percentage'] < 50;
 
         return response()->json([
             'grades' => $grades,
-            'total_value' => round($totalValue, 2),
-            'total_max' => round($totalMax, 2),
-            'percentage' => $percentage,
-            'letter_grade' => $letterGrade,
-            'gpa' => $gpa,
-            'status' => $percentage < 50 ? 'failed' : 'passed',
-            'needs_retake' => $percentage < 50,
+            'total_value' => $agg['total_value'],
+            'total_max' => $agg['total_max'],
+            'percentage' => $agg['percentage'],
+            'letter_grade' => $agg['letter_grade'],
+            'gpa' => $agg['gpa'],
+            'status' => $isFailing ? 'failed' : 'passed',
+            'needs_retake' => $isFailing,
         ]);
     }
 
@@ -235,11 +233,10 @@ class GradeController extends Controller
             $key = $enrollment->student_id . '|' . $enrollment->subject_id;
             $subjectGrades = $grades->get($key, collect());
 
-            $totalValue = $subjectGrades->sum('grade_value');
-            $totalMax = $subjectGrades->sum('max_grade');
-            $percentage = $totalMax > 0 ? round(($totalValue / $totalMax) * 100, 1) : null;
-            $letterGrade = $percentage !== null ? $this->getLetterGrade($percentage) : null;
-            $gpa = $percentage !== null ? $this->getGPA($percentage) : null;
+            $agg = GradeCalculationService::aggregateGrades($subjectGrades);
+            $percentage = $subjectGrades->isNotEmpty() ? $agg['percentage'] : null;
+            $letterGrade = $percentage !== null ? $agg['letter_grade'] : null;
+            $gpa = $percentage !== null ? $agg['gpa'] : null;
             $isFailing = $percentage !== null && $percentage < 50;
             $publishedCount = $subjectGrades->where('is_published', true)->count();
 
@@ -259,8 +256,8 @@ class GradeController extends Controller
                 'is_retake' => $enrollment->is_retake ?? false,
                 'grade_count' => $subjectGrades->count(),
                 'published_count' => $publishedCount,
-                'total_value' => round($totalValue, 2),
-                'total_max' => round($totalMax, 2),
+                'total_value' => $agg['total_value'],
+                'total_max' => $agg['total_max'],
                 'percentage' => $percentage,
                 'letter_grade' => $letterGrade,
                 'gpa' => $gpa,
@@ -289,27 +286,4 @@ class GradeController extends Controller
         ]);
     }
 
-    private function getLetterGrade(float $percentage): array
-    {
-        if ($percentage >= 90) return ['letter' => 'A', 'label' => 'ممتاز', 'label_en' => 'Excellent'];
-        if ($percentage >= 80) return ['letter' => 'B', 'label' => 'جيد جداً', 'label_en' => 'Very Good'];
-        if ($percentage >= 70) return ['letter' => 'C', 'label' => 'جيد', 'label_en' => 'Good'];
-        if ($percentage >= 60) return ['letter' => 'D', 'label' => 'مقبول', 'label_en' => 'Acceptable'];
-        if ($percentage >= 50) return ['letter' => 'D-', 'label' => 'مقبول ضعيف', 'label_en' => 'Weak Pass'];
-        return ['letter' => 'F', 'label' => 'راسب', 'label_en' => 'Fail'];
-    }
-
-    private function getGPA(float $percentage): float
-    {
-        if ($percentage >= 90) return 4.0;
-        if ($percentage >= 85) return 3.7;
-        if ($percentage >= 80) return 3.3;
-        if ($percentage >= 75) return 3.0;
-        if ($percentage >= 70) return 2.7;
-        if ($percentage >= 65) return 2.3;
-        if ($percentage >= 60) return 2.0;
-        if ($percentage >= 55) return 1.7;
-        if ($percentage >= 50) return 1.0;
-        return 0.0;
-    }
 }

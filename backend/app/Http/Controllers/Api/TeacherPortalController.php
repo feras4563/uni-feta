@@ -376,7 +376,7 @@ class TeacherPortalController extends Controller
             'subject_id' => 'required|exists:subjects,id',
             'grades' => 'required|array|min:1',
             'grades.*.student_id' => 'required|exists:students,id',
-            'grades.*.grade_type' => 'required|in:midterm,final,assignment,quiz,project,participation,homework,classwork',
+            'grades.*.grade_type' => 'required|in:classwork,midterm,final',
             'grades.*.grade_name' => 'required|string|max:255',
             'grades.*.grade_value' => 'required|numeric|min:0',
             'grades.*.max_grade' => 'required|numeric|min:0.01',
@@ -429,7 +429,7 @@ class TeacherPortalController extends Controller
             ->where('teacher_id', $teacher->id)
             ->whereIn('student_id', $studentIds)
             ->get()
-            ->keyBy(fn ($g) => $g->student_id . '|' . $g->grade_type . '|' . $g->grade_name);
+            ->keyBy(fn ($g) => $g->student_id . '|' . $g->grade_type);
 
         $created = [];
         $updated = [];
@@ -452,7 +452,7 @@ class TeacherPortalController extends Controller
         $publishedNotificationGrades = [];
 
         foreach ($request->grades as $gradeData) {
-            $lookupKey = $gradeData['student_id'] . '|' . $gradeData['grade_type'] . '|' . $gradeData['grade_name'];
+            $lookupKey = $gradeData['student_id'] . '|' . $gradeData['grade_type'];
             $existing = $existingGrades->get($lookupKey);
 
             $gradePayload = [
@@ -1192,14 +1192,9 @@ class TeacherPortalController extends Controller
     private function buildGradePublishedNotificationContent(StudentGrade $grade): array
     {
         $gradeTypeLabels = [
-            'assignment' => 'واجب',
-            'quiz' => 'اختبار قصير',
-            'midterm' => 'امتحان نصف الفصل',
-            'final' => 'الامتحان النهائي',
-            'project' => 'مشروع',
-            'participation' => 'مشاركة',
-            'homework' => 'واجب بيتي',
-            'classwork' => 'نشاط صفي',
+            'classwork' => 'درجة أعمال الفصل',
+            'midterm' => 'درجة الامتحان النصفي',
+            'final' => 'درجة الامتحان النهائي',
         ];
 
         $subjectName = $grade->subject?->name ?? 'المادة';

@@ -6,6 +6,7 @@ use App\Models\StudentGrade;
 use App\Models\StudentSubjectEnrollment;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\GradeCalculationService;
 
 class GradeFinalizationService
 {
@@ -93,7 +94,7 @@ class GradeFinalizationService
         $percentage = $totalMax > 0 ? round(($totalValue / $totalMax) * 100, 2) : 0;
 
         $passed = $percentage >= self::PASS_PERCENTAGE;
-        $letterGrade = self::getLetterGrade($percentage);
+        $letterGrade = GradeCalculationService::percentageToLetter($percentage);
 
         // Determine new status: any published grades → mark completed or failed.
         // Teachers may use any combination of grade types (midterm, assignment, quiz,
@@ -190,16 +191,4 @@ class GradeFinalizationService
         return $percentage >= self::PASS_PERCENTAGE;
     }
 
-    /**
-     * Get letter grade from percentage.
-     */
-    private static function getLetterGrade(float $percentage): string
-    {
-        if ($percentage >= 90) return 'A';
-        if ($percentage >= 80) return 'B';
-        if ($percentage >= 70) return 'C';
-        if ($percentage >= 60) return 'D';
-        if ($percentage >= 50) return 'D-';
-        return 'F';
-    }
 }

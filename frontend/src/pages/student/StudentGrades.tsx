@@ -6,19 +6,15 @@ import { formatDate } from '../../lib/utils';
 // Grade type columns shown in the summary table
 const GRADE_COLUMNS = [
   { key: 'classwork', label: 'أعمال الفصل' },
-  { key: 'homework', label: 'واجبات منزلية' },
-  { key: 'assignment', label: 'واجبات' },
-  { key: 'quiz', label: 'اختبارات قصيرة' },
-  { key: 'midterm', label: 'نصفي' },
-  { key: 'final', label: 'نهائي' },
-  { key: 'project', label: 'مشاريع' },
-  { key: 'participation', label: 'مشاركة' },
+  { key: 'midterm', label: 'النصفي' },
+  { key: 'final', label: 'النهائي' },
 ] as const;
 
 export default function StudentGrades() {
   const { user } = useAuth();
   const [bySubject, setBySubject] = useState<any[]>([]);
   const [overallGPA, setOverallGPA] = useState<number>(0);
+  const [totalCredits, setTotalCredits] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [expandedSubject, setExpandedSubject] = useState<string | null>(null);
 
@@ -29,9 +25,10 @@ export default function StudentGrades() {
   const loadGrades = async () => {
     try {
       setLoading(true);
-      const data = await fetchStudentMyGrades();
-      setBySubject(data.by_subject || []);
-      setOverallGPA(data.overall_gpa || 0);
+      const data: any = await fetchStudentMyGrades();
+      setBySubject(Array.isArray(data.by_subject) ? data.by_subject : []);
+      setOverallGPA(Number(data.overall_gpa) || 0);
+      setTotalCredits(Number(data.total_credits) || 0);
     } catch (error) {
       console.error('Failed to load grades:', error);
     } finally {
@@ -66,10 +63,15 @@ export default function StudentGrades() {
         <div className="flex items-center gap-4 mt-1">
           <p className="text-sm text-gray-500">الدرجات المنشورة للفصل الحالي</p>
           {bySubject.length > 0 && (
-            <span className="text-sm text-gray-500">
-              المعدل التراكمي: <span className="font-bold text-gray-800">{overallGPA.toFixed(2)}</span>
-              <span className="text-gray-400"> / 4.0</span>
-            </span>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-500">
+                المعدل التراكمي: <span className="font-bold text-gray-800">{overallGPA.toFixed(2)}</span>
+                <span className="text-gray-400"> / 4.0</span>
+              </span>
+              <span className="text-sm text-gray-500">
+                إجمالي الوحدات: <span className="font-bold text-gray-800">{totalCredits}</span>
+              </span>
+            </div>
           )}
         </div>
       </div>
@@ -99,6 +101,7 @@ export default function StudentGrades() {
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="text-right px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">المادة</th>
                     <th className="text-right px-3 py-3 font-semibold text-gray-600 whitespace-nowrap">الرمز</th>
+                    <th className="text-center px-3 py-3 font-semibold text-gray-600 whitespace-nowrap">الوحدات</th>
                     {activeColumns.map(col => (
                       <th key={col.key} className="text-center px-3 py-3 font-semibold text-gray-600 whitespace-nowrap">{col.label}</th>
                     ))}
@@ -128,6 +131,7 @@ export default function StudentGrades() {
                           </div>
                         </td>
                         <td className="px-3 py-3 text-gray-500 font-mono text-xs">{subjectGroup.subject?.code || '—'}</td>
+                        <td className="px-3 py-3 text-center text-gray-700 font-medium">{subjectGroup.credits || subjectGroup.subject?.credits || '—'}</td>
                         {activeColumns.map(col => {
                           const agg = getTypeAggregate(subjectGroup.grades, col.key);
                           if (!agg) return <td key={col.key} className="px-3 py-3 text-center text-gray-300">—</td>;
@@ -172,11 +176,12 @@ export default function StudentGrades() {
                 {bySubject.length > 1 && (
                   <tfoot>
                     <tr className="bg-gray-50 border-t-2 border-gray-200">
-                      <td className="px-4 py-3 font-bold text-gray-700" colSpan={2 + activeColumns.length}>المعدل العام</td>
+                      <td className="px-4 py-3 font-bold text-gray-700" colSpan={3 + activeColumns.length}>المعدل العام (موزون بالوحدات)</td>
                       <td className="px-3 py-3 text-center bg-gray-100" colSpan={2}>
                         <span className="font-bold text-gray-900">
                           GPA {overallGPA.toFixed(2)}
                         </span>
+                        <span className="text-xs text-gray-500 mr-1">({totalCredits} وحدة)</span>
                       </td>
                       <td className="px-3 py-3 text-center" colSpan={2}>
                         {failedCount > 0 && (
@@ -223,8 +228,7 @@ export default function StudentGrades() {
                       const pct = grade.percentage ?? (grade.max_grade > 0 ? Math.round((grade.grade_value / grade.max_grade) * 100) : 0);
                       const lg = grade.letter_grade;
                       const typeLabels: Record<string, string> = {
-                        midterm: 'نصفي', final: 'نهائي', assignment: 'واجب', quiz: 'اختبار قصير',
-                        project: 'مشروع', participation: 'مشاركة', homework: 'واجب منزلي', classwork: 'أعمال فصل',
+                        classwork: 'أعمال الفصل', midterm: 'الامتحان النصفي', final: 'الامتحان النهائي',
                       };
                       return (
                         <tr key={grade.id} className="hover:bg-gray-50">

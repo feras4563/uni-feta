@@ -1076,25 +1076,33 @@ export async function markAllNotificationsAsRead() {
 // ============================================
 
 export async function exportStudents(params?: Record<string, string>) {
-  return api.download('/export/students', params, `student_list_${new Date().toISOString().slice(0, 10)}.csv`);
+  return api.download('/export/students', params, `student_list_${new Date().toISOString().slice(0, 10)}.xls`);
 }
 
 export async function exportTeachers(params?: Record<string, string>) {
-  return api.download('/export/teachers', params, `teacher_list_${new Date().toISOString().slice(0, 10)}.csv`);
+  return api.download('/export/teachers', params, `teacher_list_${new Date().toISOString().slice(0, 10)}.xls`);
 }
 
 export async function exportSubjects(params?: Record<string, string>) {
-  return api.download('/export/subjects', params, `subject_list_${new Date().toISOString().slice(0, 10)}.csv`);
+  return api.download('/export/subjects', params, `subject_list_${new Date().toISOString().slice(0, 10)}.xls`);
 }
 
 export async function exportGrades(params?: Record<string, string>) {
-  return api.download('/export/grades', params, `grade_sheet_${new Date().toISOString().slice(0, 10)}.csv`);
+  return api.download('/export/grades', params, `grade_sheet_${new Date().toISOString().slice(0, 10)}.xls`);
 }
 
 export async function exportAttendance(params?: Record<string, string>) {
-  return api.download('/export/attendance', params, `attendance_report_${new Date().toISOString().slice(0, 10)}.csv`);
+  return api.download('/export/attendance', params, `attendance_report_${new Date().toISOString().slice(0, 10)}.xls`);
 }
 
 export async function exportInvoices(params?: Record<string, string>) {
-  return api.download('/export/invoices', params, `invoice_report_${new Date().toISOString().slice(0, 10)}.csv`);
+  return api.download('/export/invoices', params, `invoice_report_${new Date().toISOString().slice(0, 10)}.xls`);
+}
+
+// ============================================
+// FORM TEMPLATES API
+// ============================================
+
+export async function fetchFormTemplates() {
+  return api.get<any[]>('/form-templates');
 }

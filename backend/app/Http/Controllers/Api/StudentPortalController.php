@@ -14,6 +14,7 @@ use App\Models\TeacherSubject;
 use App\Models\Subject;
 use App\Models\StudentSemesterRegistration;
 use App\Models\AppUser;
+use App\Services\GradeCalculationService;
 use Illuminate\Http\Request;
 
 class StudentPortalController extends Controller
@@ -448,7 +449,7 @@ class StudentPortalController extends Controller
             ->orderBy('grade_date')
             ->get();
 
-        $assignmentTypes = ['assignment', 'homework', 'project', 'quiz', 'classwork', 'participation'];
+        $assignmentTypes = ['classwork', 'midterm', 'final'];
         $assignments = $publishedGrades
             ->whereIn('grade_type', $assignmentTypes)
             ->values()
@@ -873,7 +874,7 @@ class StudentPortalController extends Controller
         $query = StudentGrade::where('student_id', $student->id)
             ->where('is_published', true)
             ->with([
-                'subject:id,name,name_en,code',
+                'subject:id,name,name_en,code,credits',
                 'teacher:id,name,name_en',
                 'semester:id,name,name_en',
             ]);
@@ -892,46 +893,42 @@ class StudentPortalController extends Controller
         $grades->each(function ($grade) {
             $pct = $grade->max_grade > 0 ? round(($grade->grade_value / $grade->max_grade) * 100, 1) : 0;
             $grade->percentage = $pct;
-            $grade->letter_grade = $this->getLetterGrade($pct);
+            $grade->letter_grade = GradeCalculationService::percentageToLetterGrade($pct);
         });
 
-        // Group by subject
+        // Group by subject and aggregate
         $grouped = $grades->groupBy('subject_id')->map(function ($subjectGrades) {
             $subject = $subjectGrades->first()->subject;
-            $totalValue = 0;
-            $totalMax = 0;
-
-            foreach ($subjectGrades as $grade) {
-                $totalValue += $grade->grade_value;
-                $totalMax += $grade->max_grade;
-            }
-
-            $average = $totalMax > 0 ? round(($totalValue / $totalMax) * 100, 1) : 0;
-            $letterGrade = $this->getLetterGrade($average);
-            $gpa = $this->getGPA($average);
-            $isFailing = $average < 50;
+            $credits = $subject?->credits ?? 0;
+            $agg = GradeCalculationService::aggregateGrades($subjectGrades);
+            $isFailing = $agg['percentage'] < 50;
 
             return [
                 'subject' => $subject,
                 'grades' => $subjectGrades->values(),
-                'average' => $average,
-                'total_value' => round($totalValue, 2),
-                'total_max' => round($totalMax, 2),
-                'letter_grade' => $letterGrade,
-                'gpa' => $gpa,
+                'credits' => $credits,
+                'average' => $agg['percentage'],
+                'total_value' => $agg['total_value'],
+                'total_max' => $agg['total_max'],
+                'letter_grade' => $agg['letter_grade'],
+                'gpa' => $agg['gpa'],
                 'status' => $isFailing ? 'failed' : 'passed',
                 'needs_retake' => $isFailing,
                 'grade_count' => $subjectGrades->count(),
             ];
         })->values();
 
-        // Overall GPA across all subjects
-        $overallGPA = $grouped->count() > 0 ? round($grouped->avg('gpa'), 2) : 0;
+        // Credit-weighted overall GPA: sum(gpa × credits) / sum(credits)
+        $weightedResult = GradeCalculationService::calculateWeightedGPA(
+            $grouped->map(fn($s) => ['gpa' => $s['gpa'], 'credits' => $s['credits']])->all()
+        );
 
         return response()->json([
             'grades' => $grades,
             'by_subject' => $grouped,
-            'overall_gpa' => $overallGPA,
+            'overall_gpa' => $weightedResult['gpa'],
+            'total_credits' => $weightedResult['total_credits'],
+            'total_weighted_points' => $weightedResult['total_weighted_points'],
         ]);
     }
 
@@ -998,33 +995,4 @@ class StudentPortalController extends Controller
         return response()->json($student);
     }
 
-    /**
-     * Convert percentage to letter grade (Arab university standard scale)
-     */
-    private function getLetterGrade(float $percentage): array
-    {
-        if ($percentage >= 90) return ['letter' => 'A', 'label' => 'ممتاز', 'label_en' => 'Excellent'];
-        if ($percentage >= 80) return ['letter' => 'B', 'label' => 'جيد جداً', 'label_en' => 'Very Good'];
-        if ($percentage >= 70) return ['letter' => 'C', 'label' => 'جيد', 'label_en' => 'Good'];
-        if ($percentage >= 60) return ['letter' => 'D', 'label' => 'مقبول', 'label_en' => 'Acceptable'];
-        if ($percentage >= 50) return ['letter' => 'D-', 'label' => 'مقبول ضعيف', 'label_en' => 'Weak Pass'];
-        return ['letter' => 'F', 'label' => 'راسب', 'label_en' => 'Fail'];
-    }
-
-    /**
-     * Convert percentage to GPA on 4.0 scale
-     */
-    private function getGPA(float $percentage): float
-    {
-        if ($percentage >= 90) return 4.0;
-        if ($percentage >= 85) return 3.7;
-        if ($percentage >= 80) return 3.3;
-        if ($percentage >= 75) return 3.0;
-        if ($percentage >= 70) return 2.7;
-        if ($percentage >= 65) return 2.3;
-        if ($percentage >= 60) return 2.0;
-        if ($percentage >= 55) return 1.7;
-        if ($percentage >= 50) return 1.0;
-        return 0.0;
-    }
 }

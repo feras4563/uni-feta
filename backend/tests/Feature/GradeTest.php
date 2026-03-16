@@ -113,8 +113,8 @@ class GradeTest extends TestCase
                 'student_id' => $this->student->id,
                 'subject_id' => $this->subject->id,
                 'teacher_id' => $this->teacher->id,
-                'grade_type' => 'quiz',
-                'grade_name' => 'Quiz 1',
+                'grade_type' => 'classwork',
+                'grade_name' => 'درجة أعمال الفصل',
                 'grade_value' => 110,
                 'max_grade' => 100,
             ]);
@@ -129,8 +129,8 @@ class GradeTest extends TestCase
             'subject_id' => $this->subject->id,
             'teacher_id' => $this->teacher->id,
             'semester_id' => $this->semester->id,
-            'grade_type' => 'assignment',
-            'grade_name' => 'Assignment 1',
+            'grade_type' => 'classwork',
+            'grade_name' => 'درجة أعمال الفصل',
             'grade_value' => 70,
             'max_grade' => 100,
         ]);

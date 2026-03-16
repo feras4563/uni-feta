@@ -10,6 +10,7 @@ use App\Models\StudentSubjectEnrollment;
 use App\Models\StudyYear;
 use App\Models\Subject;
 use App\Services\StudentPortalService;
+use App\Services\GradeCalculationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

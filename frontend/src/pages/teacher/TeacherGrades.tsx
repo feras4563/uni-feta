@@ -14,13 +14,8 @@ interface GradeEntry {
 
 const GRADE_TYPES = [
   { value: 'classwork', label: 'درجة أعمال الفصل', icon: 'fa-clipboard-list', color: 'green', defaultMax: 30 },
-  { value: 'homework', label: 'واجبات منزلية', icon: 'fa-home', color: 'teal', defaultMax: 10 },
   { value: 'midterm', label: 'درجة الامتحان النصفي', icon: 'fa-file-alt', color: 'blue', defaultMax: 30 },
   { value: 'final', label: 'درجة الامتحان النهائي', icon: 'fa-file-signature', color: 'red', defaultMax: 40 },
-  { value: 'assignment', label: 'واجب / تكليف', icon: 'fa-tasks', color: 'cyan', defaultMax: 15 },
-  { value: 'participation', label: 'حضور ومشاركة', icon: 'fa-clipboard-check', color: 'purple', defaultMax: 15 },
-  { value: 'quiz', label: 'اختبار قصير', icon: 'fa-question-circle', color: 'yellow', defaultMax: 10 },
-  { value: 'project', label: 'مشروع', icon: 'fa-project-diagram', color: 'indigo', defaultMax: 20 },
 ];
 
 export default function TeacherGrades() {
@@ -28,7 +23,6 @@ export default function TeacherGrades() {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedGradeType, setSelectedGradeType] = useState<string>('classwork');
-  const [gradeName, setGradeName] = useState<string>('');
   const [maxGrade, setMaxGrade] = useState<number>(30);
   const [students, setStudents] = useState<any[]>([]);
   const [existingGrades, setExistingGrades] = useState<any[]>([]);
@@ -54,7 +48,6 @@ export default function TeacherGrades() {
     const type = GRADE_TYPES.find(t => t.value === selectedGradeType);
     if (type) {
       setMaxGrade(type.defaultMax);
-      setGradeName(type.label);
     }
   }, [selectedGradeType]);
 
@@ -105,12 +98,13 @@ export default function TeacherGrades() {
     if (!selectedSubject) return;
 
     const grades: GradeEntry[] = [];
+    const currentTypeLabel = GRADE_TYPES.find(t => t.value === selectedGradeType)?.label || selectedGradeType;
     Object.entries(gradeInputs).forEach(([studentId, value]) => {
       if (value !== '' && value !== undefined) {
         grades.push({
           student_id: studentId,
           grade_type: selectedGradeType,
-          grade_name: gradeName || GRADE_TYPES.find(t => t.value === selectedGradeType)?.label || selectedGradeType,
+          grade_name: currentTypeLabel,
           grade_value: parseFloat(value),
           max_grade: maxGrade,
           weight: 1.0,
@@ -142,12 +136,13 @@ export default function TeacherGrades() {
     if (!selectedSubject) return;
 
     const grades: GradeEntry[] = [];
+    const currentTypeLabel = GRADE_TYPES.find(t => t.value === selectedGradeType)?.label || selectedGradeType;
     Object.entries(gradeInputs).forEach(([studentId, value]) => {
       if (value !== '' && value !== undefined) {
         grades.push({
           student_id: studentId,
           grade_type: selectedGradeType,
-          grade_name: gradeName || GRADE_TYPES.find(t => t.value === selectedGradeType)?.label || selectedGradeType,
+          grade_name: currentTypeLabel,
           grade_value: parseFloat(value),
           max_grade: maxGrade,
           weight: 1.0,
@@ -219,12 +214,12 @@ export default function TeacherGrades() {
   useEffect(() => {
     const inputs: Record<string, string> = {};
     existingGrades.forEach((g: any) => {
-      if (g.grade_type === selectedGradeType && g.grade_name === gradeName) {
+      if (g.grade_type === selectedGradeType) {
         inputs[g.student_id] = String(g.grade_value);
       }
     });
     setGradeInputs(inputs);
-  }, [selectedGradeType, gradeName, existingGrades]);
+  }, [selectedGradeType, existingGrades]);
 
   // Get grade summary per student
   const getStudentGradeSummary = (studentId: string) => {
@@ -278,7 +273,7 @@ export default function TeacherGrades() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">إدارة الدرجات والتقييم</h1>
-        <p className="text-gray-600 text-sm">إدخال وإدارة درجات الطلاب - نصفي، نهائي، واجبات، حضور</p>
+        <p className="text-gray-600 text-sm">إدخال وإدارة درجات الطلاب - أعمال الفصل، امتحان نصفي، امتحان نهائي</p>
       </div>
 
       {/* Message */}
@@ -308,7 +303,7 @@ export default function TeacherGrades() {
         <>
           {/* Controls Bar */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Subject Selector */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">المادة</label>
@@ -334,34 +329,9 @@ export default function TeacherGrades() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   {GRADE_TYPES.map(type => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
+                    <option key={type.value} value={type.value}>{type.label} (من {type.defaultMax})</option>
                   ))}
                 </select>
-              </div>
-
-              {/* Grade Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">اسم التقييم</label>
-                <input
-                  type="text"
-                  value={gradeName}
-                  onChange={(e) => setGradeName(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="مثال: امتحان نصفي 1"
-                />
-              </div>
-
-              {/* Max Grade */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">الدرجة القصوى</label>
-                <input
-                  type="number"
-                  value={maxGrade}
-                  onChange={(e) => setMaxGrade(Number(e.target.value))}
-                  min={1}
-                  max={100}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
               </div>
             </div>
 
@@ -486,7 +456,7 @@ export default function TeacherGrades() {
           </div>
 
           {/* Grade Type Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+          <div className="grid grid-cols-3 gap-3 mb-6">
             {GRADE_TYPES.map(type => {
               const typeGrades = existingGrades.filter((g: any) => g.grade_type === type.value);
               const isActive = selectedGradeType === type.value;
@@ -546,8 +516,8 @@ export default function TeacherGrades() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">#</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">الرقم الجامعي</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">اسم الطالب</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">الرقم الجامعي</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                         الدرجة (من {maxGrade})
                       </th>
@@ -561,7 +531,6 @@ export default function TeacherGrades() {
                       return (
                         <tr key={student.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
-                          <td className="px-4 py-3 text-sm font-mono text-gray-700">{student.campus_id}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center">
                               {student.photo_url ? (
@@ -574,6 +543,7 @@ export default function TeacherGrades() {
                               <span className="text-sm font-medium text-gray-900">{student.name}</span>
                             </div>
                           </td>
+                          <td className="px-4 py-3 text-sm font-mono text-gray-700">{student.campus_id}</td>
                           <td className="px-4 py-3 text-center">
                             <input
                               type="number"
@@ -616,8 +586,8 @@ export default function TeacherGrades() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-3 py-3 text-right text-xs font-medium text-gray-500">#</th>
-                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500">الرقم الجامعي</th>
                       <th className="px-3 py-3 text-right text-xs font-medium text-gray-500">اسم الطالب</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500">الرقم الجامعي</th>
                       {GRADE_TYPES.map(type => (
                         <th key={type.value} className="px-3 py-3 text-center text-xs font-medium text-gray-500">
                           <i className={`fas ${type.icon} ml-1 text-${type.color}-500`}></i>
@@ -643,7 +613,6 @@ export default function TeacherGrades() {
                       return (
                         <tr key={student.id} className={`hover:bg-gray-50 ${isFailing ? 'bg-red-50/40' : ''}`}>
                           <td className="px-3 py-2 text-sm text-gray-500">{index + 1}</td>
-                          <td className="px-3 py-2 text-sm font-mono text-gray-700">{student.campus_id}</td>
                           <td className="px-3 py-2">
                             <div className="flex items-center">
                               <span className="text-sm font-medium text-gray-900">{student.name}</span>
@@ -655,6 +624,7 @@ export default function TeacherGrades() {
                               )}
                             </div>
                           </td>
+                          <td className="px-3 py-2 text-sm font-mono text-gray-700">{student.campus_id}</td>
                           {GRADE_TYPES.map(type => {
                             const s = summary[type.value];
                             return (

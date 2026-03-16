@@ -68,6 +68,7 @@ import Timetable from "./pages/Timetable";
 import TimetableGroupView from "./pages/TimetableGroupView";
 import Attendance from "./pages/Attendance";
 import Grades from "./pages/Grades";
+import UniversityForms from "./pages/UniversityForms";
 import { JWTAuthProvider, useAuth } from "./contexts/JWTAuthContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import logo1 from "./assets/logo1.png";
@@ -196,6 +197,12 @@ function AppContent() {
                         <Link to="/students" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
                           <i className="fas fa-user-graduate text-xs ml-2"></i>
                           إدارة الطلاب
+                        </Link>
+                      )}
+                      {hasPermission('students', 'view') && (
+                        <Link to="/university-forms" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200">
+                          <i className="fas fa-file-alt text-xs ml-2"></i>
+                          النماذج الجامعية
                         </Link>
                       )}
                       {hasPermission('teachers', 'view') && (
@@ -532,6 +539,14 @@ function AppContent() {
             element={
               <ProtectedRoute requiredResource="students" requiredAction="view">
                 <StudentDetail />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/university-forms" 
+            element={
+              <ProtectedRoute requiredResource="students" requiredAction="view">
+                <UniversityForms />
               </ProtectedRoute>
             } 
           />

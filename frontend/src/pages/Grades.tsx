@@ -182,7 +182,7 @@ function GradeOverviewTab({
   const stats: any = (summary as any)?.stats || {};
 
   const filteredRows = useMemo(() => {
-    let result = rows;
+    let result = rows.filter((r: any) => r.status !== "no_grades");
     if (statusFilter) {
       result = result.filter((r: any) => r.status === statusFilter);
     }
@@ -257,7 +257,6 @@ function GradeOverviewTab({
               <option value="">الكل</option>
               <option value="passed">ناجح</option>
               <option value="failed">راسب</option>
-              <option value="no_grades">بدون درجات</option>
             </select>
           </div>
           <div>

@@ -411,24 +411,36 @@ class ExportController extends Controller
      */
     private function streamCsv(string $filename, array $headers, $rows, callable $mapRow): StreamedResponse
     {
+        $xlsFilename = preg_replace('/\.csv$/i', '.xls', $filename);
+
         return new StreamedResponse(function () use ($headers, $rows, $mapRow) {
-            $handle = fopen('php://output', 'w');
+            // HTML table format — Excel opens this natively with correct encoding and columns
+            echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
+            echo '<head><meta charset="UTF-8"><style>td,th{mso-number-format:\@;white-space:nowrap;border:1px solid #ccc;padding:4px 8px;font-family:Arial,sans-serif;font-size:12px;}th{background:#4472C4;color:#fff;font-weight:bold;}tr:nth-child(even) td{background:#f2f2f2;}</style></head>';
+            echo '<body><table dir="rtl">';
 
-            // BOM for Excel UTF-8 recognition
-            fwrite($handle, "\xEF\xBB\xBF");
-
-            // Header row — use tab separator so Excel always splits columns correctly
-            fputcsv($handle, $headers, "\t");
+            // Header row
+            echo '<tr>';
+            foreach ($headers as $h) {
+                echo '<th>' . htmlspecialchars((string) $h, ENT_QUOTES, 'UTF-8') . '</th>';
+            }
+            echo '</tr>';
 
             // Data rows
             foreach ($rows as $row) {
-                fputcsv($handle, $mapRow($row), "\t");
+                $mapped = $mapRow($row);
+                echo '<tr>';
+                foreach ($mapped as $cell) {
+                    $val = htmlspecialchars((string) ($cell ?? ''), ENT_QUOTES, 'UTF-8');
+                    echo '<td>' . $val . '</td>';
+                }
+                echo '</tr>';
             }
 
-            fclose($handle);
+            echo '</table></body></html>';
         }, 200, [
-            'Content-Type' => 'text/tab-separated-values; charset=UTF-8',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$xlsFilename}\"",
             'Cache-Control' => 'no-cache, no-store, must-revalidate',
             'Pragma' => 'no-cache',
             'Expires' => '0',

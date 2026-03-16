@@ -39,7 +39,7 @@ class StudentController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Student::with('department:id,name,name_en');
+        $query = Student::with(['department:id,name,name_en', 'enrollmentSemester:id,name,name_en,code']);
 
         // Search functionality
         if ($request->has('search') && $request->search) {
@@ -67,6 +67,19 @@ class StudentController extends Controller
         // Filter by year
         if ($request->has('year')) {
             $query->where('year', $request->year);
+        }
+
+        // Filter by nationality
+        if ($request->has('nationality') && $request->nationality) {
+            if ($request->nationality === 'foreign') {
+                $query->where(function($q) {
+                    $q->where('nationality', '!=', 'ليبيا')
+                      ->where('nationality', '!=', 'ليبي')
+                      ->where('nationality', '!=', 'ليبية');
+                });
+            } else {
+                $query->where('nationality', $request->nationality);
+            }
         }
 
         // Order by
@@ -106,7 +119,7 @@ class StudentController extends Controller
                 $data['id'] = $studentId;
 
                 $student = Student::create($data);
-                $student->load('department:id,name,name_en');
+                $student->load(['department:id,name,name_en', 'enrollmentSemester:id,name,name_en,code']);
 
                 // Auto-create login account if student has email
                 $generatedPassword = null;
@@ -144,6 +157,7 @@ class StudentController extends Controller
     {
         $student = Student::with([
             'department:id,name,name_en',
+            'enrollmentSemester:id,name,name_en,code',
             'semesterRegistrations.semester',
             'semesterRegistrations.studyYear',
             'grades.subject',
@@ -163,7 +177,7 @@ class StudentController extends Controller
         $student = Student::findOrFail($id);
 
         $student->update($request->all());
-        $student->load('department:id,name,name_en');
+        $student->load(['department:id,name,name_en', 'enrollmentSemester:id,name,name_en,code']);
 
         $this->logAction('update', 'students', $student->id, [
             'student_name' => $student->name,

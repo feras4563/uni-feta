@@ -43,6 +43,7 @@ use App\Http\Controllers\Api\AcademicProgressionController;
 use App\Http\Controllers\Api\DepartmentTransferController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ExportController;
+use App\Http\Controllers\Api\FormTemplateController;
 
 /*
 |--------------------------------------------------------------------------
@@ -498,6 +499,13 @@ $registerRoutes = function () {
         Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
         Route::post('/mark-read', [NotificationController::class, 'markAsRead']);
         Route::post('/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+    });
+
+    // Form Templates Routes
+    Route::prefix('form-templates')->group(function () {
+        Route::get('/', [FormTemplateController::class, 'index']);
+        Route::get('/serve/{filename}', [FormTemplateController::class, 'serve']);
+        Route::get('/download/{filename}', [FormTemplateController::class, 'download']);
     });
 
     // Data Export Routes (CSV)

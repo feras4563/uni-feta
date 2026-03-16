@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Student;
 use App\Models\StudentAcademicProgress;
 use App\Models\StudentSubjectEnrollment;
-use App\Models\StudentGrade;
 use App\Models\Subject;
 use App\Models\Semester;
 use Illuminate\Support\Facades\DB;
@@ -370,54 +369,13 @@ class AcademicProgressionService
      */
     public static function calculateCumulativeGPA(string $studentId): array
     {
-        // Get the best enrollment per subject (passed takes priority, then highest grade)
-        $enrollments = StudentSubjectEnrollment::where('student_id', $studentId)
-            ->whereIn('status', ['completed', 'failed'])
-            ->whereNotNull('grade')
-            ->with('subject:id,credits')
-            ->get()
-            ->groupBy('subject_id')
-            ->map(function ($group) {
-                // Prefer passed, then highest grade
-                $passed = $group->where('passed', true)->sortByDesc('grade')->first();
-                return $passed ?? $group->sortByDesc('grade')->first();
-            })
-            ->filter();
-
-        $totalWeightedPoints = 0;
-        $totalCredits = 0;
-        $subjectResults = [];
-
-        foreach ($enrollments as $enrollment) {
-            $credits = $enrollment->subject?->credits ?? 0;
-            if ($credits <= 0) continue;
-
-            $grade = (float) $enrollment->grade;
-            $maxGrade = 100;
-            $percentage = $maxGrade > 0 ? ($grade / $maxGrade) * 100 : 0;
-            $gpaPoints = StudentPortalService::aggregateGrades(collect([
-                (object) ['grade_value' => $grade, 'max_grade' => $maxGrade]
-            ]))['gpa'];
-
-            $totalWeightedPoints += $gpaPoints * $credits;
-            $totalCredits += $credits;
-
-            $subjectResults[] = [
-                'subject_id' => $enrollment->subject_id,
-                'credits' => $credits,
-                'grade' => $grade,
-                'gpa_points' => $gpaPoints,
-                'passed' => $enrollment->passed,
-            ];
-        }
-
-        $cumulativeGPA = $totalCredits > 0 ? round($totalWeightedPoints / $totalCredits, 2) : 0;
+        $result = GradeCalculationService::calculateCumulativeGPAFromEnrollments($studentId);
 
         return [
-            'gpa' => $cumulativeGPA,
-            'total_credits_counted' => $totalCredits,
-            'total_weighted_points' => round($totalWeightedPoints, 2),
-            'subjects_counted' => count($subjectResults),
+            'gpa' => $result['gpa'],
+            'total_credits_counted' => $result['total_credits'],
+            'total_weighted_points' => $result['total_weighted_points'],
+            'subjects_counted' => $result['subjects_counted'],
         ];
     }
 

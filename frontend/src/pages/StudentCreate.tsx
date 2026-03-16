@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchDepartments } from "../lib/api";
-import { createStudent, fetchNextStudentId } from "../lib/jwt-api";
+import { createStudent, fetchNextStudentId, fetchSemesters } from "../lib/jwt-api";
 import { usePermissions } from "../hooks/usePermissions";
+import { printFilledRegistrationForm } from "../lib/pdf-form-filler";
 
 export default function StudentCreate() {
   const navigate = useNavigate();
@@ -51,6 +52,7 @@ export default function StudentCreate() {
     
     // Enrollment
     department_id: "",
+    semester_id: "",
     year: "",
     status: "active",
     enrollment_date: new Date().toISOString().split('T')[0]
@@ -62,6 +64,12 @@ export default function StudentCreate() {
   const { data: departments = [] } = useQuery({
     queryKey: ["departments"],
     queryFn: fetchDepartments
+  });
+
+  // Load semesters
+  const { data: semesters = [] } = useQuery({
+    queryKey: ["semesters"],
+    queryFn: fetchSemesters
   });
 
   // Fetch preview student ID on mount
@@ -103,7 +111,7 @@ export default function StudentCreate() {
         gender: form.gender || null,
         birth_date: form.birth_date || null,
         birth_place: form.birth_place.trim() || null,
-        nationality: form.nationality.trim() || null,
+        nationality: form.nationality || null,
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
         address: form.address.trim() || null,
@@ -117,6 +125,7 @@ export default function StudentCreate() {
         certification_specialization: form.certification_specialization.trim() || null,
         transcript_file: transcriptFile ? transcriptFile.name : null,
         department_id: form.department_id || null,
+        semester_id: form.semester_id || null,
         year: form.year ? parseInt(form.year) : null,
         status: form.status,
         enrollment_date: form.enrollment_date || null
@@ -183,85 +192,38 @@ export default function StudentCreate() {
   };
 
   const printRegistrationForm = () => {
-    const w = window.open('', '_blank');
-    if (!w) return;
-    const deptName = departments.find((d: any) => d.id === form.department_id)?.name || '.....................';
-    const currentYear = new Date().getFullYear();
-    const nextYear = currentYear + 1;
-    const semesterLabel = '........';
+    const deptName = departments.find((d: any) => d.id === form.department_id)?.name || '';
 
-    if (isLibyan) {
-      // Libyan student registration form
-      w.document.write(`<html><head><title>نموذج قبول وتسجيل طالب</title>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;700&display=swap');
-          *{margin:0;padding:0;box-sizing:border-box}
-          body{font-family:'Noto Sans Arabic',Arial,sans-serif;direction:rtl;padding:40px;background:#fff;color:#1a2332;font-size:14px;line-height:2}
-          .header{text-align:center;color:#1a4d8c;margin-bottom:30px}
-          .header h1{font-size:18px;font-weight:700;margin-bottom:5px}
-          .header h2{font-size:16px;font-weight:600}
-          .section-title{font-weight:700;font-size:15px;margin:20px 0 10px;text-decoration:underline}
-          .field{margin-bottom:8px}
-          .field .label{font-weight:600}
-          .field .dots{border-bottom:1px dotted #333;display:inline-block;min-width:150px;padding:0 5px}
-          .signature{margin-top:40px;text-align:center}
-          .signature .dots{display:block;margin-top:10px;border-bottom:1px dotted #333;width:200px;margin-left:auto;margin-right:auto}
-          @media print{body{padding:20px}@page{size:A4;margin:15mm}}
-        </style></head><body>
-        <div class="header">
-          <h1>نموذج قبول وتسجيل طالب للفصل الدراسي (${semesterLabel}) ....20م</h1>
-          <h2>للعام الجامعي .....20\\....20م</h2>
-        </div>
-        <div class="section-title">بيانات الطالب:</div>
-        <div class="field">اسم الطالب رباعي: <span class="dots">${form.name || '...................................................'}</span> رقم القيد الجامعي: (<span class="dots">${previewStudentId || '.............'}</span>)</div>
-        <div class="field">تاريخ ومكان والميلاد: <span class="dots">${form.birth_date || '...............'} ${form.birth_place || '...............'}</span> محل الإقامة: <span class="dots">${form.address || '...................'}</span> المدرسة المتحصل منها الطالب على</div>
-        <div class="field">الشهادة: <span class="dots">${form.certification_school || '.....................'}</span> التخصص: <span class="dots">${form.certification_specialization || '.....................'}</span> تاريخ الحصول عنها: <span class="dots">${form.certification_date || '...................'}</span> التقدير</div>
-        <div class="field">العام: <span class="dots">${form.academic_score || '.........'}</span>%.</div>
-        <div class="field">البرنامج العلمي الذي يرغب الطالب التسجيل فيه:</div>
-        <div class="field"><span class="dots" style="width:100%">${deptName}</span></div>
-        <div class="signature">
-          <div>توقيع الطالب</div>
-          <span class="dots">&nbsp;</span>
-        </div>
-      </body></html>`);
-    } else {
-      // Foreign student registration form
-      w.document.write(`<html><head><title>نموذج قبول وتسجيل طالب (وافد)</title>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;700&display=swap');
-          *{margin:0;padding:0;box-sizing:border-box}
-          body{font-family:'Noto Sans Arabic',Arial,sans-serif;direction:rtl;padding:40px;background:#fff;color:#1a2332;font-size:14px;line-height:2}
-          .header{text-align:center;color:#1a4d8c;margin-bottom:30px}
-          .header h1{font-size:18px;font-weight:700;margin-bottom:5px}
-          .header h2{font-size:16px;font-weight:600}
-          .field{margin-bottom:8px}
-          .field .dots{border-bottom:1px dotted #333;display:inline-block;min-width:120px;padding:0 5px}
-          .signature{margin-top:40px;text-align:center}
-          .signature .dots{display:block;margin-top:10px;border-bottom:1px dotted #333;width:200px;margin-left:auto;margin-right:auto}
-          @media print{body{padding:20px}@page{size:A4;margin:15mm}}
-        </style></head><body>
-        <div class="header">
-          <h1>نموذج قبول وتسجيل طالب (وافد)</h1>
-          <h2>للفصل الدراسي (${semesterLabel}) ....20م للعام الجامعي .....20\\....20م</h2>
-        </div>
-        <div class="field">أنا مقدم الطلب:</div>
-        <div class="field"><span class="dots" style="width:100%">${form.name || '...................................................'}</span></div>
-        <div class="field">الجنس: <span class="dots">${form.gender === 'male' ? 'ذكر' : form.gender === 'female' ? 'أنثى' : '...................'}</span> الجنسية: <span class="dots">${form.nationality || '.....................'}</span> مكان وتاريخ الميلاد: <span class="dots">${form.birth_place || '...............'} ${form.birth_date || '...............'}</span> رقم جواز</div>
-        <div class="field">السفر: <span class="dots">${form.passport_number || '...............................'}</span> مكان وتاريخ الإصدار: <span class="dots">${form.passport_place_of_issue || '...............'} ${form.passport_issue_date || '...............'}</span> تاريخ الصلاحية:</div>
-        <div class="field"><span class="dots">${form.passport_expiry_date || '...............................'}</span> معبر الدخول: <span class="dots">${form.port_of_entry || '...................'}</span> نوع الإقامة: <span class="dots">${form.visa_type || '...................'}</span> اسم الأم: <span class="dots">${form.mother_name || '.....................'}</span></div>
-        <div class="field">جنسيتها: <span class="dots">${form.mother_nationality || '.....................'}</span> محل الإقامة الحالي: <span class="dots">${form.address || '.....................'}</span> الشهادة ما قبل المرحلة الجامعية</div>
-        <div class="field">المتحصل عليها: <span class="dots">${form.certification_school || '...............................'}</span> النسبة: <span class="dots">${form.academic_score || '...................'}</span>% التقدير: <span class="dots">${form.academic_history_type || '...................'}</span> العام</div>
-        <div class="field">الدراسي: <span class="dots">${form.certification_date || '......'}</span>20م.</div>
-        <div class="field">أتقدم إليكم بطلبي هذا بشأن قبولي كطالب ببرامج الدراسة الجامعية بقسم: <span class="dots">${deptName}</span></div>
-        <div class="signature">
-          <div>توقيع مقدم الطلب</div>
-          <div>التاريخ: ......\\......\\....20م</div>
-          <span class="dots">&nbsp;</span>
-        </div>
-      </body></html>`);
-    }
-    w.document.close();
-    setTimeout(() => w.print(), 500);
+    printFilledRegistrationForm({
+      name: form.name,
+      name_en: form.name_en,
+      campus_id: previewStudentId,
+      national_id_passport: form.national_id_passport,
+      gender: form.gender,
+      birth_date: form.birth_date,
+      birth_place: form.birth_place,
+      nationality: form.nationality,
+      phone: form.phone,
+      email: form.email,
+      address: form.address,
+      sponsor_name: form.sponsor_name,
+      sponsor_contact: form.sponsor_contact,
+      academic_score: form.academic_score,
+      certification_type: form.academic_history_type,
+      certification_date: form.certification_date,
+      certification_school: form.certification_school,
+      certification_specialization: form.certification_specialization,
+      department_name: deptName,
+      enrollment_date: form.enrollment_date,
+      port_of_entry: form.port_of_entry,
+      visa_type: form.visa_type,
+      mother_name: form.mother_name,
+      mother_nationality: form.mother_nationality,
+      passport_number: form.passport_number,
+      passport_issue_date: form.passport_issue_date,
+      passport_expiry_date: form.passport_expiry_date,
+      passport_place_of_issue: form.passport_place_of_issue,
+    }, isLibyan);
   };
 
   if (!canCreate('students')) {
@@ -453,16 +415,50 @@ export default function StudentCreate() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         الجنسية
                       </label>
-                      <input
-                        type="text"
+                      <select
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         value={form.nationality}
                         onChange={(e) => handleInputChange("nationality", e.target.value)}
-                        placeholder="ليبيا"
-                      />
-                      <p className="mt-1 text-xs text-gray-500">
-                        {isLibyan ? 'طالب ليبي - النموذج الأساسي' : 'طالب وافد - سيتم إظهار حقول إضافية'}
-                      </p>
+                      >
+                        <option value="ليبيا">ليبيا</option>
+                        <option value="مصر">مصر</option>
+                        <option value="تونس">تونس</option>
+                        <option value="الجزائر">الجزائر</option>
+                        <option value="المغرب">المغرب</option>
+                        <option value="السودان">السودان</option>
+                        <option value="الأردن">الأردن</option>
+                        <option value="فلسطين">فلسطين</option>
+                        <option value="سوريا">سوريا</option>
+                        <option value="العراق">العراق</option>
+                        <option value="لبنان">لبنان</option>
+                        <option value="السعودية">السعودية</option>
+                        <option value="الإمارات">الإمارات</option>
+                        <option value="الكويت">الكويت</option>
+                        <option value="قطر">قطر</option>
+                        <option value="البحرين">البحرين</option>
+                        <option value="عُمان">عُمان</option>
+                        <option value="اليمن">اليمن</option>
+                        <option value="موريتانيا">موريتانيا</option>
+                        <option value="الصومال">الصومال</option>
+                        <option value="جيبوتي">جيبوتي</option>
+                        <option value="تشاد">تشاد</option>
+                        <option value="النيجر">النيجر</option>
+                        <option value="نيجيريا">نيجيريا</option>
+                        <option value="تركيا">تركيا</option>
+                        <option value="إيران">إيران</option>
+                        <option value="باكستان">باكستان</option>
+                        <option value="بنغلاديش">بنغلاديش</option>
+                        <option value="الهند">الهند</option>
+                        <option value="الصين">الصين</option>
+                        <option value="إندونيسيا">إندونيسيا</option>
+                        <option value="ماليزيا">ماليزيا</option>
+                        <option value="أخرى">أخرى</option>
+                      </select>
+                      {!isLibyan && (
+                        <p className="mt-1 text-xs text-orange-600 font-medium">
+                          طالب وافد - سيتم إظهار حقول إضافية خاصة بالطلاب الوافدين
+                        </p>
+                      )}
                     </div>
 
                     {/* Phone */}
@@ -638,6 +634,7 @@ export default function StudentCreate() {
                       >
                         <option value="">اختر نوع الشهادة</option>
                         <option value="high_school">الثانوية العامة</option>
+                        <option value="intermediate_institute">معهد متوسط</option>
                         <option value="diploma">دبلوم</option>
                         <option value="bachelor">بكالوريوس</option>
                         <option value="master">ماجستير</option>
@@ -764,6 +761,25 @@ export default function StudentCreate() {
             </h2>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Semester */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        الفصل الدراسي (فصل التسجيل)
+                      </label>
+                      <select
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={form.semester_id}
+                        onChange={(e) => handleInputChange("semester_id", e.target.value)}
+                      >
+                        <option value="">اختر الفصل الدراسي</option>
+                        {semesters.map((sem: any) => (
+                          <option key={sem.id} value={sem.id}>
+                            {sem.name} {sem.status === 'in_progress' ? '(جاري)' : sem.status === 'upcoming' ? '(قادم)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     {/* Department */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">

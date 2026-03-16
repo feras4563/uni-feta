@@ -195,7 +195,7 @@ export default function TeacherDetail() {
         .card-top .uni-logo{width:24px;height:24px;object-fit:contain}
         .card-top .uni{color:#fff;font-size:12px;font-weight:700;letter-spacing:0.5px}
         .card-top .uni-en{color:#2dd4bf;font-size:7.5px;font-weight:600;font-family:Arial;letter-spacing:0.3px}
-        .card-top .badge{background:rgba(45,212,191,0.15);color:#2dd4bf;font-size:7px;padding:2px 8px;border-radius:10px;font-weight:700;border:1px solid rgba(45,212,191,0.3)}
+        .card-top .badge{background:rgba(249,115,22,0.15);color:#f97316;font-size:7px;padding:2px 8px;border-radius:10px;font-weight:700;border:1px solid rgba(249,115,22,0.3)}
         .card-body{flex:1;display:flex;padding:10px 14px;gap:10px}
         .photo-col{display:flex;flex-direction:column;align-items:center;gap:4px}
         .photo{width:60px;height:72px;border-radius:6px;border:2px solid #1a2332;object-fit:cover;background:#f9fafb}
@@ -563,7 +563,7 @@ export default function TeacherDetail() {
                       <div className="text-[#2dd4bf] text-[6px]">UNIVERSITY OF ALKHALIL</div>
                     </div>
                   </div>
-                  <span className="text-[6px] text-[#2dd4bf] bg-[#2dd4bf]/10 border border-[#2dd4bf]/30 px-1.5 py-0.5 rounded-full font-medium">بطاقة مدرس</span>
+                  <span className="text-[6px] text-[#f97316] bg-[#f97316]/10 border border-[#f97316]/30 px-1.5 py-0.5 rounded-full font-medium">بطاقة مدرس</span>
                 </div>
                 {/* Mini card body */}
                 <div className="flex p-2 gap-2 bg-white" style={{ minHeight: 0 }}>
@@ -661,7 +661,7 @@ export default function TeacherDetail() {
                     <div className="text-[#2dd4bf] text-[8px] font-medium">UNIVERSITY OF ALKHALIL</div>
                   </div>
                 </div>
-                <span className="text-[8px] text-[#2dd4bf] bg-[#2dd4bf]/10 border border-[#2dd4bf]/30 px-2 py-0.5 rounded-full font-medium">بطاقة مدرس</span>
+                <span className="text-[8px] text-[#f97316] bg-[#f97316]/10 border border-[#f97316]/30 px-2 py-0.5 rounded-full font-medium">بطاقة مدرس</span>
               </div>
               <div className="flex p-3 gap-3 bg-white flex-1">
                 <div className="flex flex-col items-center gap-1 flex-shrink-0">

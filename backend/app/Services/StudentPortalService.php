@@ -154,45 +154,12 @@ class StudentPortalService
 
     /**
      * Aggregate student grades into a semester-level summary.
+     * Delegates to GradeCalculationService (single source of truth).
      *
      * @return array{total_value: float, total_max: float, percentage: float, gpa: float, letter_grade: array}
      */
     public static function aggregateGrades(Collection $grades): array
     {
-        $totalValue = $grades->sum('grade_value');
-        $totalMax = $grades->sum('max_grade');
-        $percentage = $totalMax > 0 ? round(($totalValue / $totalMax) * 100, 1) : 0;
-
-        return [
-            'total_value' => round($totalValue, 2),
-            'total_max' => round($totalMax, 2),
-            'percentage' => $percentage,
-            'gpa' => self::getGPA($percentage),
-            'letter_grade' => self::getLetterGrade($percentage),
-        ];
-    }
-
-    private static function getLetterGrade(float $pct): array
-    {
-        if ($pct >= 90) return ['letter' => 'A', 'label' => 'ممتاز', 'label_en' => 'Excellent'];
-        if ($pct >= 80) return ['letter' => 'B', 'label' => 'جيد جداً', 'label_en' => 'Very Good'];
-        if ($pct >= 70) return ['letter' => 'C', 'label' => 'جيد', 'label_en' => 'Good'];
-        if ($pct >= 60) return ['letter' => 'D', 'label' => 'مقبول', 'label_en' => 'Acceptable'];
-        if ($pct >= 50) return ['letter' => 'D-', 'label' => 'مقبول ضعيف', 'label_en' => 'Weak Pass'];
-        return ['letter' => 'F', 'label' => 'راسب', 'label_en' => 'Fail'];
-    }
-
-    private static function getGPA(float $pct): float
-    {
-        if ($pct >= 90) return 4.0;
-        if ($pct >= 85) return 3.7;
-        if ($pct >= 80) return 3.3;
-        if ($pct >= 75) return 3.0;
-        if ($pct >= 70) return 2.7;
-        if ($pct >= 65) return 2.3;
-        if ($pct >= 60) return 2.0;
-        if ($pct >= 55) return 1.7;
-        if ($pct >= 50) return 1.0;
-        return 0.0;
+        return GradeCalculationService::aggregateGrades($grades);
     }
 }

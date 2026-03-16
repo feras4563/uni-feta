@@ -17,6 +17,7 @@ export default function StudentsPage() {
   const [yearFilter, setYearFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [genderFilter, setGenderFilter] = useState("");
+  const [nationalityFilter, setNationalityFilter] = useState("");
   const [showQRModal, setShowQRModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -51,9 +52,16 @@ export default function StudentsPage() {
     if (yearFilter) filtered = filtered.filter((s: any) => s.year === parseInt(yearFilter));
     if (statusFilter) filtered = filtered.filter((s: any) => s.status === statusFilter);
     if (genderFilter) filtered = filtered.filter((s: any) => s.gender === genderFilter);
+    if (nationalityFilter) {
+      if (nationalityFilter === 'foreign') {
+        filtered = filtered.filter((s: any) => s.nationality && s.nationality !== 'ليبيا' && s.nationality !== 'ليبي' && s.nationality !== 'ليبية');
+      } else {
+        filtered = filtered.filter((s: any) => s.nationality === nationalityFilter);
+      }
+    }
 
     return filtered;
-  }, [students, searchTerm, departmentFilter, yearFilter, statusFilter, genderFilter]);
+  }, [students, searchTerm, departmentFilter, yearFilter, statusFilter, genderFilter, nationalityFilter]);
 
   const totalPages = Math.ceil(filteredStudents.length / studentsPerPage);
   const paginatedStudents = useMemo(() => {
@@ -61,7 +69,7 @@ export default function StudentsPage() {
     return filteredStudents.slice(start, start + studentsPerPage);
   }, [filteredStudents, currentPage]);
 
-  useEffect(() => { setCurrentPage(1); }, [searchTerm, departmentFilter, yearFilter, statusFilter, genderFilter]);
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, departmentFilter, yearFilter, statusFilter, genderFilter, nationalityFilter]);
 
   const getDepartmentName = (departmentId: string) => {
     if (!departmentId) return 'غير محدد';
@@ -88,12 +96,13 @@ export default function StudentsPage() {
     }
   };
 
-  const hasActiveFilters = departmentFilter || yearFilter || statusFilter || genderFilter;
+  const hasActiveFilters = departmentFilter || yearFilter || statusFilter || genderFilter || nationalityFilter;
   const clearFilters = () => {
     setDepartmentFilter("");
     setYearFilter("");
     setStatusFilter("");
     setGenderFilter("");
+    setNationalityFilter("");
     setSearchTerm("");
   };
 
@@ -158,12 +167,20 @@ export default function StudentsPage() {
               if (yearFilter) params.year = yearFilter;
               if (statusFilter) params.status = statusFilter;
               if (genderFilter) params.gender = genderFilter;
+              if (nationalityFilter) params.nationality = nationalityFilter;
               exportStudents(params);
             }}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
             تصدير CSV
+          </button>
+          <button
+            onClick={() => navigate('/university-forms')}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            النماذج الجامعية
           </button>
           {canCreate('students') && (
             <button
@@ -213,6 +230,21 @@ export default function StudentsPage() {
             <option value="">الجنس</option>
             <option value="male">ذكر</option>
             <option value="female">أنثى</option>
+          </select>
+          <select value={nationalityFilter} onChange={(e) => setNationalityFilter(e.target.value)} className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:ring-1 focus:ring-gray-400">
+            <option value="">الجنسية</option>
+            <option value="ليبيا">ليبي</option>
+            <option value="foreign">وافد (غير ليبي)</option>
+            <option value="مصر">مصري</option>
+            <option value="تونس">تونسي</option>
+            <option value="الجزائر">جزائري</option>
+            <option value="المغرب">مغربي</option>
+            <option value="السودان">سوداني</option>
+            <option value="فلسطين">فلسطيني</option>
+            <option value="سوريا">سوري</option>
+            <option value="العراق">عراقي</option>
+            <option value="الأردن">أردني</option>
+            <option value="لبنان">لبناني</option>
           </select>
           {hasActiveFilters && (
             <button onClick={clearFilters} className="text-xs text-gray-500 hover:text-gray-800 underline">مسح الفلاتر</button>

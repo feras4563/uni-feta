@@ -14,12 +14,9 @@ const DAY_NAMES: Record<number, string> = {
 };
 
 const ASSIGNMENT_LABELS: Record<string, string> = {
-  assignment: 'واجب',
-  homework: 'واجب منزلي',
-  project: 'مشروع',
-  quiz: 'اختبار قصير',
-  classwork: 'أعمال فصل',
-  participation: 'مشاركة',
+  classwork: 'أعمال الفصل',
+  midterm: 'الامتحان النصفي',
+  final: 'الامتحان النهائي',
 };
 
 export default function StudentSubjectDetail() {

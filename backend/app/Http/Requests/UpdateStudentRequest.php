@@ -25,6 +25,7 @@ class UpdateStudentRequest extends FormRequest
             'phone' => 'nullable|string|max:20',
             'address' => 'nullable|string',
             'department_id' => 'nullable|exists:departments,id',
+            'semester_id' => 'nullable|exists:semesters,id',
             'specialization_track' => 'nullable|in:fine_arts_media,advertising_design,photography_cinema,multimedia_media',
             'year' => 'nullable|integer|min:1|max:10',
             'status' => 'nullable|in:active,inactive,graduated,suspended',

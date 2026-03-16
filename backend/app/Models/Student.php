@@ -24,6 +24,7 @@ class Student extends Model
         'phone',
         'address',
         'department_id',
+        'semester_id',
         'specialization_track',
         'year',
         'status',
@@ -102,6 +103,11 @@ class Student extends Model
     public function department()
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function enrollmentSemester()
+    {
+        return $this->belongsTo(Semester::class, 'semester_id');
     }
 
     public function semesterRegistrations()
