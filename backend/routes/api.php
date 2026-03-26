@@ -70,6 +70,70 @@ $registerRoutes = function () {
         ]);
     });
 
+    // Cache clear endpoint (temporary - remove after use)
+    Route::get('/clear-cache', function () {
+        \Artisan::call('cache:clear');
+        \Artisan::call('config:clear');
+        \Artisan::call('route:clear');
+        \Artisan::call('view:clear');
+        return response()->json([
+            'status' => 'success',
+            'message' => 'All caches cleared successfully',
+            'timestamp' => now()->toIso8601String(),
+        ]);
+    });
+
+    // Database diagnostic endpoint (temporary - remove after use)
+    Route::get('/check-db', function () {
+        try {
+            $columns = \DB::select("SHOW COLUMNS FROM students LIKE 'deleted_at'");
+            $hasDeletedAt = !empty($columns);
+            
+            $studentCount = \DB::table('students')->count();
+            
+            return response()->json([
+                'status' => 'success',
+                'has_deleted_at_column' => $hasDeletedAt,
+                'column_info' => $columns,
+                'student_count' => $studentCount,
+                'database' => config('database.connections.mysql.database'),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    });
+
+    // Test student creation endpoint (temporary - remove after use)
+    Route::post('/test-student', function (\Illuminate\Http\Request $request) {
+        try {
+            $year = date('y');
+            $random = str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
+            $studentId = "ST{$year}{$random}";
+            
+            $student = \App\Models\Student::create([
+                'id' => $studentId,
+                'name' => 'Test Student',
+                'email' => 'test' . time() . '@test.com',
+                'national_id_passport' => 'TEST' . time(),
+                'enrollment_date' => now(),
+            ]);
+            
+            return response()->json([
+                'status' => 'success',
+                'student' => $student,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ], 500);
+        }
+    });
+
     // System Settings (public access for app initialization)
     Route::get('/system-settings', [SystemSettingsController::class, 'index']);
 
