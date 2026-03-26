@@ -145,8 +145,20 @@ class StudentController extends Controller
                 return response()->json($response, 201);
             });
         } catch (\Exception $e) {
-            \Log::error('Failed to create student', ['error' => $e->getMessage()]);
-            return response()->json(['message' => 'فشل في إنشاء الطالب', 'error' => $e->getMessage()], 500);
+            \Log::error('Failed to create student', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'message' => 'فشل في إنشاء الطالب',
+                'error' => $e->getMessage(),
+                'debug' => [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]
+            ], 500);
         }
     }
 
